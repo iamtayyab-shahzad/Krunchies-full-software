@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"backend/internal/config"
 
@@ -10,27 +11,43 @@ import (
 	"gorm.io/gorm"
 )
 
-func Connect() (*gorm.DB, error) {
-	cfg := config.Load()
-
+func Connect(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	dsn := buildDSN(cfg)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		return nil, err
+		if strings.Contains(err.Error(), "SQLSTATE 28P01") {
+			return nil, fmt.Errorf(
+				"authentication failed for user=%s db=%s host=%s port=%s: %w",
+				cfg.User,
+				cfg.Name,
+				cfg.Host,
+				cfg.Port,
+				err,
+			)
+		}
+
+		return nil, fmt.Errorf(
+			"database connection failed for user=%s db=%s host=%s port=%s: %w",
+			cfg.User,
+			cfg.Name,
+			cfg.Host,
+			cfg.Port,
+			err,
+		)
 	}
 
 	return db, nil
 }
 
-func buildDSN(cfg config.Config) string {
-	password := url.QueryEscape(cfg.DBPassword)
+func buildDSN(cfg config.DatabaseConfig) string {
+	password := url.QueryEscape(cfg.Password)
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.DBHost,
-		cfg.DBPort,
-		cfg.DBUser,
+		cfg.Host,
+		cfg.Port,
+		cfg.User,
 		password,
-		cfg.DBName,
-		cfg.DBSSLMode,
+		cfg.Name,
+		cfg.SSLMode,
 	)
 }
