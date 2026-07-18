@@ -17,7 +17,7 @@ type Config struct {
 }
 
 func Load() Config {
-	_ = godotenv.Load()
+	_ = godotenv.Load(".env", "../../.env")
 
 	return Config{
 		Port:       getEnv("APP_PORT", "8080"),
