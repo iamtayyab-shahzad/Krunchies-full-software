@@ -3,8 +3,10 @@ package service
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"backend/internal/domain"
+	"backend/internal/dto"
 	"backend/internal/repository"
 	"backend/internal/utils"
 
@@ -16,6 +18,7 @@ type OrderService struct {
 	db            *gorm.DB
 	orderRepo     *repository.OrderRepository
 	inventoryRepo *repository.InventoryRepository
+	paymentRepo   *repository.PaymentRepository
 }
 
 func NewOrderService(db *gorm.DB) *OrderService {
@@ -23,33 +26,33 @@ func NewOrderService(db *gorm.DB) *OrderService {
 		db:            db,
 		orderRepo:     repository.NewOrderRepository(db),
 		inventoryRepo: repository.NewInventoryRepository(db),
+		paymentRepo:   repository.NewPaymentRepository(db),
 	}
 }
 
-type CreateOrderItemInput struct {
-	ProductID     uuid.UUID `json:"product_id" binding:"required"`
-	ProductSizeID uuid.UUID `json:"product_size_id" binding:"required"`
-	Quantity      int       `json:"quantity" binding:"required,min=1"`
-	Price         int       `json:"price" binding:"required,min=0"`
-}
+func (s *OrderService) CreateOrder(input dto.CreateOrderRequest, orderType string) (*domain.Order, error) {
+	orderType = normalizeOrderType(orderType)
+	method := strings.ToLower(strings.TrimSpace(input.PaymentMethod))
 
-type CreateOrderInput struct {
-	CustomerName   string                 `json:"customer_name" binding:"required"`
-	Phone          string                 `json:"phone" binding:"required"`
-	Address        string                 `json:"address"`
-	LocationID     uuid.UUID              `json:"location_id" binding:"required"`
-	DeliveryCharge int                    `json:"delivery_charge"`
-	PaymentMethod  string                 `json:"payment_method" binding:"required"`
-	OrderStatus    string                 `json:"order_status"`
-	OrderNotes     string                 `json:"order_notes"`
-	Subtotal       int                    `json:"subtotal"`
-	GrandTotal     int                    `json:"grand_total"`
-	Items          []CreateOrderItemInput `json:"items" binding:"required,min=1,dive"`
-}
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
 
-func (s *OrderService) CreateOrder(input CreateOrderInput) (*domain.Order, error) {
-	if input.OrderStatus == "" {
-		input.OrderStatus = "PENDING"
+	var location domain.Location
+	if err := tx.First(&location, "id = ?", input.LocationID).Error; err != nil {
+		tx.Rollback()
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.NewAppError(http.StatusBadRequest, "invalid location")
+		}
+		return nil, err
+	}
+
+	var setting domain.Setting
+	_ = tx.Order("created_at asc").First(&setting).Error
+	codFee := 0
+	if method == "cod" {
+		codFee = setting.CashOnDeliveryFee
 	}
 
 	order := &domain.Order{
@@ -57,76 +60,250 @@ func (s *OrderService) CreateOrder(input CreateOrderInput) (*domain.Order, error
 		Phone:          input.Phone,
 		Address:        input.Address,
 		LocationID:     input.LocationID,
-		DeliveryCharge: input.DeliveryCharge,
-		PaymentMethod:  input.PaymentMethod,
-		OrderStatus:    input.OrderStatus,
+		DeliveryCharge: location.DeliveryCharge,
+		PaymentMethod:  method,
+		OrderStatus:    "PENDING",
+		OrderType:      orderType,
 		OrderNotes:     input.OrderNotes,
-		Subtotal:       input.Subtotal,
-		GrandTotal:     input.GrandTotal,
 	}
 
+	subtotal := 0
 	order.Items = make([]domain.OrderItem, 0, len(input.Items))
 	for _, item := range input.Items {
+		var size domain.ProductSize
+		if err := tx.First(&size, "id = ?", item.ProductSizeID).Error; err != nil {
+			tx.Rollback()
+			return nil, utils.NewAppError(http.StatusBadRequest, "invalid product size")
+		}
+		if size.ProductID != item.ProductID {
+			tx.Rollback()
+			return nil, utils.NewAppError(http.StatusBadRequest, "product size does not belong to product")
+		}
+
+		var product domain.Product
+		if err := tx.First(&product, "id = ?", item.ProductID).Error; err != nil {
+			tx.Rollback()
+			return nil, utils.NewAppError(http.StatusBadRequest, "invalid product")
+		}
+		if !product.Available {
+			tx.Rollback()
+			return nil, utils.NewAppError(http.StatusBadRequest, "product is unavailable: "+product.Name)
+		}
+
+		lineTotal := size.Price * item.Quantity
+		subtotal += lineTotal
 		order.Items = append(order.Items, domain.OrderItem{
 			ProductID:     item.ProductID,
 			ProductSizeID: item.ProductSizeID,
 			Quantity:      item.Quantity,
-			Price:         item.Price,
+			Price:         size.Price,
 		})
 	}
 
-	tx := s.db.Begin()
+	order.Subtotal = subtotal
+	order.GrandTotal = subtotal + location.DeliveryCharge + codFee
+
 	if err := s.orderRepo.Create(tx, order); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 
-	if order.OrderStatus == "COMPLETED" {
-		if err := s.consumeInventory(tx, order); err != nil {
-			tx.Rollback()
-			return nil, err
-		}
+	payment := &domain.Payment{
+		OrderID:   order.ID,
+		Method:    method,
+		Amount:    order.GrandTotal,
+		Status:    "pending",
+		Reference: "",
+	}
+	if err := s.paymentRepo.Create(tx, payment); err != nil {
+		tx.Rollback()
+		return nil, err
 	}
 
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
-
 	return s.orderRepo.GetByID(order.ID)
 }
 
-func (s *OrderService) UpdateOrder(id uuid.UUID, updates map[string]any) error {
+func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) error {
+	updates := map[string]any{}
+	if input.CustomerName != nil {
+		updates["customer_name"] = *input.CustomerName
+	}
+	if input.Phone != nil {
+		updates["phone"] = *input.Phone
+	}
+	if input.Address != nil {
+		updates["address"] = *input.Address
+	}
+	if input.LocationID != nil {
+		updates["location_id"] = *input.LocationID
+	}
+	if input.PaymentMethod != nil {
+		updates["payment_method"] = strings.ToLower(*input.PaymentMethod)
+	}
+	if input.OrderNotes != nil {
+		updates["order_notes"] = *input.OrderNotes
+	}
+	if input.OrderStatus != nil {
+		status := strings.ToUpper(*input.OrderStatus)
+		switch status {
+		case "COMPLETED":
+			return s.CompleteOrder(id)
+		case "CANCELLED":
+			return s.CancelOrder(id)
+		case "PENDING":
+			updates["order_status"] = status
+		default:
+			return utils.NewAppError(http.StatusBadRequest, "invalid order status")
+		}
+	}
+	if len(updates) == 0 {
+		return utils.NewAppError(http.StatusBadRequest, "no fields to update")
+	}
+
 	tx := s.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
 	if err := s.orderRepo.Update(tx, id, updates); err != nil {
 		tx.Rollback()
 		return err
 	}
+	return tx.Commit().Error
+}
 
-	if status, ok := updates["order_status"].(string); ok && status == "COMPLETED" {
-		order, err := s.orderRepo.GetByID(id)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err := s.consumeInventory(tx, order); err != nil {
-			tx.Rollback()
-			return err
-		}
+func (s *OrderService) CancelOrder(id uuid.UUID) error {
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	order, err := s.orderRepo.GetByIDTx(tx, id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if order.OrderStatus == "CANCELLED" {
+		tx.Rollback()
+		return nil
+	}
+	if order.OrderStatus == "COMPLETED" {
+		tx.Rollback()
+		return utils.NewAppError(http.StatusConflict, "completed orders cannot be cancelled")
+	}
+
+	affected, err := s.orderRepo.TransitionStatus(tx, id, "PENDING", "CANCELLED")
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if affected == 0 {
+		tx.Rollback()
+		return utils.NewAppError(http.StatusConflict, "order could not be cancelled")
+	}
+
+	_ = tx.Model(&domain.Payment{}).
+		Where("order_id = ?", id).
+		Update("status", "failed")
+
+	return tx.Commit().Error
+}
+
+func (s *OrderService) CompleteOrder(id uuid.UUID) error {
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	order, err := s.orderRepo.GetByIDTx(tx, id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if order.OrderStatus == "COMPLETED" {
+		tx.Rollback()
+		return nil // idempotent
+	}
+	if order.OrderStatus == "CANCELLED" {
+		tx.Rollback()
+		return utils.NewAppError(http.StatusConflict, "cancelled orders cannot be completed")
+	}
+
+	affected, err := s.orderRepo.TransitionStatus(tx, id, "PENDING", "COMPLETED")
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if affected == 0 {
+		tx.Rollback()
+		return utils.NewAppError(http.StatusConflict, "order already processed")
+	}
+
+	// Reload within same tx after transition
+	order, err = s.orderRepo.GetByIDTx(tx, id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := s.consumeInventory(tx, order); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if payment, err := s.paymentRepo.GetByOrderID(id); err == nil {
+		_ = tx.Model(&domain.Payment{}).Where("id = ?", payment.ID).Updates(map[string]any{
+			"status": "paid",
+			"amount": order.GrandTotal,
+		}).Error
 	}
 
 	return tx.Commit().Error
 }
 
-func (s *OrderService) CancelOrder(id uuid.UUID) error {
-	return s.UpdateOrder(id, map[string]any{"order_status": "CANCELLED"})
-}
+func (s *OrderService) DeleteOrder(id uuid.UUID) error {
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
 
-func (s *OrderService) CompleteOrder(id uuid.UUID) error {
-	return s.UpdateOrder(id, map[string]any{"order_status": "COMPLETED"})
+	order, err := s.orderRepo.GetByIDTx(tx, id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if order.OrderStatus == "COMPLETED" {
+		tx.Rollback()
+		return utils.NewAppError(http.StatusConflict, "completed orders cannot be deleted")
+	}
+
+	if err := tx.Where("order_id = ?", id).Delete(&domain.OrderItem{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Where("order_id = ?", id).Delete(&domain.Payment{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := s.orderRepo.Delete(tx, id); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
 }
 
 func (s *OrderService) ListOrders() ([]domain.Order, error) {
 	return s.orderRepo.List()
+}
+
+func (s *OrderService) ListPendingOrders() ([]domain.Order, error) {
+	return s.orderRepo.ListByStatus("PENDING")
+}
+
+func (s *OrderService) ListOrdersByType(orderType string) ([]domain.Order, error) {
+	return s.orderRepo.ListByType(normalizeOrderType(orderType))
 }
 
 func (s *OrderService) GetOrderByID(id uuid.UUID) (*domain.Order, error) {
@@ -135,27 +312,26 @@ func (s *OrderService) GetOrderByID(id uuid.UUID) (*domain.Order, error) {
 
 func (s *OrderService) consumeInventory(tx *gorm.DB, order *domain.Order) error {
 	for _, item := range order.Items {
-		recipes, err := s.inventoryRepo.GetRecipeByProductID(item.ProductID)
+		recipes, err := s.inventoryRepo.GetRecipeByProductID(tx, item.ProductID)
 		if err != nil {
 			return err
 		}
-
 		for _, recipe := range recipes {
 			consumeQty := recipe.QuantityRequired * item.Quantity
 			if consumeQty <= 0 {
 				continue
 			}
-
+			if _, err := s.inventoryRepo.LockInventory(tx, recipe.InventoryID); err != nil {
+				return err
+			}
 			if err := s.inventoryRepo.DecreaseStock(tx, recipe.InventoryID, consumeQty); err != nil {
 				return err
 			}
-
-			reason := fmt.Sprintf("Order %s completed", order.ID.String())
 			tr := &domain.InventoryTransaction{
 				InventoryID:     recipe.InventoryID,
 				Quantity:        -consumeQty,
 				TransactionType: "CONSUMPTION",
-				Reason:          reason,
+				Reason:          fmt.Sprintf("Order %s completed", order.ID.String()),
 			}
 			if err := s.inventoryRepo.AddTransaction(tx, tr); err != nil {
 				return err
@@ -163,6 +339,19 @@ func (s *OrderService) consumeInventory(tx *gorm.DB, order *domain.Order) error 
 		}
 	}
 	return nil
+}
+
+func normalizeOrderType(orderType string) string {
+	switch strings.ToLower(strings.TrimSpace(orderType)) {
+	case "phone":
+		return "phone"
+	case "walkin", "walk-in":
+		return "walkin"
+	case "guest":
+		return "guest"
+	default:
+		return "website"
+	}
 }
 
 func ParseOrderID(id string) (uuid.UUID, error) {

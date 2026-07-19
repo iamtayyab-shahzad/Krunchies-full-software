@@ -32,46 +32,52 @@ func (r *AnalyticsRepository) CancelledOrdersCount() (int64, error) {
 }
 
 func (r *AnalyticsRepository) PaymentBreakdown() ([]map[string]any, error) {
-	rows, err := r.db.Model(&domain.Payment{}).
+	type row struct {
+		Method string
+		Total  int
+	}
+	var rows []row
+	err := r.db.Model(&domain.Payment{}).
 		Select("method, COALESCE(SUM(amount), 0) as total").
-		Group("method").Rows()
+		Where("status = ?", "paid").
+		Group("method").
+		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := make([]map[string]any, 0)
-	for rows.Next() {
-		var method string
-		var total int
-		if err := rows.Scan(&method, &total); err != nil {
-			return nil, err
-		}
-		result = append(result, map[string]any{"method": method, "total": total})
+	result := make([]map[string]any, 0, len(rows))
+	for _, rrow := range rows {
+		result = append(result, map[string]any{"method": rrow.Method, "total": rrow.Total})
 	}
 	return result, nil
 }
 
 func (r *AnalyticsRepository) BestSellingProducts(limit int) ([]map[string]any, error) {
-	rows, err := r.db.Table("order_items").
-		Select("product_id, COALESCE(SUM(quantity), 0) as qty").
-		Group("product_id").
-		Order("qty desc").
+	type row struct {
+		ProductID   string
+		ProductName string
+		Quantity    int
+	}
+	var rows []row
+	err := r.db.Table("order_items").
+		Select("order_items.product_id, COALESCE(products.name, '') as product_name, COALESCE(SUM(order_items.quantity), 0) as quantity").
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Joins("LEFT JOIN products ON products.id = order_items.product_id").
+		Where("orders.order_status = ?", "COMPLETED").
+		Group("order_items.product_id, products.name").
+		Order("quantity desc").
 		Limit(limit).
-		Rows()
+		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := make([]map[string]any, 0)
-	for rows.Next() {
-		var productID string
-		var qty int
-		if err := rows.Scan(&productID, &qty); err != nil {
-			return nil, err
-		}
-		result = append(result, map[string]any{"product_id": productID, "quantity": qty})
+	result := make([]map[string]any, 0, len(rows))
+	for _, rrow := range rows {
+		result = append(result, map[string]any{
+			"product_id":   rrow.ProductID,
+			"product_name": rrow.ProductName,
+			"quantity":     rrow.Quantity,
+		})
 	}
 	return result, nil
 }
@@ -79,6 +85,17 @@ func (r *AnalyticsRepository) BestSellingProducts(limit int) ([]map[string]any, 
 func (r *AnalyticsRepository) RemainingInventory() ([]domain.Inventory, error) {
 	var inv []domain.Inventory
 	if err := r.db.Order("stock asc").Find(&inv).Error; err != nil {
+		return nil, err
+	}
+	return inv, nil
+}
+
+func (r *AnalyticsRepository) LowStockInventory() ([]domain.Inventory, error) {
+	var inv []domain.Inventory
+	if err := r.db.
+		Where("stock <= minimum_stock").
+		Order("stock asc").
+		Find(&inv).Error; err != nil {
 		return nil, err
 	}
 	return inv, nil

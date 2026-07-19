@@ -3,6 +3,7 @@ package service
 import (
 	"time"
 
+	"backend/internal/domain"
 	"backend/internal/repository"
 
 	"gorm.io/gorm"
@@ -56,4 +57,8 @@ func (s *AnalyticsService) BestSellingProducts() ([]map[string]any, error) {
 
 func (s *AnalyticsService) RemainingInventory() (any, error) {
 	return s.repo.RemainingInventory()
+}
+
+func (s *AnalyticsService) LowStockItems() ([]domain.Inventory, error) {
+	return s.repo.LowStockInventory()
 }

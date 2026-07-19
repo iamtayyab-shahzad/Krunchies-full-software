@@ -18,7 +18,15 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 	var setting domain.Setting
 	err := s.db.First(&setting).Error
 	if err == gorm.ErrRecordNotFound {
-		setting = domain.Setting{}
+		setting = domain.Setting{
+			RestaurantName:    "Krunchies Pizza",
+			Phone:             "",
+			WhatsApp:          "",
+			Currency:          "Rs",
+			CashOnDeliveryFee: 0,
+			OpeningTime:       "11:00 AM",
+			ClosingTime:       "11:00 PM",
+		}
 		if createErr := s.db.Create(&setting).Error; createErr != nil {
 			return nil, createErr
 		}

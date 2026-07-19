@@ -87,3 +87,12 @@ func (h *AnalyticsHandler) RemainingInventory(c *gin.Context) {
 	}
 	utils.Success(c, http.StatusOK, "remaining inventory", data)
 }
+
+func (h *AnalyticsHandler) LowStockItems(c *gin.Context) {
+	data, err := h.service.LowStockItems()
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "low stock items", data)
+}

@@ -7,31 +7,28 @@ import (
 	"backend/internal/handler"
 	"backend/internal/middleware"
 	"backend/internal/service"
+
 	"github.com/gin-gonic/gin"
 )
 
 func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
-	router := gin.Default()
-	router.Use(middleware.RequestLogger(), middleware.ErrorRecovery())
-
-	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		c.Next()
-	})
+	router := gin.New()
+	router.Use(
+		middleware.RequestID(),
+		middleware.CORS(),
+		middleware.RequestLogger(),
+		middleware.ErrorRecovery(),
+	)
 
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Krunchies Backend Running",
+			"docs":    "/swagger/index.html",
 		})
 	})
+
+	router.Static("/swagger", "./docs/swagger")
+	router.StaticFile("/openapi.yaml", "./docs/openapi.yaml")
 
 	authHandler := handler.NewAuthHandler(services.Auth)
 	categoryHandler := handler.NewCRUDHandler[domain.Category](services.Categories, "category")
@@ -42,6 +39,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 	inventoryHandler := handler.NewCRUDHandler[domain.Inventory](services.Inventory, "inventory")
 	recipeHandler := handler.NewCRUDHandler[domain.Recipe](services.Recipes, "recipe")
 	orderHandler := handler.NewOrderHandler(services.Orders)
+	paymentHandler := handler.NewPaymentHandler(services.Payments)
 	analyticsHandler := handler.NewAnalyticsHandler(services.Analytics)
 	settingHandler := handler.NewSettingHandler(services.Settings)
 
@@ -54,12 +52,16 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			auth.POST("/customers/login", authHandler.CustomerLogin)
 		}
 
-		orders := api.Group("/orders")
+		// Public order creation (guest checkout supported)
+		ordersPublic := api.Group("/orders")
 		{
-			orders.POST("", orderHandler.Create)
-			orders.POST("/phone", orderHandler.Create)
-			orders.POST("/walkin", orderHandler.Create)
+			ordersPublic.POST("", orderHandler.Create)
+			ordersPublic.POST("/phone", orderHandler.CreatePhone)
+			ordersPublic.POST("/walkin", orderHandler.CreateWalkin)
 		}
+
+		// Public settings read for website/POS bootstrap
+		api.GET("/settings/public", settingHandler.Get)
 
 		staff := api.Group("")
 		staff.Use(middleware.JWTAuth(jwtSecret, "staff"))
@@ -73,10 +75,20 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			recipeHandler.Register(staff, "/recipes")
 
 			staff.GET("/orders", orderHandler.List)
+			staff.GET("/orders/pending", orderHandler.ListPending)
+			staff.GET("/orders/phone", orderHandler.ListPhone)
+			staff.GET("/orders/walkin", orderHandler.ListWalkin)
 			staff.GET("/orders/:id", orderHandler.GetByID)
 			staff.PUT("/orders/:id", orderHandler.Update)
+			staff.DELETE("/orders/:id", orderHandler.Delete)
 			staff.PATCH("/orders/:id/cancel", orderHandler.Cancel)
 			staff.PATCH("/orders/:id/complete", orderHandler.Complete)
+
+			staff.GET("/payments", paymentHandler.List)
+			staff.POST("/payments", paymentHandler.Create)
+			staff.GET("/payments/:id", paymentHandler.GetByID)
+			staff.PUT("/payments/:id", paymentHandler.Update)
+			staff.DELETE("/payments/:id", paymentHandler.Delete)
 
 			staff.GET("/analytics/today-sales", analyticsHandler.TodaySales)
 			staff.GET("/analytics/yesterday-sales", analyticsHandler.YesterdaySales)
@@ -86,6 +98,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			staff.GET("/analytics/cancelled-orders", analyticsHandler.CancelledOrders)
 			staff.GET("/analytics/payment-breakdown", analyticsHandler.PaymentBreakdown)
 			staff.GET("/analytics/remaining-inventory", analyticsHandler.RemainingInventory)
+			staff.GET("/analytics/low-stock", analyticsHandler.LowStockItems)
 
 			staff.GET("/settings", settingHandler.Get)
 			staff.PUT("/settings", settingHandler.Update)

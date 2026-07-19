@@ -16,7 +16,10 @@ func NewAuthRepository(db *gorm.DB) *AuthRepository {
 
 func (r *AuthRepository) GetStaffByUsername(username string) (*domain.User, error) {
 	var user domain.User
-	if err := r.db.Where("username = ?", username).First(&user).Error; err != nil {
+	// Accept legacy rows with empty role while enforcing staff for new accounts.
+	if err := r.db.
+		Where("username = ? AND (role = ? OR role = '' OR role IS NULL)", username, "staff").
+		First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -38,10 +41,14 @@ func (r *AuthRepository) GetUserByUsername(username string) (*domain.User, error
 	return &user, nil
 }
 
-func (r *AuthRepository) CreateUser(user *domain.User) error {
-	return r.db.Create(user).Error
+func (r *AuthRepository) CreateUser(tx *gorm.DB, user *domain.User) error {
+	return tx.Create(user).Error
 }
 
-func (r *AuthRepository) CreateCustomer(customer *domain.Customer) error {
-	return r.db.Create(customer).Error
+func (r *AuthRepository) CreateCustomer(tx *gorm.DB, customer *domain.Customer) error {
+	return tx.Create(customer).Error
+}
+
+func (r *AuthRepository) DB() *gorm.DB {
+	return r.db
 }

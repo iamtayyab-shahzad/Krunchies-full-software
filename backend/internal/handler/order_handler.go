@@ -3,8 +3,10 @@ package handler
 import (
 	"net/http"
 
+	"backend/internal/dto"
 	"backend/internal/service"
 	"backend/internal/utils"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,18 +18,41 @@ func NewOrderHandler(service *service.OrderService) *OrderHandler {
 	return &OrderHandler{service: service}
 }
 
-func (h *OrderHandler) Create(c *gin.Context) {
-	var input service.CreateOrderInput
+func (h *OrderHandler) createWithType(c *gin.Context, orderType string) {
+	var input dto.CreateOrderRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	order, err := h.service.CreateOrder(input)
+	if input.IsGuest && orderType == "website" {
+		orderType = "guest"
+	}
+	order, err := h.service.CreateOrder(input, orderType)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
 	utils.Success(c, http.StatusCreated, "order created", order)
+}
+
+// Create godoc
+// @Summary Create website/guest order
+// @Tags orders
+// @Accept json
+// @Produce json
+// @Param body body dto.CreateOrderRequest true "order"
+// @Success 201 {object} map[string]interface{}
+// @Router /api/v1/orders [post]
+func (h *OrderHandler) Create(c *gin.Context) {
+	h.createWithType(c, "website")
+}
+
+func (h *OrderHandler) CreatePhone(c *gin.Context) {
+	h.createWithType(c, "phone")
+}
+
+func (h *OrderHandler) CreateWalkin(c *gin.Context) {
+	h.createWithType(c, "walkin")
 }
 
 func (h *OrderHandler) List(c *gin.Context) {
@@ -37,6 +62,33 @@ func (h *OrderHandler) List(c *gin.Context) {
 		return
 	}
 	utils.Success(c, http.StatusOK, "orders list", orders)
+}
+
+func (h *OrderHandler) ListPending(c *gin.Context) {
+	orders, err := h.service.ListPendingOrders()
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "pending orders", orders)
+}
+
+func (h *OrderHandler) ListPhone(c *gin.Context) {
+	orders, err := h.service.ListOrdersByType("phone")
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "phone orders", orders)
+}
+
+func (h *OrderHandler) ListWalkin(c *gin.Context) {
+	orders, err := h.service.ListOrdersByType("walkin")
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "walk-in orders", orders)
 }
 
 func (h *OrderHandler) GetByID(c *gin.Context) {
@@ -59,16 +111,29 @@ func (h *OrderHandler) Update(c *gin.Context) {
 		HandleError(c, err)
 		return
 	}
-	updates := map[string]any{}
-	if err := c.ShouldBindJSON(&updates); err != nil {
+	var input dto.UpdateOrderRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.service.UpdateOrder(id, updates); err != nil {
+	if err := h.service.UpdateOrder(id, input); err != nil {
 		HandleError(c, err)
 		return
 	}
 	utils.Success(c, http.StatusOK, "order updated", nil)
+}
+
+func (h *OrderHandler) Delete(c *gin.Context) {
+	id, err := service.ParseOrderID(c.Param("id"))
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+	if err := h.service.DeleteOrder(id); err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "order deleted", nil)
 }
 
 func (h *OrderHandler) Cancel(c *gin.Context) {

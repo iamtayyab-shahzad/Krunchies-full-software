@@ -3,8 +3,10 @@ package handler
 import (
 	"net/http"
 
+	"backend/internal/dto"
 	"backend/internal/service"
 	"backend/internal/utils"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,8 +18,16 @@ func NewAuthHandler(service *service.AuthService) *AuthHandler {
 	return &AuthHandler{service: service}
 }
 
+// StaffLogin godoc
+// @Summary Staff login
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param body body dto.StaffLoginRequest true "credentials"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/auth/staff/login [post]
 func (h *AuthHandler) StaffLogin(c *gin.Context) {
-	var input service.StaffLoginInput
+	var input dto.StaffLoginRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
@@ -30,8 +40,16 @@ func (h *AuthHandler) StaffLogin(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "staff login successful", gin.H{"token": token})
 }
 
+// CustomerRegister godoc
+// @Summary Customer registration
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param body body dto.CustomerRegisterRequest true "registration"
+// @Success 201 {object} map[string]interface{}
+// @Router /api/v1/auth/customers/register [post]
 func (h *AuthHandler) CustomerRegister(c *gin.Context) {
-	var input service.CustomerRegisterInput
+	var input dto.CustomerRegisterRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
@@ -44,8 +62,16 @@ func (h *AuthHandler) CustomerRegister(c *gin.Context) {
 	utils.Success(c, http.StatusCreated, "customer registered", gin.H{"customer": customer, "token": token})
 }
 
+// CustomerLogin godoc
+// @Summary Customer login
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param body body dto.CustomerLoginRequest true "credentials"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/auth/customers/login [post]
 func (h *AuthHandler) CustomerLogin(c *gin.Context) {
-	var input service.CustomerLoginInput
+	var input dto.CustomerLoginRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return

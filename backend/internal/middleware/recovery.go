@@ -1,17 +1,27 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 
+	"backend/internal/logger"
 	"backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 func ErrorRecovery() gin.HandlerFunc {
-	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
-		log.Printf("panic recovered: %v", recovered)
-		utils.Error(c, http.StatusInternalServerError, "internal server error")
-	})
+	return func(c *gin.Context) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				logger.Error("panic_recovered", map[string]any{
+					"request_id": c.GetString("request_id"),
+					"path":       c.Request.URL.Path,
+					"panic":      recovered,
+				})
+				utils.Error(c, http.StatusInternalServerError, "internal server error")
+				c.Abort()
+			}
+		}()
+		c.Next()
+	}
 }

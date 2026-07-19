@@ -12,6 +12,7 @@ type Order struct {
 	DeliveryCharge int         `gorm:"not null;default:0" json:"delivery_charge"`
 	PaymentMethod  string      `gorm:"size:50;not null" json:"payment_method"`
 	OrderStatus    string      `gorm:"size:50;not null;index" json:"order_status"`
+	OrderType      string      `gorm:"size:30;not null;default:'website';index" json:"order_type"`
 	OrderNotes     string      `gorm:"type:text" json:"order_notes"`
 	Subtotal       int         `gorm:"not null;default:0" json:"subtotal"`
 	GrandTotal     int         `gorm:"not null;default:0" json:"grand_total"`
