@@ -17,6 +17,7 @@ export type Category = {
 };
 
 export type PizzaSize = {
+  id?: string;
   label: string;
   price: number;
 };
@@ -103,6 +104,7 @@ export type Customer = {
 export type InventoryItem = {
   id: string;
   name: string;
+  category: string;
   currentStock: number;
   unit: string;
   purchasePrice: number;
@@ -453,6 +455,7 @@ export const mockInventory: InventoryItem[] = [
   {
     id: "i1",
     name: "Mozzarella Cheese",
+    category: "Dairy",
     currentStock: 8,
     unit: "kg",
     purchasePrice: 1200,
@@ -462,6 +465,7 @@ export const mockInventory: InventoryItem[] = [
   {
     id: "i2",
     name: "Chicken Breast",
+    category: "Meat",
     currentStock: 25,
     unit: "kg",
     purchasePrice: 650,
@@ -471,6 +475,7 @@ export const mockInventory: InventoryItem[] = [
   {
     id: "i3",
     name: "Pizza Dough Balls",
+    category: "Bakery",
     currentStock: 40,
     unit: "pcs",
     purchasePrice: 40,
@@ -480,6 +485,7 @@ export const mockInventory: InventoryItem[] = [
   {
     id: "i4",
     name: "Burger Buns",
+    category: "Bakery",
     currentStock: 12,
     unit: "pcs",
     purchasePrice: 25,
@@ -489,6 +495,7 @@ export const mockInventory: InventoryItem[] = [
   {
     id: "i5",
     name: "Cooking Oil",
+    category: "Pantry",
     currentStock: 6,
     unit: "L",
     purchasePrice: 480,

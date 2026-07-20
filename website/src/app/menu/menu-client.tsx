@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { ProductCard } from "@/components/menu/product-card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { pizzaCategoryIds } from "@/data/krunchies";
 import { getCategories, getProducts } from "@/services/api";
 import type { Category, Product } from "@/types";
 
@@ -19,6 +18,16 @@ export default function MenuPage() {
   const [search, setSearch] = useState("");
   const [sizeFilter, setSizeFilter] = useState<"all" | "pizza" | "other">("all");
   const [loading, setLoading] = useState(true);
+
+  const pizzaCategoryIds = useMemo(
+    () =>
+      new Set(
+        categories
+          .filter((c) => c.name.toLowerCase().includes("pizza"))
+          .map((c) => c.id),
+      ),
+    [categories],
+  );
 
   useEffect(() => {
     getCategories().then(setCategories);
@@ -40,7 +49,7 @@ export default function MenuPage() {
       return products.filter((p) => pizzaCategoryIds.has(p.category_id));
     }
     return products.filter((p) => !pizzaCategoryIds.has(p.category_id));
-  }, [products, sizeFilter]);
+  }, [products, sizeFilter, pizzaCategoryIds]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">

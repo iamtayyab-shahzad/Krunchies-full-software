@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,7 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { mockCategories, type Category } from "@/lib/mock-data";
+import { type Category } from "@/lib/mock-data";
+import { categoriesApi } from "@/services/api";
 
 const empty = (): Omit<Category, "id"> => ({
   name: "",
@@ -28,10 +29,30 @@ const empty = (): Omit<Category, "id"> => ({
 });
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState(mockCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
   const [form, setForm] = useState(empty());
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      const cats = await categoriesApi.list();
+      if (cancelled) return;
+      setCategories(cats);
+      setLoading(false);
+    };
+    load().catch((e) => {
+      toast.error(e instanceof Error ? e.message : "Failed to load categories");
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -48,39 +69,73 @@ export default function CategoriesPage() {
     setOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.name.trim()) {
       toast.error("Category name is required");
       return;
     }
-    const slug =
-      form.slug.trim() ||
-      form.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-    const payload: Category = {
-      id: editing?.id || `c-${Date.now()}`,
-      ...form,
-      slug,
-    };
-    setCategories((prev) =>
-      editing
-        ? prev.map((c) => (c.id === editing.id ? payload : c))
-        : [...prev, payload].sort((a, b) => a.displayOrder - b.displayOrder),
-    );
-    toast.success(editing ? "Category updated" : "Category added");
-    setOpen(false);
+
+    try {
+      const apiPayload = {
+        name: form.name,
+        image: form.image,
+        displayOrder: Number(form.displayOrder || 0),
+        hidden: form.hidden,
+      };
+
+      if (editing) {
+        await categoriesApi.update(editing.id, apiPayload);
+        toast.success("Category updated");
+      } else {
+        await categoriesApi.create(apiPayload);
+        toast.success("Category added");
+      }
+
+      const cats = await categoriesApi.list();
+      setCategories(cats);
+      setOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    }
   };
 
-  const remove = (id: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-    toast.success("Category deleted");
+  const remove = async (id: string) => {
+    try {
+      if (!confirm("Delete this category?")) return;
+      await categoriesApi.remove(id);
+      toast.success("Category deleted");
+      const cats = await categoriesApi.list();
+      setCategories(cats);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    }
   };
 
-  const toggleHide = (id: string) => {
-    setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, hidden: !c.hidden } : c)),
-    );
-    toast.success("Visibility updated");
+  const toggleHide = async (id: string) => {
+    try {
+      const current = categories.find((c) => c.id === id);
+      if (!current) return;
+      await categoriesApi.update(id, {
+        name: current.name,
+        image: current.image,
+        displayOrder: current.displayOrder,
+        hidden: !current.hidden,
+      });
+      toast.success("Visibility updated");
+      const cats = await categoriesApi.list();
+      setCategories(cats);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Update failed");
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center text-zinc-400">
+        Loading categories...
+      </div>
+    );
+  }
 
   return (
     <div>

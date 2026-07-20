@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,16 +25,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  mockCategories,
-  mockProducts,
+  type Category,
   type PizzaSize,
   type Product,
 } from "@/lib/mock-data";
 import { formatPrice } from "@/lib/utils";
+import { categoriesApi, productsApi } from "@/services/api";
 
-const emptyForm = (): Omit<Product, "id"> => ({
+const emptyForm = (categories: Category[]): Omit<Product, "id"> => ({
   name: "",
-  categoryId: mockCategories[0]?.id || "",
+  categoryId: categories[0]?.id || "",
   description: "",
   image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&q=80",
   available: true,
@@ -44,10 +44,12 @@ const emptyForm = (): Omit<Product, "id"> => ({
 });
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState(mockProducts);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState(() => emptyForm([]));
   const [useSizes, setUseSizes] = useState(false);
   const [sizes, setSizes] = useState<PizzaSize[]>([
     { label: "S", price: 0 },
@@ -56,15 +58,41 @@ export default function ProductsPage() {
     { label: "XL", price: 0 },
   ]);
 
-  const categoryName = useMemo(() => {
-    const map = Object.fromEntries(mockCategories.map((c) => [c.id, c.name]));
-    return (id: string) => map[id] || "—";
+  // Load categories + products from backend.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      const [cats, prods] = await Promise.all([
+        categoriesApi.list(),
+        productsApi.list(),
+      ]);
+      if (cancelled) return;
+      setCategories(cats);
+      setProducts(prods);
+      setLoading(false);
+      // If create dialog opens early, make sure default category is valid.
+      setForm(emptyForm(cats));
+    };
+    load().catch((e) => {
+      toast.error(e instanceof Error ? e.message : "Failed to load products");
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const categoryName = useMemo(() => {
+    const map = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+    return (id: string) => map[id] || "—";
+  }, [categories]);
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm());
-    setUseSizes(false);
+    setForm(emptyForm(categories));
+    setUseSizes(true);
     setSizes([
       { label: "S", price: 0 },
       { label: "M", price: 0 },
@@ -91,30 +119,81 @@ export default function ProductsPage() {
     setOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.name.trim()) {
       toast.error("Product name is required");
       return;
     }
-    const payload: Product = {
-      id: editing?.id || `p-${Date.now()}`,
-      ...form,
-      pizzaSizes: useSizes ? sizes : undefined,
-      basePrice: useSizes ? sizes[0]?.price || form.basePrice : form.basePrice,
-    };
-    setProducts((prev) =>
-      editing
-        ? prev.map((p) => (p.id === editing.id ? payload : p))
-        : [payload, ...prev],
-    );
-    toast.success(editing ? "Product updated" : "Product added");
-    setOpen(false);
+    if (!form.categoryId) {
+      toast.error("Category is required");
+      return;
+    }
+    try {
+      const pizzaSizes: PizzaSize[] = useSizes
+        ? sizes
+        : [{ label: "Regular", price: form.basePrice }];
+
+      if (editing) {
+        await productsApi.update(editing.id, {
+          categoryId: form.categoryId,
+          name: form.name,
+          description: form.description,
+          image: form.image,
+          featured: form.featured,
+          available: form.available,
+          pizzaSizes,
+        });
+        toast.success("Product updated");
+      } else {
+        await productsApi.create({
+          categoryId: form.categoryId,
+          name: form.name,
+          description: form.description,
+          image: form.image,
+          featured: form.featured,
+          available: form.available,
+          pizzaSizes,
+        });
+        toast.success("Product added");
+      }
+
+      const [cats, prods] = await Promise.all([
+        categoriesApi.list(),
+        productsApi.list(),
+      ]);
+      setCategories(cats);
+      setProducts(prods);
+      setForm(emptyForm(cats));
+      setOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    }
   };
 
-  const remove = (id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    toast.success("Product deleted");
+  const remove = async (id: string) => {
+    try {
+      if (!confirm("Delete this product?")) return;
+      await productsApi.remove(id);
+      toast.success("Product deleted");
+      const [cats, prods] = await Promise.all([
+        categoriesApi.list(),
+        productsApi.list(),
+      ]);
+      setCategories(cats);
+      setProducts(prods);
+      setForm(emptyForm(cats));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center text-zinc-400">
+        Loading products...
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -234,7 +313,7 @@ export default function ProductsPage() {
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockCategories.map((c) => (
+                  {categories.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
                     </SelectItem>
@@ -272,11 +351,18 @@ export default function ProductsPage() {
               <Input
                 type="file"
                 accept="image/*"
-                onChange={() =>
-                  toast.message("Mock upload", {
-                    description: "Image upload will connect to backend later.",
-                  })
-                }
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setForm((f) => ({
+                      ...f,
+                      image: String(reader.result || ""),
+                    }));
+                  };
+                  reader.readAsDataURL(file);
+                }}
               />
             </div>
             <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-3">

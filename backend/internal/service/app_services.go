@@ -15,6 +15,7 @@ type AppServices struct {
 	Locations    *CRUDService[domain.Location]
 	Offers       *OfferService
 	Inventory    *CRUDService[domain.Inventory]
+	InventoryTransactions *InventoryTransactionService
 	Recipes      *CRUDService[domain.Recipe]
 	Orders       *OrderService
 	Payments     *PaymentService
@@ -31,6 +32,7 @@ func NewAppServices(db *gorm.DB, jwtSecret string) *AppServices {
 		Locations:    NewCRUDService(repository.NewGenericRepository[domain.Location](db)),
 		Offers:       NewOfferService(db),
 		Inventory:    NewCRUDService(repository.NewGenericRepository[domain.Inventory](db)),
+		InventoryTransactions: NewInventoryTransactionService(db),
 		Recipes:      NewCRUDService(repository.NewGenericRepository[domain.Recipe](db)),
 		Orders:       NewOrderService(db),
 		Payments:     NewPaymentService(db),

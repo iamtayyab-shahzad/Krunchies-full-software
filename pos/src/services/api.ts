@@ -51,85 +51,127 @@ export const authApi = {
 };
 
 export async function syncKrunchiesMenu() {
-  const [remoteCategories, remoteProducts, remoteSizes] = await Promise.all([
+  const [remoteCategories, remoteProducts, remoteSizes, remoteOffers] =
+    await Promise.all([
     apiFetch<Category[]>("/categories"),
     apiFetch<Product[]>("/products"),
     apiFetch<ProductSize[]>("/product-sizes"),
+    apiFetch<Offer[]>("/offers"),
   ]);
   const categoryIds = new Set(remoteCategories.map((item) => item.id));
   const productIds = new Set(remoteProducts.map((item) => item.id));
   const sizesById = new Map(remoteSizes.map((item) => [item.id, item]));
+  const offerIds = new Set(remoteOffers.map((item) => item.id));
 
-  await Promise.all(
-    krunchiesCategories.map((category) => {
-      const payload = {
-        id: category.id,
-        name: category.name,
-        image: category.image,
-        display_order: category.display_order,
-        visible: category.visible,
-      };
-      return categoryIds.has(category.id)
-        ? apiFetch<null>(`/categories/${category.id}`, {
-            method: "PUT",
-            body: JSON.stringify(payload),
-          })
-        : apiFetch<Category>("/categories", {
-            method: "POST",
-            body: JSON.stringify(payload),
-          });
-    }),
-  );
+  const shouldSeedCatalog =
+    remoteCategories.length === 0 ||
+    remoteProducts.length === 0 ||
+    remoteSizes.length === 0;
+  const shouldSeedOffers = remoteOffers.length === 0;
 
-  await Promise.all(
-    krunchiesProducts.map((product) => {
-      const payload = {
-        id: product.id,
-        category_id: product.category_id,
-        name: product.name,
-        description: product.description,
-        image: product.image,
-        featured: product.featured,
-        available: product.available,
-        display_order: product.display_order,
-      };
-      return productIds.has(product.id)
-        ? apiFetch<null>(`/products/${product.id}`, {
-            method: "PUT",
-            body: JSON.stringify(payload),
-          })
-        : apiFetch<Product>("/products", {
-            method: "POST",
-            body: JSON.stringify(payload),
-          });
-    }),
-  );
-
-  await Promise.all(
-    krunchiesProducts.flatMap((product) =>
-      (product.sizes ?? []).map((size) => {
+  // Seeding is "create missing" only. Once Admin has data, we avoid overwriting it.
+  if (shouldSeedCatalog) {
+    await Promise.all(
+      krunchiesCategories.map((category) => {
+        if (categoryIds.has(category.id)) return Promise.resolve(null);
         const payload = {
-          id: size.id,
-          product_id: size.product_id,
-          size: size.size,
-          price: size.price,
+          id: category.id,
+          name: category.name,
+          image: category.image,
+          display_order: category.display_order,
+          visible: category.visible,
         };
-        return sizesById.has(size.id)
-          ? apiFetch<null>(`/product-sizes/${size.id}`, {
-              method: "PUT",
-              body: JSON.stringify(payload),
-            })
-          : apiFetch<ProductSize>("/product-sizes", {
-              method: "POST",
-              body: JSON.stringify(payload),
-            });
+        return apiFetch<Category>("/categories", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
       }),
-    ),
-  );
+    );
+
+    await Promise.all(
+      krunchiesProducts.map((product) => {
+        if (productIds.has(product.id)) return Promise.resolve(null);
+        const payload = {
+          id: product.id,
+          category_id: product.category_id,
+          name: product.name,
+          description: product.description,
+          image: product.image,
+          featured: product.featured,
+          available: product.available,
+          display_order: product.display_order,
+        };
+        return apiFetch<Product>("/products", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }),
+    );
+
+    await Promise.all(
+      krunchiesProducts.flatMap((product) =>
+        (product.sizes ?? []).map((size) => {
+          if (sizesById.has(size.id)) return Promise.resolve(null);
+          const payload = {
+            id: size.id,
+            product_id: size.product_id,
+            size: size.size,
+            price: size.price,
+          };
+          return apiFetch<ProductSize>("/product-sizes", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+        }),
+      ),
+    );
+  }
+
+  // Seed offers only when the backend has none.
+  if (shouldSeedOffers) {
+    await Promise.all(
+      krunchiesOffers.map((offer) => {
+        if (offerIds.has(offer.id)) return Promise.resolve(null);
+        const isPromotion = Boolean(offer.start_date || offer.end_date);
+        const payload = {
+          id: offer.id,
+          title: offer.title,
+          description: offer.description,
+          image: offer.image,
+          active: offer.active,
+          start_date: offer.start_date,
+          end_date: offer.end_date,
+          // Backfill flags for Website offer-popup & Admin toggles.
+          offer_popup: isPromotion,
+          homepage_deal: true,
+          discount_label: offer.title,
+        };
+        return apiFetch<Offer>("/offers", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }),
+    );
+  }
 }
 
 export const productsApi = {
-  list: async () => krunchiesProducts,
+  list: async () => {
+    const [remoteProducts, remoteSizes] = await Promise.all([
+      apiFetch<Product[]>("/products"),
+      apiFetch<ProductSize[]>("/product-sizes"),
+    ]);
+    const sizesByProduct = new Map<string, ProductSize[]>();
+    for (const s of remoteSizes) {
+      const arr = sizesByProduct.get(s.product_id) || [];
+      arr.push(s);
+      sizesByProduct.set(s.product_id, arr);
+    }
+    return remoteProducts.map((p) => ({
+      ...p,
+      sizes: sizesByProduct.get(p.id) || [],
+    }));
+  },
   get: async (id: string) => {
     const product = krunchiesProducts.find((item) => item.id === id);
     if (!product) throw new Error("Product not found");
@@ -181,7 +223,7 @@ export const productSizesApi = {
 };
 
 export const categoriesApi = {
-  list: async () => krunchiesCategories,
+  list: async () => apiFetch<Category[]>("/categories"),
   create: async (payload: Partial<Category>) => {
     try {
       return await apiFetch<Category>("/categories", {
@@ -326,7 +368,7 @@ export const recipesApi = {
 };
 
 export const offersApi = {
-  list: async () => krunchiesOffers,
+  list: async () => apiFetch<Offer[]>("/offers"),
   create: async (payload: Partial<Offer>) => {
     try {
       return await apiFetch<Offer>("/offers", {

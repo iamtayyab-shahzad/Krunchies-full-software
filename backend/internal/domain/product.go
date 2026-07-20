@@ -8,7 +8,7 @@ type Product struct {
 	Category     Category      `gorm:"foreignKey:CategoryID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"category,omitempty"`
 	Name         string        `gorm:"size:150;not null" json:"name"`
 	Description  string        `gorm:"type:text" json:"description"`
-	Image        string        `gorm:"size:500" json:"image"`
+	Image        string        `gorm:"type:text" json:"image"`
 	Featured     bool          `gorm:"not null;default:false" json:"featured"`
 	Available    bool          `gorm:"not null;default:true" json:"available"`
 	DisplayOrder int           `gorm:"not null;default:0" json:"display_order"`

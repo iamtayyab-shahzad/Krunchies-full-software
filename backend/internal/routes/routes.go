@@ -37,6 +37,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 	locationHandler := handler.NewCRUDHandler[domain.Location](services.Locations, "location")
 	offerHandler := handler.NewOfferHandler(services.Offers)
 	inventoryHandler := handler.NewCRUDHandler[domain.Inventory](services.Inventory, "inventory")
+	inventoryTxHandler := handler.NewInventoryTransactionHandler(services.InventoryTransactions)
 	recipeHandler := handler.NewCRUDHandler[domain.Recipe](services.Recipes, "recipe")
 	orderHandler := handler.NewOrderHandler(services.Orders)
 	paymentHandler := handler.NewPaymentHandler(services.Payments)
@@ -63,16 +64,48 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 		// Public settings read for website/POS bootstrap
 		api.GET("/settings/public", settingHandler.Get)
 
+		// Public catalog reads used by Website (and POS can also call these)
+		api.GET("/categories", categoryHandler.List)
+		api.GET("/categories/:id", categoryHandler.GetByID)
+		api.GET("/products", productHandler.List)
+		api.GET("/products/:id", productHandler.GetByID)
+		api.GET("/product-sizes", productSizeHandler.List)
+		api.GET("/product-sizes/:id", productSizeHandler.GetByID)
+		api.GET("/locations", locationHandler.List)
+		api.GET("/locations/:id", locationHandler.GetByID)
+		api.GET("/offers", offerHandler.List)
+		api.GET("/offers/:id", offerHandler.GetByID)
+
 		staff := api.Group("")
 		staff.Use(middleware.JWTAuth(jwtSecret, "staff"))
 		{
-			categoryHandler.Register(staff, "/categories")
-			productHandler.Register(staff, "/products")
-			productSizeHandler.Register(staff, "/product-sizes")
-			locationHandler.Register(staff, "/locations")
-			offerHandler.Register(staff, "/offers")
+			// Mutations require staff JWT
+			staff.POST("/categories", categoryHandler.Create)
+			staff.PUT("/categories/:id", categoryHandler.Update)
+			staff.DELETE("/categories/:id", categoryHandler.Delete)
+
+			staff.POST("/products", productHandler.Create)
+			staff.PUT("/products/:id", productHandler.Update)
+			staff.DELETE("/products/:id", productHandler.Delete)
+
+			staff.POST("/product-sizes", productSizeHandler.Create)
+			staff.PUT("/product-sizes/:id", productSizeHandler.Update)
+			staff.DELETE("/product-sizes/:id", productSizeHandler.Delete)
+
+			staff.POST("/locations", locationHandler.Create)
+			staff.PUT("/locations/:id", locationHandler.Update)
+			staff.DELETE("/locations/:id", locationHandler.Delete)
+
+			staff.POST("/offers", offerHandler.Create)
+			staff.PUT("/offers/:id", offerHandler.Update)
+			staff.DELETE("/offers/:id", offerHandler.Delete)
+			staff.PATCH("/offers/:id/enable", offerHandler.Enable)
+			staff.PATCH("/offers/:id/disable", offerHandler.Disable)
+
 			inventoryHandler.Register(staff, "/inventory")
 			recipeHandler.Register(staff, "/recipes")
+
+			staff.GET("/inventory/transactions", inventoryTxHandler.List)
 
 			staff.GET("/orders", orderHandler.List)
 			staff.GET("/orders/pending", orderHandler.ListPending)

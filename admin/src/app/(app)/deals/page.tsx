@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,7 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { mockDeals, type Deal } from "@/lib/mock-data";
+import { type Deal } from "@/lib/mock-data";
+import { offersApi } from "@/services/api";
 
 const empty = (): Omit<Deal, "id"> => ({
   title: "",
@@ -31,10 +32,29 @@ const empty = (): Omit<Deal, "id"> => ({
 });
 
 export default function DealsPage() {
-  const [deals, setDeals] = useState(mockDeals);
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Deal | null>(null);
   const [form, setForm] = useState(empty());
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      const list = await offersApi.list();
+      if (cancelled) return;
+      setDeals(list);
+      setLoading(false);
+    };
+    load().catch((e) => {
+      toast.error(e instanceof Error ? e.message : "Failed to load deals");
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -48,32 +68,96 @@ export default function DealsPage() {
     setOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.title.trim()) {
       toast.error("Deal title is required");
       return;
     }
-    const payload: Deal = {
-      id: editing?.id || `d-${Date.now()}`,
-      ...form,
-    };
-    setDeals((prev) =>
-      editing ? prev.map((d) => (d.id === editing.id ? payload : d)) : [payload, ...prev],
-    );
-    toast.success(editing ? "Deal updated" : "Deal created");
-    setOpen(false);
+
+    try {
+      if (editing) {
+        await offersApi.update(editing.id, {
+          title: form.title,
+          description: form.description,
+          image: form.image,
+          active: form.enabled,
+          offer_popup: form.offerPopup,
+          homepage_deal: form.homepageDeal,
+          discount_label: form.discountLabel,
+        });
+        toast.success("Deal updated");
+      } else {
+        await offersApi.create({
+          title: form.title,
+          description: form.description,
+          image: form.image,
+          enabled: form.enabled,
+          offerPopup: form.offerPopup,
+          homepageDeal: form.homepageDeal,
+          discountLabel: form.discountLabel,
+        });
+        toast.success("Deal created");
+      }
+
+      const list = await offersApi.list();
+      setDeals(list);
+      setOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    }
   };
 
-  const remove = (id: string) => {
-    setDeals((prev) => prev.filter((d) => d.id !== id));
-    toast.success("Deal deleted");
+  const refresh = async () => {
+    const list = await offersApi.list();
+    setDeals(list);
   };
 
-  const patch = (id: string, patchData: Partial<Deal>) => {
-    setDeals((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, ...patchData } : d)),
-    );
+  const remove = async (id: string) => {
+    try {
+      if (!confirm("Delete this deal?")) return;
+      await offersApi.remove(id);
+      toast.success("Deal deleted");
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    }
   };
+
+  const toggleEnabled = async (id: string, enabled: boolean) => {
+    try {
+      if (enabled) await offersApi.enable(id);
+      else await offersApi.disable(id);
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Update failed");
+    }
+  };
+
+  const togglePopup = async (id: string, value: boolean) => {
+    try {
+      await offersApi.update(id, { offer_popup: value });
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Update failed");
+    }
+  };
+
+  const toggleHomepage = async (id: string, value: boolean) => {
+    try {
+      await offersApi.update(id, { homepage_deal: value });
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Update failed");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center text-zinc-400">
+        Loading deals...
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -125,23 +209,21 @@ export default function DealsPage() {
                   <span className="text-sm">Enable</span>
                   <Switch
                     checked={deal.enabled}
-                    onCheckedChange={(v) => patch(deal.id, { enabled: v })}
+                    onCheckedChange={(v) => toggleEnabled(deal.id, v)}
                   />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2">
                   <span className="text-sm">Popup</span>
                   <Switch
                     checked={deal.offerPopup}
-                    onCheckedChange={(v) => patch(deal.id, { offerPopup: v })}
+                    onCheckedChange={(v) => togglePopup(deal.id, v)}
                   />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2">
                   <span className="text-sm">Homepage</span>
                   <Switch
                     checked={deal.homepageDeal}
-                    onCheckedChange={(v) =>
-                      patch(deal.id, { homepageDeal: v })
-                    }
+                    onCheckedChange={(v) => toggleHomepage(deal.id, v)}
                   />
                 </div>
               </div>

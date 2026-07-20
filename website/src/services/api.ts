@@ -1,8 +1,5 @@
 import {
-  categories,
   locations,
-  offers,
-  products,
   reviews,
   settings,
 } from "@/data/krunchies";
@@ -13,10 +10,25 @@ import type {
   LoginPayload,
   Order,
   Product,
+  ProductSize,
   RegisterPayload,
 } from "@/types";
 
 const MOCK_LATENCY = 250;
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+
+async function backendFetch<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`);
+  const json = (await res.json().catch(() => null)) as
+    | { success: boolean; message: string; data: T }
+    | null;
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || `Request failed (${res.status})`);
+  }
+  return json.data;
+}
 
 export async function getSettings() {
   await delay(MOCK_LATENCY);
@@ -25,7 +37,8 @@ export async function getSettings() {
 
 export async function getCategories() {
   await delay(MOCK_LATENCY);
-  return categories
+  const cats = await backendFetch<any[]>("/categories");
+  return cats
     .filter((c) => c.visible)
     .sort((a, b) => a.display_order - b.display_order);
 }
@@ -37,16 +50,24 @@ export async function getProducts(params?: {
   popular?: boolean;
 }): Promise<Product[]> {
   await delay(MOCK_LATENCY);
-  let result = products.filter((p) => p.available);
+  // Fetch from backend and join product sizes.
+  const [categories, remoteProducts, remoteSizes] = await Promise.all([
+    backendFetch<any[]>("/categories"),
+    backendFetch<any[]>("/products"),
+    backendFetch<ProductSize[]>("/product-sizes"),
+  ]);
+
+  let result = remoteProducts.filter((p: any) => p.available);
 
   if (params?.categoryId) {
-    result = result.filter((p) => p.category_id === params.categoryId);
+    result = result.filter((p: any) => p.category_id === params.categoryId);
   }
   if (params?.featured) {
     result = result.filter((p) => p.featured);
   }
   if (params?.popular) {
-    result = result.filter((p) => p.popular);
+    // Backend doesn't have `popular`; treat it as "featured".
+    result = result.filter((p: any) => p.featured);
   }
   if (params?.search) {
     const q = params.search.toLowerCase();
@@ -57,27 +78,44 @@ export async function getProducts(params?: {
     );
   }
 
+  const sizesByProduct = new Map<string, ProductSize[]>();
+  for (const s of remoteSizes) {
+    const arr = sizesByProduct.get((s as any).product_id) || [];
+    arr.push(s);
+    sizesByProduct.set((s as any).product_id, arr);
+  }
+
   return result
-    .map((p) => ({
+    .map((p: any) => ({
       ...p,
-      category: categories.find((c) => c.id === p.category_id),
+      sizes: sizesByProduct.get(p.id) || [],
+      category: categories.find((c: any) => c.id === p.category_id),
     }))
-    .sort((a, b) => a.display_order - b.display_order);
+    .sort((a, b) => (a as any).display_order - (b as any).display_order);
 }
 
 export async function getProductById(id: string): Promise<Product | null> {
   await delay(MOCK_LATENCY);
-  const product = products.find((p) => p.id === id);
+  const [categories, product, sizes] = await Promise.all([
+    backendFetch<any[]>("/categories"),
+    backendFetch<any>(`/products/${id}`).catch(() => null),
+    backendFetch<ProductSize[]>(`/product-sizes`).then((all) =>
+      all.filter((s) => (s as any).product_id === id),
+    ),
+  ]);
   if (!product) return null;
   return {
     ...product,
-    category: categories.find((c) => c.id === product.category_id),
+    sizes,
+    category: categories.find((c) => c.id === (product as any).category_id),
   };
 }
 
 export async function getOffers() {
   await delay(MOCK_LATENCY);
-  return offers.filter((o) => o.active);
+  const list = await backendFetch<any[]>("/offers");
+  // `offer_popup` is optional in the DB during migrations; treat missing as true.
+  return list.filter((o) => o.active && (o.offer_popup === undefined || o.offer_popup));
 }
 
 export async function getLocations() {

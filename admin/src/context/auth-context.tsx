@@ -8,8 +8,9 @@ import {
   useMemo,
   useState,
 } from "react";
-import { AUTH_KEY, POS_URL } from "@/lib/utils";
+import { AUTH_KEY, POS_URL, TOKEN_KEY } from "@/lib/utils";
 import { AuthUser, MOCK_USERS } from "@/lib/mock-data";
+import { apiFetch } from "@/lib/api-client";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -27,7 +28,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(AUTH_KEY);
-      if (raw) setUser(JSON.parse(raw) as AuthUser);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AuthUser;
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (parsed && token) setUser(parsed);
+        else localStorage.removeItem(AUTH_KEY);
+      }
     } catch {
       localStorage.removeItem(AUTH_KEY);
     } finally {
@@ -48,12 +54,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return "staff" as const;
     }
 
+    const resp = await apiFetch<{ token: string }>(
+      "/auth/staff/login",
+      {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      },
+      false,
+    );
+    localStorage.setItem(TOKEN_KEY, resp.token);
     localStorage.setItem(AUTH_KEY, JSON.stringify(match.user));
     setUser(match.user);
     return "admin" as const;
   }, []);
 
   const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(AUTH_KEY);
     setUser(null);
   }, []);

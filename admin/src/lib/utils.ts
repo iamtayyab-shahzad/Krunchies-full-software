@@ -10,5 +10,8 @@ export function formatPrice(amount: number, currency = "Rs") {
 }
 
 export const AUTH_KEY = "krunchies_admin_auth";
+export const TOKEN_KEY = "krunchies_admin_token";
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 export const POS_URL =
   process.env.NEXT_PUBLIC_POS_URL || "http://localhost:3001";
