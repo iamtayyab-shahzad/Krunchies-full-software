@@ -38,24 +38,15 @@ export async function apiFetch<T>(
   }
 
   const url = `${API_URL}${path}`;
-  // #region agent log
-  fetch('http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5f52e'},body:JSON.stringify({sessionId:'b5f52e',runId:'pre-fix',hypothesisId:'A',location:'api-client.ts:fetch-start',message:'API fetch starting',data:{url,method:options.method||'GET',path,apiUrl:API_URL},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   let res: Response;
   try {
     res = await fetch(url, {
       ...options,
       headers,
     });
-  } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5f52e'},body:JSON.stringify({sessionId:'b5f52e',runId:'pre-fix',hypothesisId:'A',location:'api-client.ts:fetch-catch',message:'API fetch network failure',data:{url,errorName:err instanceof Error ? err.name : 'unknown',errorMessage:err instanceof Error ? err.message : String(err),online:typeof navigator!=='undefined'?navigator.onLine:null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+  } catch {
     throw new ApiError("Network unavailable", 0);
   }
-  // #region agent log
-  fetch('http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5f52e'},body:JSON.stringify({sessionId:'b5f52e',runId:'pre-fix',hypothesisId:'B',location:'api-client.ts:fetch-response',message:'API fetch got response',data:{url,status:res.status,ok:res.ok},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   const json = (await res.json().catch(() => null)) as ApiResponse<T> | null;
 

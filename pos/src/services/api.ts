@@ -7,6 +7,12 @@ import {
   markActionError,
   markActionSynced,
 } from "@/lib/offline-db";
+import {
+  krunchiesCategories,
+  krunchiesOffers,
+  krunchiesProducts,
+  krunchiesSettings,
+} from "@/data/krunchies";
 import type {
   Category,
   CreateOrderInput,
@@ -44,10 +50,91 @@ export const authApi = {
     }, false),
 };
 
+export async function syncKrunchiesMenu() {
+  const [remoteCategories, remoteProducts, remoteSizes] = await Promise.all([
+    apiFetch<Category[]>("/categories"),
+    apiFetch<Product[]>("/products"),
+    apiFetch<ProductSize[]>("/product-sizes"),
+  ]);
+  const categoryIds = new Set(remoteCategories.map((item) => item.id));
+  const productIds = new Set(remoteProducts.map((item) => item.id));
+  const sizesById = new Map(remoteSizes.map((item) => [item.id, item]));
+
+  await Promise.all(
+    krunchiesCategories.map((category) => {
+      const payload = {
+        id: category.id,
+        name: category.name,
+        image: category.image,
+        display_order: category.display_order,
+        visible: category.visible,
+      };
+      return categoryIds.has(category.id)
+        ? apiFetch<null>(`/categories/${category.id}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          })
+        : apiFetch<Category>("/categories", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+    }),
+  );
+
+  await Promise.all(
+    krunchiesProducts.map((product) => {
+      const payload = {
+        id: product.id,
+        category_id: product.category_id,
+        name: product.name,
+        description: product.description,
+        image: product.image,
+        featured: product.featured,
+        available: product.available,
+        display_order: product.display_order,
+      };
+      return productIds.has(product.id)
+        ? apiFetch<null>(`/products/${product.id}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          })
+        : apiFetch<Product>("/products", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+    }),
+  );
+
+  await Promise.all(
+    krunchiesProducts.flatMap((product) =>
+      (product.sizes ?? []).map((size) => {
+        const payload = {
+          id: size.id,
+          product_id: size.product_id,
+          size: size.size,
+          price: size.price,
+        };
+        return sizesById.has(size.id)
+          ? apiFetch<null>(`/product-sizes/${size.id}`, {
+              method: "PUT",
+              body: JSON.stringify(payload),
+            })
+          : apiFetch<ProductSize>("/product-sizes", {
+              method: "POST",
+              body: JSON.stringify(payload),
+            });
+      }),
+    ),
+  );
+}
+
 export const productsApi = {
-  list: () =>
-    withCacheFallback("products", () => apiFetch<Product[]>("/products")),
-  get: (id: string) => apiFetch<Product>(`/products/${id}`),
+  list: async () => krunchiesProducts,
+  get: async (id: string) => {
+    const product = krunchiesProducts.find((item) => item.id === id);
+    if (!product) throw new Error("Product not found");
+    return product;
+  },
   create: async (payload: Partial<Product>) => {
     try {
       return await apiFetch<Product>("/products", {
@@ -94,8 +181,7 @@ export const productSizesApi = {
 };
 
 export const categoriesApi = {
-  list: () =>
-    withCacheFallback("categories", () => apiFetch<Category[]>("/categories")),
+  list: async () => krunchiesCategories,
   create: async (payload: Partial<Category>) => {
     try {
       return await apiFetch<Category>("/categories", {
@@ -240,7 +326,7 @@ export const recipesApi = {
 };
 
 export const offersApi = {
-  list: () => apiFetch<Offer[]>("/offers"),
+  list: async () => krunchiesOffers,
   create: async (payload: Partial<Offer>) => {
     try {
       return await apiFetch<Offer>("/offers", {
@@ -272,8 +358,7 @@ export const offersApi = {
 };
 
 export const settingsApi = {
-  get: () =>
-    withCacheFallback("settings", () => apiFetch<Settings>("/settings")),
+  get: async () => krunchiesSettings,
   update: async (updates: Record<string, unknown>) => {
     try {
       return await apiFetch<Settings>("/settings", {

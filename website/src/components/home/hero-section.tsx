@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { restaurant } from "@/data/krunchies";
 
 export function HeroSection() {
   return (
@@ -29,12 +30,12 @@ export function HeroSection() {
           Pizza
         </motion.p>
         <motion.h1
-          className="mt-6 max-w-xl text-xl font-medium text-zinc-200 sm:text-2xl"
+          className="mt-6 max-w-xl text-xl font-medium uppercase tracking-[0.18em] text-zinc-200 sm:text-2xl"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.15 }}
         >
-          Fire-baked perfection, delivered hot.
+          {restaurant.tagline}
         </motion.h1>
         <motion.p
           className="mt-4 max-w-md text-base text-zinc-400"
@@ -42,7 +43,8 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.28 }}
         >
-          Premium dough, bold toppings, and oven-fresh flavor in every bite.
+          {restaurant.deliveryNote}. Open daily {restaurant.openingTime}–
+          {restaurant.closingTime}.
         </motion.p>
         <motion.div
           className="mt-10 flex flex-wrap gap-4"

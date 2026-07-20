@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
-  Boxes,
   ClipboardList,
   FolderTree,
   History,
@@ -27,7 +26,6 @@ const LINKS = [
   { href: "/orders/history", label: "Order History", icon: History },
   { href: "/products", label: "Products", icon: Package },
   { href: "/categories", label: "Categories", icon: FolderTree },
-  { href: "/inventory", label: "Inventory", icon: Boxes },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -132,9 +130,6 @@ export function TopBar({
   useEffect(() => {
     setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000);
-    // #region agent log
-    fetch('http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5f52e'},body:JSON.stringify({sessionId:'b5f52e',runId:'post-fix',hypothesisId:'H1',location:'shell.tsx:TopBar',message:'TopBar clock mounted client-only',data:{mounted:true},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return () => clearInterval(id);
   }, []);
 

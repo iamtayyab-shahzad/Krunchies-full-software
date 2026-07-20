@@ -3,7 +3,8 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: path.join(__dirname),
+    // Include repo root so `shared/krunchies-menu.json` resolves.
+    root: path.join(__dirname, ".."),
   },
   images: {
     remotePatterns: [

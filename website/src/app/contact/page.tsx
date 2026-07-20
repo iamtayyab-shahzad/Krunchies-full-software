@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { settings } from "@/data/mock";
+import { settings, restaurant } from "@/data/krunchies";
 
 const schema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -56,13 +56,27 @@ export default function ContactPage() {
           <div className="flex gap-3 text-zinc-300">
             <Phone className="mt-0.5 h-5 w-5 text-orange-500" />
             <div>
-              <p className="font-medium text-white">Phone</p>
+              <p className="font-medium text-white">Delivery Phone</p>
               <a
                 href={`tel:${settings.phone}`}
                 className="text-sm text-zinc-400 hover:text-orange-400"
               >
                 {settings.phone}
               </a>
+              {restaurant.alternatePhone ? (
+                <>
+                  <br />
+                  <a
+                    href={`tel:${restaurant.alternatePhone.replace(/-/g, "")}`}
+                    className="text-sm text-zinc-400 hover:text-orange-400"
+                  >
+                    {restaurant.alternatePhone}
+                  </a>
+                </>
+              ) : null}
+              <p className="mt-1 text-xs text-zinc-500">
+                {restaurant.deliveryNote}
+              </p>
             </div>
           </div>
           <div className="flex gap-3 text-zinc-300">

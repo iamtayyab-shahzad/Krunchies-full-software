@@ -5,7 +5,7 @@ import {
   products,
   reviews,
   settings,
-} from "@/data/mock";
+} from "@/data/krunchies";
 import { delay } from "@/lib/utils";
 import type {
   CreateOrderPayload,

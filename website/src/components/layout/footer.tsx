@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { MapPin, Phone } from "lucide-react";
-import { settings } from "@/data/mock";
+import { settings, restaurant } from "@/data/krunchies";
 import { NAV_LINKS } from "@/lib/constants";
 
 function FacebookIcon({ className }: { className?: string }) {
@@ -29,9 +29,12 @@ export function Footer() {
           <p className="font-display text-2xl text-white">
             <span className="text-orange-500">Krunchies</span> Pizza
           </p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-orange-400">
+            {restaurant.tagline}
+          </p>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-zinc-400">
-            Handcrafted pizzas, bold flavors, and premium ingredients. Fresh from
-            our oven to your door.
+            {restaurant.deliveryNote}. Open daily {settings.opening_time}–
+            {settings.closing_time}.
           </p>
         </div>
 
@@ -76,6 +79,17 @@ export function Footer() {
                 {settings.phone}
               </a>
             </li>
+            {restaurant.alternatePhone ? (
+              <li className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-orange-500" />
+                <a
+                  href={`tel:${restaurant.alternatePhone.replace(/-/g, "")}`}
+                  className="hover:text-white"
+                >
+                  {restaurant.alternatePhone}
+                </a>
+              </li>
+            ) : null}
             <li>
               Open daily {settings.opening_time} – {settings.closing_time}
             </li>

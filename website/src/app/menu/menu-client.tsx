@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ProductCard } from "@/components/menu/product-card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { pizzaCategoryIds } from "@/data/krunchies";
 import { getCategories, getProducts } from "@/services/api";
 import type { Category, Product } from "@/types";
 
@@ -36,9 +37,9 @@ export default function MenuPage() {
   const filtered = useMemo(() => {
     if (sizeFilter === "all") return products;
     if (sizeFilter === "pizza") {
-      return products.filter((p) => p.category_id === "cat-pizza");
+      return products.filter((p) => pizzaCategoryIds.has(p.category_id));
     }
-    return products.filter((p) => p.category_id !== "cat-pizza");
+    return products.filter((p) => !pizzaCategoryIds.has(p.category_id));
   }, [products, sizeFilter]);
 
   return (
@@ -46,7 +47,8 @@ export default function MenuPage() {
       <div className="mb-8">
         <h1 className="font-display text-5xl text-white">Menu</h1>
         <p className="mt-2 text-zinc-400">
-          Explore our pizzas, sides, pasta, drinks, and desserts.
+          Official Krunchies Pizza menu — shakes, pasta, rolls, burgers, pizzas,
+          and family deals.
         </p>
       </div>
 

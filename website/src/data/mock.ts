@@ -9,18 +9,18 @@ import type {
 
 export const settings: Settings = {
   restaurant_name: "Krunchies Pizza",
-  phone: "+92 300 1234567",
-  whatsapp: "923001234567",
+  phone: "03002022633",
+  whatsapp: "923002022633",
   logo: "/logo.svg",
   opening_time: "11:00 AM",
   closing_time: "11:00 PM",
   cash_on_delivery_fee: 50,
   currency: "Rs",
-  google_maps: "https://maps.google.com",
-  facebook: "https://facebook.com/krunchiespizza",
-  instagram: "https://instagram.com/krunchiespizza",
-  address: "Shop 12, Food Street, Lahore, Pakistan",
-  email: "hello@krunchies.pizza",
+  google_maps: "",
+  facebook: "",
+  instagram: "",
+  address: "WE DELIVER! CALL NOW FREE DELIVERY",
+  email: "",
 };
 
 export const categories: Category[] = [

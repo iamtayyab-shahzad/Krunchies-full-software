@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setToken } from "@/lib/api-client";
 import { TOKEN_KEY } from "@/lib/utils";
-import { authApi } from "@/services/api";
+import { authApi, syncKrunchiesMenu } from "@/services/api";
 import { useEffect } from "react";
 
 const schema = z.object({
@@ -36,21 +36,17 @@ export default function LoginPage() {
   }, [router]);
 
   const onSubmit = async (values: FormValues) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5f52e'},body:JSON.stringify({sessionId:'b5f52e',runId:'pre-fix',hypothesisId:'C',location:'login/page.tsx:onSubmit',message:'Login submit clicked',data:{username:values.username,hasPassword:Boolean(values.password),href:typeof window!=='undefined'?window.location.href:null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     try {
       const data = await authApi.login(values);
-      // #region agent log
-      fetch('http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5f52e'},body:JSON.stringify({sessionId:'b5f52e',runId:'pre-fix',hypothesisId:'D',location:'login/page.tsx:success',message:'Login succeeded',data:{hasToken:Boolean(data?.token)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setToken(data.token);
+      try {
+        await syncKrunchiesMenu();
+      } catch {
+        toast.warning("Logged in, but menu sync will retry on the next login.");
+      }
       toast.success("Logged in");
       router.replace("/orders/new");
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5f52e'},body:JSON.stringify({sessionId:'b5f52e',runId:'pre-fix',hypothesisId:'A',location:'login/page.tsx:error',message:'Login failed',data:{errorMessage:err instanceof Error ? err.message : String(err)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       toast.error(err instanceof Error ? err.message : "Login failed");
     }
   };
