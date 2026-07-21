@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Search, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -14,55 +14,85 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { mockOrders, type Order } from "@/lib/mock-data";
 import { formatPrice } from "@/lib/utils";
+import {
+  ordersApi,
+  type BackendOrder,
+} from "@/services/api";
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState(mockOrders);
+  const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<Order | null>(null);
+  const [status, setStatusFilter] = useState("ALL");
+  const [editing, setEditing] = useState<BackendOrder | null>(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
 
+  const refresh = async () => {
+    const list = await ordersApi.list();
+    setOrders(list);
+  };
+
+  useEffect(() => {
+    refresh()
+      .catch((error) =>
+        toast.error(error instanceof Error ? error.message : "Failed to load orders"),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter(
-      (o) =>
-        o.orderNumber.toLowerCase().includes(q) ||
-        o.customerName.toLowerCase().includes(q) ||
-        o.phone.includes(q),
-    );
-  }, [orders, query]);
+    return orders
+      .filter((o) => status === "ALL" || o.order_status === status)
+      .filter(
+        (o) =>
+          !q ||
+          o.order_number.toLowerCase().includes(q) ||
+          o.id.toLowerCase().includes(q) ||
+          o.customer_name.toLowerCase().includes(q) ||
+          o.phone.includes(q),
+      );
+  }, [orders, query, status]);
 
-  const openEdit = (order: Order) => {
-    if (order.status !== "pending") {
+  const openEdit = (order: BackendOrder) => {
+    if (order.order_status !== "PENDING") {
       toast.error("Only pending orders can be edited");
       return;
     }
     setEditing(order);
-    setEditName(order.customerName);
+    setEditName(order.customer_name);
     setEditPhone(order.phone);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editing) return;
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === editing.id
-          ? { ...o, customerName: editName, phone: editPhone }
-          : o,
-      ),
-    );
-    toast.success("Pending order updated");
-    setEditing(null);
+    try {
+      await ordersApi.update(editing.id, {
+        customer_name: editName,
+        phone: editPhone,
+      });
+      await refresh();
+      toast.success("Pending order updated");
+      setEditing(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Update failed");
+    }
   };
 
-  const setStatus = (id: string, status: Order["status"]) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status } : o)),
-    );
-    toast.success(`Order marked ${status}`);
+  const changeStatus = async (
+    id: string,
+    next: "COMPLETED" | "CANCELLED",
+  ) => {
+    try {
+      if (next === "COMPLETED") await ordersApi.complete(id);
+      else await ordersApi.cancel(id);
+      await refresh();
+      toast.success(`Order marked ${next.toLowerCase()}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Update failed");
+    }
   };
 
   return (
@@ -82,15 +112,26 @@ export default function OrdersPage() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        {["ALL", "PENDING", "COMPLETED", "CANCELLED"].map((value) => (
+          <Button
+            key={value}
+            size="sm"
+            variant={status === value ? "default" : "secondary"}
+            onClick={() => setStatusFilter(value)}
+          >
+            {value}
+          </Button>
+        ))}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-zinc-800">
-        <table className="w-full min-w-[900px] text-left">
+        <table className="w-full min-w-[1050px] text-left">
           <thead className="bg-zinc-950 text-sm uppercase text-zinc-500">
             <tr>
               <th className="px-4 py-3">Order</th>
               <th className="px-4 py-3">Customer</th>
               <th className="px-4 py-3">Items</th>
+              <th className="px-4 py-3">Payment</th>
               <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
@@ -100,37 +141,53 @@ export default function OrdersPage() {
             {filtered.map((order) => (
               <tr key={order.id} className="border-t border-zinc-800">
                 <td className="px-4 py-3">
-                  <p className="font-bold">{order.orderNumber}</p>
+                  <p className="font-bold">{order.order_number}</p>
                   <p className="text-xs text-zinc-500">
-                    {new Date(order.createdAt).toLocaleString()}
+                    {new Date(order.created_at).toLocaleString()}
                   </p>
                 </td>
                 <td className="px-4 py-3">
-                  <p className="font-semibold">{order.customerName}</p>
+                  <p className="font-semibold">{order.customer_name}</p>
                   <p className="text-sm text-zinc-400">{order.phone}</p>
                 </td>
                 <td className="px-4 py-3 text-sm text-zinc-300">
-                  {order.items.join(", ")}
+                  {(order.items || [])
+                    .map((item) => {
+                      const name = item.product?.name || item.product_id;
+                      const size = item.product_size?.size;
+                      return `${item.quantity}× ${name}${size ? ` (${size})` : ""}`;
+                    })
+                    .join(", ") || "—"}
+                </td>
+                <td className="px-4 py-3 capitalize text-zinc-300">
+                  {order.payment_method}
                 </td>
                 <td className="px-4 py-3 font-bold text-orange-400">
-                  {formatPrice(order.total)}
+                  <p>{formatPrice(order.grand_total)}</p>
+                  <p className="text-xs font-normal text-zinc-500">
+                    Subtotal {formatPrice(order.subtotal)} · Delivery{" "}
+                    {formatPrice(order.delivery_charge)}
+                    {order.cash_on_delivery_fee > 0
+                      ? ` · COD ${formatPrice(order.cash_on_delivery_fee)}`
+                      : ""}
+                  </p>
                 </td>
                 <td className="px-4 py-3">
                   <Badge
                     tone={
-                      order.status === "completed"
+                      order.order_status === "COMPLETED"
                         ? "success"
-                        : order.status === "cancelled"
+                        : order.order_status === "CANCELLED"
                           ? "danger"
                           : "warning"
                     }
                   >
-                    {order.status}
+                    {order.order_status}
                   </Badge>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap justify-end gap-2">
-                    {order.status === "pending" ? (
+                    {order.order_status === "PENDING" ? (
                       <>
                         <Button
                           size="sm"
@@ -142,7 +199,7 @@ export default function OrdersPage() {
                         <Button
                           size="sm"
                           variant="success"
-                          onClick={() => setStatus(order.id, "completed")}
+                          onClick={() => changeStatus(order.id, "COMPLETED")}
                         >
                           <CheckCircle2 className="h-4 w-4" />
                           Complete
@@ -150,7 +207,7 @@ export default function OrdersPage() {
                         <Button
                           size="sm"
                           variant="danger"
-                          onClick={() => setStatus(order.id, "cancelled")}
+                          onClick={() => changeStatus(order.id, "CANCELLED")}
                         >
                           <XCircle className="h-4 w-4" />
                           Cancel
@@ -163,6 +220,13 @@ export default function OrdersPage() {
                 </td>
               </tr>
             ))}
+            {!loading && !filtered.length ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-zinc-500">
+                  No orders found.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

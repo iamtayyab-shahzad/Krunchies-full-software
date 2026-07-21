@@ -1,21 +1,57 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Package, ShoppingBag, TrendingUp } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, StatCard } from "@/components/ui/card";
-import {
-  mockAnalytics,
-  mockInventory,
-  mockOrders,
-} from "@/lib/mock-data";
+import type { InventoryItem } from "@/lib/mock-data";
 import { formatPrice } from "@/lib/utils";
+import {
+  inventoryApi,
+  ordersApi,
+  type BackendOrder,
+} from "@/services/api";
 
 export default function DashboardPage() {
-  const recent = mockOrders.slice(0, 5);
-  const lowStock = mockInventory.filter((i) => i.currentStock <= i.minimumStock);
-  const pending = mockOrders.filter((o) => o.status === "pending").length;
-  const completedToday = mockOrders.filter((o) => o.status === "completed").length;
+  const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+
+  useEffect(() => {
+    Promise.all([ordersApi.list(), inventoryApi.list()])
+      .then(([orderRows, inventoryRows]) => {
+        setOrders(orderRows);
+        setInventory(inventoryRows);
+      })
+      .catch((error) =>
+        toast.error(error instanceof Error ? error.message : "Failed to load dashboard"),
+      );
+  }, []);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startWeek = new Date(startToday);
+    startWeek.setDate(startWeek.getDate() - 6);
+    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const completed = orders.filter((o) => o.order_status === "COMPLETED");
+    const sumSince = (from: Date) =>
+      completed
+        .filter((o) => new Date(o.created_at) >= from)
+        .reduce((sum, o) => sum + o.grand_total, 0);
+    return {
+      today: sumSince(startToday),
+      week: sumSince(startWeek),
+      month: sumSince(startMonth),
+      pending: orders.filter((o) => o.order_status === "PENDING").length,
+      completedToday: completed.filter((o) => new Date(o.created_at) >= startToday)
+        .length,
+    };
+  }, [orders]);
+
+  const recent = orders.slice(0, 5);
+  const lowStock = inventory.filter((i) => i.currentStock <= i.minimumStock);
 
   return (
     <div>
@@ -27,24 +63,24 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Today's Sales"
-          value={formatPrice(mockAnalytics.todaySales)}
-          hint="Mock live total"
+          value={formatPrice(stats.today)}
+          hint="Completed orders"
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
           label="Weekly Sales"
-          value={formatPrice(mockAnalytics.weeklySales)}
+          value={formatPrice(stats.week)}
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
           label="Monthly Sales"
-          value={formatPrice(mockAnalytics.monthlySales)}
+          value={formatPrice(stats.month)}
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
           label="Quick Stats"
-          value={`${pending} pending`}
-          hint={`${completedToday} completed · ${lowStock.length} low stock`}
+          value={`${stats.pending} pending`}
+          hint={`${stats.completedToday} completed · ${lowStock.length} low stock`}
           icon={<ShoppingBag className="h-5 w-5" />}
         />
       </div>
@@ -62,25 +98,28 @@ export default function DashboardPage() {
                 className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3"
               >
                 <div className="min-w-0">
-                  <p className="font-bold text-white">{order.orderNumber}</p>
+                  <p className="font-bold text-white">{order.order_number}</p>
                   <p className="truncate text-sm text-zinc-400">
-                    {order.customerName} · {order.items.join(", ")}
+                    {order.customer_name} ·{" "}
+                    {(order.items || [])
+                      .map((item) => `${item.quantity}× ${item.product?.name || "Item"}`)
+                      .join(", ")}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-orange-400">
-                    {formatPrice(order.total)}
+                    {formatPrice(order.grand_total)}
                   </p>
                   <Badge
                     tone={
-                      order.status === "completed"
+                      order.order_status === "COMPLETED"
                         ? "success"
-                        : order.status === "cancelled"
+                        : order.order_status === "CANCELLED"
                           ? "danger"
                           : "warning"
                     }
                   >
-                    {order.status}
+                    {order.order_status}
                   </Badge>
                 </div>
               </div>

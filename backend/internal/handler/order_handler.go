@@ -8,6 +8,8 @@ import (
 	"backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 )
 
 type OrderHandler struct {
@@ -21,18 +23,60 @@ func NewOrderHandler(service *service.OrderService) *OrderHandler {
 func (h *OrderHandler) createWithType(c *gin.Context, orderType string) {
 	var input dto.CreateOrderRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		utils.Error(c, http.StatusBadRequest, err.Error())
+		utils.Error(c, http.StatusBadRequest, orderValidationMessage(err))
 		return
 	}
 	if input.IsGuest && orderType == "website" {
 		orderType = "guest"
 	}
-	order, err := h.service.CreateOrder(input, orderType)
+
+	var customerID *uuid.UUID
+	userType, _ := c.Get("user_type")
+	if rawID, exists := c.Get("user_id"); exists && userType == "customer" {
+		parsed, err := uuid.Parse(rawID.(string))
+		if err != nil {
+			utils.Error(c, http.StatusUnauthorized, "invalid customer token")
+			return
+		}
+		customerID = &parsed
+	}
+
+	order, err := h.service.CreateOrder(input, orderType, customerID)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
 	utils.Success(c, http.StatusCreated, "order created", order)
+}
+
+func orderValidationMessage(err error) string {
+	validationErrors, ok := err.(validator.ValidationErrors)
+	if !ok || len(validationErrors) == 0 {
+		return "invalid order request"
+	}
+
+	switch validationErrors[0].Field() {
+	case "CustomerName":
+		return "customer name is required"
+	case "Phone":
+		return "valid phone number is required"
+	case "Address":
+		return "delivery address is too long"
+	case "LocationID":
+		return "delivery location is required"
+	case "PaymentMethod":
+		return "valid payment method is required"
+	case "Items":
+		return "cart cannot be empty"
+	case "ProductID":
+		return "order item product is required"
+	case "ProductSizeID":
+		return "order item size is required"
+	case "Quantity":
+		return "order item quantity must be at least 1"
+	default:
+		return "invalid order request"
+	}
 }
 
 // Create godoc

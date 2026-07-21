@@ -12,4 +12,5 @@ type OrderItem struct {
 	ProductSize   ProductSize `gorm:"foreignKey:ProductSizeID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"product_size,omitempty"`
 	Quantity      int         `gorm:"not null;default:1" json:"quantity"`
 	Price         int         `gorm:"not null;default:0" json:"price"`
+	SpecialInstructions string `gorm:"type:text" json:"special_instructions"`
 }

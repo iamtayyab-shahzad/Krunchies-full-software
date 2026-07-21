@@ -1,0 +1,1 @@
+{"sessionId":"b5f52e","runId":"post-fix","hypothesisId":"A","location":"routes.go:77","message":"public catalog GET routes registered (no JWT) - running current source","data":{"routes":["/categories","/products","/product-sizes","/locations","/offers"]},"timestamp":1784612727267}

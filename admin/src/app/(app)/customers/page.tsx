@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,33 +14,65 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  mockCustomers,
-  mockOrders,
-  type Customer,
-} from "@/lib/mock-data";
+import { type Customer } from "@/lib/mock-data";
 import { formatPrice } from "@/lib/utils";
+import { ordersApi, type BackendOrder } from "@/services/api";
 
 export default function CustomersPage() {
+  const [orders, setOrders] = useState<BackendOrder[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Customer | null>(null);
 
+  useEffect(() => {
+    ordersApi
+      .list()
+      .then(setOrders)
+      .catch((error) =>
+        toast.error(error instanceof Error ? error.message : "Failed to load customers"),
+      );
+  }, []);
+
+  const customers = useMemo(() => {
+    const grouped = new Map<string, Customer>();
+    for (const order of orders) {
+      const key = order.customer_id || order.phone;
+      const current = grouped.get(key);
+      grouped.set(key, {
+        id: key,
+        name: order.customer_name,
+        phone: order.phone,
+        ordersCount: (current?.ordersCount || 0) + 1,
+        totalSpent: (current?.totalSpent || 0) + order.grand_total,
+        lastOrderAt:
+          !current || new Date(order.created_at) > new Date(current.lastOrderAt)
+            ? order.created_at
+            : current.lastOrderAt,
+      });
+    }
+    return Array.from(grouped.values()).sort(
+      (a, b) =>
+        new Date(b.lastOrderAt).getTime() - new Date(a.lastOrderAt).getTime(),
+    );
+  }, [orders]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return mockCustomers;
-    return mockCustomers.filter(
+    if (!q) return customers;
+    return customers.filter(
       (c) =>
         c.phone.includes(q) ||
         c.name.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [customers, query]);
 
   const history = useMemo(() => {
     if (!selected) return [];
-    return mockOrders.filter(
-      (o) => o.phone === selected.phone || o.customerName === selected.name,
+    return orders.filter(
+      (o) =>
+        (o.customer_id && o.customer_id === selected.id) ||
+        o.phone === selected.phone,
     );
-  }, [selected]);
+  }, [orders, selected]);
 
   return (
     <div>
@@ -112,28 +145,33 @@ export default function CustomersPage() {
                 <Card key={order.id} className="!p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold">{order.orderNumber}</p>
+                      <p className="font-bold">{order.order_number}</p>
                       <p className="text-sm text-zinc-400">
-                        {order.items.join(", ")}
+                        {(order.items || [])
+                          .map(
+                            (item) =>
+                              `${item.quantity}× ${item.product?.name || "Item"}`,
+                          )
+                          .join(", ")}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        {new Date(order.createdAt).toLocaleString()}
+                        {new Date(order.created_at).toLocaleString()}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-orange-400">
-                        {formatPrice(order.total)}
+                        {formatPrice(order.grand_total)}
                       </p>
                       <Badge
                         tone={
-                          order.status === "completed"
+                          order.order_status === "COMPLETED"
                             ? "success"
-                            : order.status === "cancelled"
+                            : order.order_status === "CANCELLED"
                               ? "danger"
                               : "warning"
                         }
                       >
-                        {order.status}
+                        {order.order_status}
                       </Badge>
                     </div>
                   </div>

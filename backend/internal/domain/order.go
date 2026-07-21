@@ -4,12 +4,16 @@ import "github.com/google/uuid"
 
 type Order struct {
 	BaseModel
+	OrderNumber    string      `gorm:"size:30" json:"order_number"`
+	CustomerID     *uuid.UUID  `gorm:"type:uuid;index" json:"customer_id,omitempty"`
+	Customer       *Customer   `gorm:"foreignKey:CustomerID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"customer,omitempty"`
 	CustomerName   string      `gorm:"size:120;not null" json:"customer_name"`
 	Phone          string      `gorm:"size:20;not null" json:"phone"`
 	Address        string      `gorm:"size:500;not null" json:"address"`
 	LocationID     uuid.UUID   `gorm:"type:uuid;not null;index" json:"location_id"`
 	Location       Location    `gorm:"foreignKey:LocationID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"location,omitempty"`
 	DeliveryCharge int         `gorm:"not null;default:0" json:"delivery_charge"`
+	CashOnDeliveryFee int      `gorm:"not null;default:0" json:"cash_on_delivery_fee"`
 	PaymentMethod  string      `gorm:"size:50;not null" json:"payment_method"`
 	OrderStatus    string      `gorm:"size:50;not null;index" json:"order_status"`
 	OrderType      string      `gorm:"size:30;not null;default:'website';index" json:"order_type"`

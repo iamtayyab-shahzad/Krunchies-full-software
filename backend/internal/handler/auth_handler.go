@@ -76,10 +76,13 @@ func (h *AuthHandler) CustomerLogin(c *gin.Context) {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	token, err := h.service.CustomerLogin(input)
+	customer, token, err := h.service.CustomerLogin(input)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "customer login successful", gin.H{"token": token})
+	utils.Success(c, http.StatusOK, "customer login successful", gin.H{
+		"customer": customer,
+		"token":    token,
+	})
 }

@@ -28,9 +28,12 @@ import { createOrder, getLocations, getSettings } from "@/services/api";
 import type { Location, PaymentMethod, Settings } from "@/types";
 
 const checkoutSchema = z.object({
-  customer_name: z.string().min(2, "Name is required"),
-  phone: z.string().min(10, "Enter a valid phone number"),
-  address: z.string().min(5, "Address is required"),
+  customer_name: z.string().trim().min(2, "Name is required"),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9+()\-\s]{7,20}$/, "Enter a valid phone number"),
+  address: z.string().trim().min(5, "Address is required"),
   location_id: z.string().min(1, "Select a delivery location"),
   payment_method: z.enum(["easypaisa", "jazzcash", "card", "cod"]),
   order_notes: z.string().optional(),
@@ -72,8 +75,18 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
   const paymentMethod = watch("payment_method");
 
   useEffect(() => {
-    getLocations().then(setLocations);
-    getSettings().then(setSettings);
+    Promise.all([getLocations(), getSettings()])
+      .then(([locationRows, restaurantSettings]) => {
+        setLocations(locationRows);
+        setSettings(restaurantSettings);
+      })
+      .catch((error) =>
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Unable to load checkout settings",
+        ),
+      );
   }, []);
 
   useEffect(() => {
@@ -105,21 +118,28 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
   }
 
   const onSubmit = async (values: CheckoutFormValues) => {
+    if (
+      items.length === 0 ||
+      items.some(
+        (item) =>
+          !item.product_id ||
+          !item.size_id ||
+          !Number.isInteger(item.quantity) ||
+          item.quantity < 1,
+      )
+    ) {
+      toast.error("Your cart contains invalid items. Please review it.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const order = await createOrder({
         ...values,
-        delivery_charge: deliveryCharge,
-        subtotal,
-        grand_total: grandTotal,
-        cash_on_delivery_fee: codFee || undefined,
         is_guest: guestMode || !isAuthenticated,
         items: items.map((item) => ({
           product_id: item.product_id,
-          size_id: item.size_id,
-          product_name: item.product_name,
-          size: item.size,
-          price: item.price,
+          product_size_id: item.size_id,
           quantity: item.quantity,
           special_instructions: item.special_instructions,
         })),
@@ -128,8 +148,12 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
       clearCart();
       toast.success("Order placed successfully!");
       router.push(`/order-success?order=${order.order_number}`);
-    } catch {
-      toast.error("Failed to place order. Please try again.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to place order. Please try again.",
+      );
     } finally {
       setSubmitting(false);
     }

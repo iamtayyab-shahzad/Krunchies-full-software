@@ -81,10 +81,7 @@ export interface Customer {
 
 export interface OrderItemPayload {
   product_id: string;
-  size_id: string;
-  product_name: string;
-  size: string;
-  price: number;
+  product_size_id: string;
   quantity: number;
   special_instructions?: string;
 }
@@ -94,32 +91,43 @@ export interface CreateOrderPayload {
   phone: string;
   address: string;
   location_id: string;
-  delivery_charge: number;
   payment_method: PaymentMethod;
   order_notes?: string;
-  subtotal: number;
-  grand_total: number;
-  cash_on_delivery_fee?: number;
   items: OrderItemPayload[];
   is_guest: boolean;
+}
+
+export interface OrderItem {
+  id: string;
+  order_id: string;
+  product_id: string;
+  product_size_id: string;
+  quantity: number;
+  price: number;
+  special_instructions?: string;
+  product?: Product;
+  product_size?: ProductSize;
 }
 
 export interface Order {
   id: string;
   order_number: string;
+  customer_id?: string;
   customer_name: string;
   phone: string;
   address: string;
   location_id: string;
   delivery_charge: number;
+  cash_on_delivery_fee: number;
   payment_method: PaymentMethod;
   order_status: string;
+  order_type: string;
   order_notes?: string;
   subtotal: number;
   grand_total: number;
-  cash_on_delivery_fee?: number;
-  items: OrderItemPayload[];
+  items: OrderItem[];
   created_at: string;
+  updated_at: string;
 }
 
 export interface Review {

@@ -1,84 +1,82 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useBill } from "@/context/bill-context";
-import { deleteDraft, listDrafts } from "@/lib/offline-db";
 import { formatPrice } from "@/lib/utils";
-import type { PendingDraft } from "@/types";
+import { ordersApi } from "@/services/api";
+import type { Order } from "@/types";
 
 export default function PendingOrdersPage() {
-  const [drafts, setDrafts] = useState<PendingDraft[]>([]);
-  const bill = useBill();
-  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: orders = [], isLoading } = useQuery({
+    queryKey: ["orders", "pending"],
+    queryFn: ordersApi.pending,
+  });
 
-  const refresh = async () => setDrafts(await listDrafts());
-
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  const resume = (draft: PendingDraft) => {
-    bill.loadDraft({
-      draftId: draft.id,
-      orderType: draft.order_type,
-      customerName: draft.customer_name,
-      phone: draft.phone,
-      address: draft.address,
-      locationId: draft.location_id,
-      deliveryCharge: draft.delivery_charge,
-      paymentMethod: draft.payment_method,
-      orderNotes: draft.order_notes,
-      items: draft.items,
-    });
-    toast.success("Pending order loaded");
-    router.push("/orders/new");
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["orders", "pending"] }),
+      queryClient.invalidateQueries({ queryKey: ["orders"] }),
+    ]);
   };
 
-  const remove = async (id: string) => {
-    await deleteDraft(id);
-    toast.message("Pending order removed");
-    refresh();
+  const complete = async (order: Order) => {
+    try {
+      await ordersApi.complete(order.id);
+      toast.success("Order completed");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to complete order");
+    }
+  };
+
+  const cancel = async (order: Order) => {
+    try {
+      await ordersApi.cancel(order.id);
+      toast.success("Order cancelled");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to cancel order");
+    }
   };
 
   return (
     <div className="h-full overflow-y-auto p-6">
       <h1 className="mb-6 text-3xl font-black">Pending Orders</h1>
       <div className="space-y-3">
-        {drafts.map((d) => {
-          const subtotal = d.items.reduce(
-            (s, i) => s + i.price * i.quantity,
-            0,
-          );
+        {orders.map((order) => {
           return (
             <div
-              key={d.id}
+              key={order.id}
               className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 md:flex-row md:items-center md:justify-between"
             >
               <div>
-                <p className="text-lg font-bold text-white">{d.customer_name}</p>
+                <p className="text-lg font-bold text-white">
+                  {order.order_number} · {order.customer_name}
+                </p>
                 <p className="text-sm text-zinc-400">
-                  {d.phone} · {d.order_type} · {d.items.length} items ·{" "}
-                  {formatPrice(subtotal)}
+                  {order.phone} · {order.order_type} · {order.items?.length ?? 0}{" "}
+                  items · {formatPrice(order.grand_total)}
                 </p>
                 <p className="text-xs text-zinc-600">
-                  Updated {new Date(d.updated_at).toLocaleString()}
+                  Created {new Date(order.created_at).toLocaleString()}
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button onClick={() => resume(d)}>Resume</Button>
-                <Button variant="danger" onClick={() => remove(d.id)}>
-                  Delete
+                <Button onClick={() => complete(order)}>Complete</Button>
+                <Button variant="danger" onClick={() => cancel(order)}>
+                  Cancel
                 </Button>
               </div>
             </div>
           );
         })}
-        {!drafts.length && (
-          <p className="text-zinc-500">No pending local orders.</p>
-        )}
+        {isLoading ? (
+          <p className="text-zinc-500">Loading pending orders...</p>
+        ) : !orders.length ? (
+          <p className="text-zinc-500">No pending orders.</p>
+        ) : null}
       </div>
     </div>
   );

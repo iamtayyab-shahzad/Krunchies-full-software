@@ -35,4 +35,5 @@ export const PAYMENT_METHODS = [
 
 export const CART_STORAGE_KEY = "krunchies_cart";
 export const AUTH_STORAGE_KEY = "krunchies_auth";
+export const AUTH_TOKEN_STORAGE_KEY = "krunchies_customer_token";
 export const LAST_ORDER_KEY = "krunchies_last_order";

@@ -134,6 +134,13 @@ export default function NewOrderPage() {
       toast.error("Customer name and phone required");
       return;
     }
+    if (
+      (bill.orderType === "phone" || bill.orderType === "website") &&
+      !bill.address.trim()
+    ) {
+      toast.error("Delivery address required");
+      return;
+    }
 
     setBusy(true);
     try {
@@ -142,28 +149,21 @@ export default function NewOrderPage() {
         phone: bill.phone,
         address: bill.address,
         location_id: bill.locationId,
-        delivery_charge: bill.deliveryCharge,
         payment_method: bill.paymentMethod,
-        order_status: status,
-        order_notes: [
-          bill.orderNotes,
-          ...bill.items
-            .filter((i) => i.special_instructions)
-            .map((i) => `${i.product_name}: ${i.special_instructions}`),
-        ]
-          .filter(Boolean)
-          .join(" | "),
-        subtotal: bill.subtotal,
-        grand_total: grandTotal,
+        order_notes: bill.orderNotes,
         items: bill.items.map((i) => ({
           product_id: i.product_id,
           product_size_id: i.size_id,
           quantity: i.quantity,
-          price: i.price,
+          special_instructions: i.special_instructions,
         })),
       };
 
-      const order = await ordersApi.create(payload, bill.orderType);
+      let order = await ordersApi.create(payload, bill.orderType);
+      if (status === "COMPLETED") {
+        await ordersApi.complete(order.id);
+        order = await ordersApi.get(order.id);
+      }
       if (bill.draftId) await deleteDraft(bill.draftId);
 
       localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(order));

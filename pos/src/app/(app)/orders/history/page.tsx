@@ -33,6 +33,7 @@ export default function OrderHistoryPage() {
         return (
           o.customer_name.toLowerCase().includes(s) ||
           o.phone.includes(s) ||
+          o.order_number.toLowerCase().includes(s) ||
           o.id.toLowerCase().includes(s)
         );
       })
@@ -125,7 +126,7 @@ export default function OrderHistoryPage() {
                     {new Date(order.created_at).toLocaleString()}
                   </p>
                   <p className="text-xs text-zinc-600">
-                    #{order.id.slice(0, 8).toUpperCase()} ·{" "}
+                    {order.order_number} ·{" "}
                     {(order.items || []).length} items
                   </p>
                 </div>

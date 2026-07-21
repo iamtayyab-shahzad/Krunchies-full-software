@@ -1,7 +1,10 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"time"
 
 	"backend/internal/domain"
 	"backend/internal/handler"
@@ -55,10 +58,9 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 
 		// Public order creation (guest checkout supported)
 		ordersPublic := api.Group("/orders")
+		ordersPublic.Use(middleware.OptionalJWT(jwtSecret, "customer", "staff"))
 		{
 			ordersPublic.POST("", orderHandler.Create)
-			ordersPublic.POST("/phone", orderHandler.CreatePhone)
-			ordersPublic.POST("/walkin", orderHandler.CreateWalkin)
 		}
 
 		// Public settings read for website/POS bootstrap
@@ -75,6 +77,15 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 		api.GET("/locations/:id", locationHandler.GetByID)
 		api.GET("/offers", offerHandler.List)
 		api.GET("/offers/:id", offerHandler.GetByID)
+
+		// #region agent log
+		func() {
+			if f, ferr := os.OpenFile(`C:\Users\admin\Desktop\summer_work\krunchies-full-setup\debug-b5f52e.log`, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); ferr == nil {
+				defer f.Close()
+				fmt.Fprintf(f, "{\"sessionId\":\"b5f52e\",\"runId\":\"post-fix\",\"hypothesisId\":\"A\",\"location\":\"routes.go:77\",\"message\":\"public catalog GET routes registered (no JWT) - running current source\",\"data\":{\"routes\":[\"/categories\",\"/products\",\"/product-sizes\",\"/locations\",\"/offers\"]},\"timestamp\":%d}\n", time.Now().UnixMilli())
+			}
+		}()
+		// #endregion
 
 		staff := api.Group("")
 		staff.Use(middleware.JWTAuth(jwtSecret, "staff"))
@@ -108,6 +119,8 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			staff.GET("/inventory/transactions", inventoryTxHandler.List)
 
 			staff.GET("/orders", orderHandler.List)
+			staff.POST("/orders/phone", orderHandler.CreatePhone)
+			staff.POST("/orders/walkin", orderHandler.CreateWalkin)
 			staff.GET("/orders/pending", orderHandler.ListPending)
 			staff.GET("/orders/phone", orderHandler.ListPhone)
 			staff.GET("/orders/walkin", orderHandler.ListWalkin)

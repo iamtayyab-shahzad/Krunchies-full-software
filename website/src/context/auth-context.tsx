@@ -9,7 +9,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { AUTH_STORAGE_KEY } from "@/lib/constants";
+import {
+  AUTH_STORAGE_KEY,
+  AUTH_TOKEN_STORAGE_KEY,
+} from "@/lib/constants";
 import { loginCustomer, registerCustomer } from "@/services/api";
 import type { Customer, LoginPayload, RegisterPayload } from "@/types";
 
@@ -30,7 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (raw) setCustomer(JSON.parse(raw) as Customer);
+      const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+      if (raw && token) setCustomer(JSON.parse(raw) as Customer);
     } catch {
       setCustomer(null);
     }
@@ -58,7 +62,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result;
   }, []);
 
-  const logout = useCallback(() => setCustomer(null), []);
+  const logout = useCallback(() => {
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    setCustomer(null);
+  }, []);
 
   const value = useMemo(
     () => ({

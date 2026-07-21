@@ -79,19 +79,24 @@ export interface OrderItem extends BaseEntity {
   product_size_id: string;
   quantity: number;
   price: number;
+  special_instructions?: string;
   product?: Product;
   product_size?: ProductSize;
 }
 
 export interface Order extends BaseEntity {
+  order_number: string;
+  customer_id?: string;
   customer_name: string;
   phone: string;
   address: string;
   location_id: string;
   location?: Location;
   delivery_charge: number;
+  cash_on_delivery_fee: number;
   payment_method: string;
   order_status: string;
+  order_type: string;
   order_notes: string;
   subtotal: number;
   grand_total: number;
@@ -127,7 +132,7 @@ export interface CreateOrderItemInput {
   product_id: string;
   product_size_id: string;
   quantity: number;
-  price: number;
+  special_instructions?: string;
 }
 
 export interface CreateOrderInput {
@@ -135,12 +140,8 @@ export interface CreateOrderInput {
   phone: string;
   address?: string;
   location_id: string;
-  delivery_charge: number;
   payment_method: string;
-  order_status?: string;
   order_notes?: string;
-  subtotal: number;
-  grand_total: number;
   items: CreateOrderItemInput[];
 }
 

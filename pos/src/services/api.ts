@@ -273,6 +273,7 @@ export const locationsApi = {
 export const ordersApi = {
   list: () =>
     withCacheFallback("orders", () => apiFetch<Order[]>("/orders")),
+  pending: () => apiFetch<Order[]>("/orders/pending"),
   get: (id: string) => apiFetch<Order>(`/orders/${id}`),
   create: async (input: CreateOrderInput, orderType: "walkin" | "phone" | "website" = "walkin") => {
     const path =

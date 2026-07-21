@@ -22,7 +22,7 @@ export function buildReceiptHtml(
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Receipt ${order.id.slice(0, 8)}</title>
+<title>Receipt ${order.order_number || order.id}</title>
 <style>
   @page { size: 80mm auto; margin: 4mm; }
   body { font-family: ui-monospace, monospace; font-size: 12px; color: #000; width: 72mm; margin: 0 auto; }
@@ -41,7 +41,7 @@ export function buildReceiptHtml(
     ${reprint ? "REPRINT<br/>" : ""}
     ${new Date(order.created_at).toLocaleString()}
   </div>
-  <div>Order: ${order.id.slice(0, 8).toUpperCase()}</div>
+  <div>Order: ${order.order_number || order.id}</div>
   <div>Customer: ${order.customer_name}</div>
   <div>Phone: ${order.phone}</div>
   ${order.address ? `<div>Address: ${order.address}</div>` : ""}

@@ -29,6 +29,7 @@ func (r *OrderRepository) GetByIDTx(tx *gorm.DB, id uuid.UUID) (*domain.Order, e
 		Preload("Items").
 		Preload("Items.Product").
 		Preload("Items.ProductSize").
+		Preload("Customer").
 		Preload("Location").
 		Preload("Payment").
 		First(&order, "id = ?", id).Error; err != nil {
@@ -41,6 +42,9 @@ func (r *OrderRepository) List() ([]domain.Order, error) {
 	var orders []domain.Order
 	if err := r.db.
 		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.ProductSize").
+		Preload("Customer").
 		Preload("Payment").
 		Preload("Location").
 		Order("created_at desc").
@@ -54,6 +58,9 @@ func (r *OrderRepository) ListByStatus(status string) ([]domain.Order, error) {
 	var orders []domain.Order
 	if err := r.db.
 		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.ProductSize").
+		Preload("Customer").
 		Preload("Payment").
 		Preload("Location").
 		Where("order_status = ?", status).
@@ -68,6 +75,9 @@ func (r *OrderRepository) ListByType(orderType string) ([]domain.Order, error) {
 	var orders []domain.Order
 	if err := r.db.
 		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.ProductSize").
+		Preload("Customer").
 		Preload("Payment").
 		Where("order_type = ?", orderType).
 		Order("created_at desc").

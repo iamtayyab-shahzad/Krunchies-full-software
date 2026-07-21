@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"backend/internal/domain"
@@ -30,9 +31,31 @@ func NewOrderService(db *gorm.DB) *OrderService {
 	}
 }
 
-func (s *OrderService) CreateOrder(input dto.CreateOrderRequest, orderType string) (*domain.Order, error) {
+var phonePattern = regexp.MustCompile(`^[0-9+()[:space:]-]{7,20}$`)
+
+func (s *OrderService) CreateOrder(
+	input dto.CreateOrderRequest,
+	orderType string,
+	customerID *uuid.UUID,
+) (*domain.Order, error) {
 	orderType = normalizeOrderType(orderType)
 	method := strings.ToLower(strings.TrimSpace(input.PaymentMethod))
+	customerName := strings.TrimSpace(input.CustomerName)
+	phone := strings.TrimSpace(input.Phone)
+	address := strings.TrimSpace(input.Address)
+
+	if customerName == "" {
+		return nil, utils.NewAppError(http.StatusBadRequest, "customer name is required")
+	}
+	if !phonePattern.MatchString(phone) {
+		return nil, utils.NewAppError(http.StatusBadRequest, "invalid phone number")
+	}
+	if (orderType == "website" || orderType == "guest" || orderType == "phone") && address == "" {
+		return nil, utils.NewAppError(http.StatusBadRequest, "delivery address is required")
+	}
+	if len(input.Items) == 0 {
+		return nil, utils.NewAppError(http.StatusBadRequest, "cart cannot be empty")
+	}
 
 	tx := s.db.Begin()
 	if tx.Error != nil {
@@ -48,6 +71,14 @@ func (s *OrderService) CreateOrder(input dto.CreateOrderRequest, orderType strin
 		return nil, err
 	}
 
+	if customerID != nil {
+		var customer domain.Customer
+		if err := tx.First(&customer, "id = ?", *customerID).Error; err != nil {
+			tx.Rollback()
+			return nil, utils.NewAppError(http.StatusUnauthorized, "customer account not found")
+		}
+	}
+
 	var setting domain.Setting
 	_ = tx.Order("created_at asc").First(&setting).Error
 	codFee := 0
@@ -55,12 +86,17 @@ func (s *OrderService) CreateOrder(input dto.CreateOrderRequest, orderType strin
 		codFee = setting.CashOnDeliveryFee
 	}
 
+	orderID := uuid.New()
 	order := &domain.Order{
-		CustomerName:   input.CustomerName,
-		Phone:          input.Phone,
-		Address:        input.Address,
+		BaseModel:       domain.BaseModel{ID: orderID},
+		OrderNumber:     "KR-" + strings.ToUpper(strings.ReplaceAll(orderID.String(), "-", "")[:16]),
+		CustomerID:      customerID,
+		CustomerName:    customerName,
+		Phone:           phone,
+		Address:         address,
 		LocationID:     input.LocationID,
 		DeliveryCharge: location.DeliveryCharge,
+		CashOnDeliveryFee: codFee,
 		PaymentMethod:  method,
 		OrderStatus:    "PENDING",
 		OrderType:      orderType,
@@ -97,6 +133,7 @@ func (s *OrderService) CreateOrder(input dto.CreateOrderRequest, orderType strin
 			ProductSizeID: item.ProductSizeID,
 			Quantity:      item.Quantity,
 			Price:         size.Price,
+			SpecialInstructions: strings.TrimSpace(item.SpecialInstructions),
 		})
 	}
 
@@ -166,6 +203,15 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 	tx := s.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
+	}
+	current, err := s.orderRepo.GetByIDTx(tx, id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if current.OrderStatus != "PENDING" {
+		tx.Rollback()
+		return utils.NewAppError(http.StatusConflict, "only pending orders can be edited")
 	}
 	if err := s.orderRepo.Update(tx, id, updates); err != nil {
 		tx.Rollback()

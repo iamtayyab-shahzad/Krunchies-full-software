@@ -74,6 +74,38 @@ type BackendRecipe = {
   quantity_required: number;
 };
 
+export type BackendOrderItem = {
+  id: string;
+  product_id: string;
+  product_size_id: string;
+  quantity: number;
+  price: number;
+  special_instructions?: string;
+  product?: { id: string; name: string };
+  product_size?: { id: string; size: string; price: number };
+};
+
+export type BackendOrder = {
+  id: string;
+  order_number: string;
+  customer_id?: string;
+  customer_name: string;
+  phone: string;
+  address: string;
+  location_id: string;
+  delivery_charge: number;
+  cash_on_delivery_fee: number;
+  payment_method: string;
+  order_status: "PENDING" | "COMPLETED" | "CANCELLED";
+  order_type: string;
+  order_notes: string;
+  subtotal: number;
+  grand_total: number;
+  items: BackendOrderItem[];
+  created_at: string;
+  updated_at: string;
+};
+
 function slugify(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 }
@@ -406,5 +438,21 @@ export const inventoryTransactionsApi = {
 
 export const recipesApi = {
   list: () => apiFetch<BackendRecipe[]>("/recipes"),
+};
+
+export const ordersApi = {
+  list: () => apiFetch<BackendOrder[]>("/orders"),
+  update: (
+    id: string,
+    updates: { customer_name?: string; phone?: string },
+  ) =>
+    apiFetch<null>(`/orders/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    }),
+  complete: (id: string) =>
+    apiFetch<null>(`/orders/${id}/complete`, { method: "PATCH" }),
+  cancel: (id: string) =>
+    apiFetch<null>(`/orders/${id}/cancel`, { method: "PATCH" }),
 };
 

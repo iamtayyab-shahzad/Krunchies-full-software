@@ -78,20 +78,6 @@ export type RestaurantSettings = {
   cashOnDeliveryFee: number;
 };
 
-export type OrderStatus = "pending" | "completed" | "cancelled";
-
-export type Order = {
-  id: string;
-  orderNumber: string;
-  customerName: string;
-  phone: string;
-  total: number;
-  status: OrderStatus;
-  paymentMethod: string;
-  createdAt: string;
-  items: string[];
-};
-
 export type Customer = {
   id: string;
   name: string;
@@ -357,99 +343,6 @@ export const mockRestaurantSettings: RestaurantSettings = {
   currency: "Rs",
   cashOnDeliveryFee: 50,
 };
-
-export const mockOrders: Order[] = [
-  {
-    id: "o1",
-    orderNumber: "ORD-1042",
-    customerName: "Ali Khan",
-    phone: "03001234567",
-    total: 1899,
-    status: "pending",
-    paymentMethod: "COD",
-    createdAt: "2026-07-19T14:20:00",
-    items: ["Chicken Tikka Pizza (L)", "Chocolate Shake"],
-  },
-  {
-    id: "o2",
-    orderNumber: "ORD-1041",
-    customerName: "Sara Ahmed",
-    phone: "03009876543",
-    total: 950,
-    status: "completed",
-    paymentMethod: "Card",
-    createdAt: "2026-07-19T13:05:00",
-    items: ["Zinger Burger", "Fries"],
-  },
-  {
-    id: "o3",
-    orderNumber: "ORD-1040",
-    customerName: "Usman Ali",
-    phone: "03111222333",
-    total: 2499,
-    status: "completed",
-    paymentMethod: "COD",
-    createdAt: "2026-07-19T11:40:00",
-    items: ["Malai Boti Pizza (XL)", "Chicken Pasta"],
-  },
-  {
-    id: "o4",
-    orderNumber: "ORD-1039",
-    customerName: "Hina Raza",
-    phone: "03221234567",
-    total: 450,
-    status: "cancelled",
-    paymentMethod: "COD",
-    createdAt: "2026-07-18T19:10:00",
-    items: ["Chicken Paratha Roll", "Shake"],
-  },
-  {
-    id: "o5",
-    orderNumber: "ORD-1038",
-    customerName: "Bilal Sheikh",
-    phone: "03339876123",
-    total: 1299,
-    status: "pending",
-    paymentMethod: "Cash",
-    createdAt: "2026-07-19T15:00:00",
-    items: ["Family Combo"],
-  },
-];
-
-export const mockCustomers: Customer[] = [
-  {
-    id: "cu1",
-    name: "Ali Khan",
-    phone: "03001234567",
-    ordersCount: 12,
-    totalSpent: 18450,
-    lastOrderAt: "2026-07-19T14:20:00",
-  },
-  {
-    id: "cu2",
-    name: "Sara Ahmed",
-    phone: "03009876543",
-    ordersCount: 8,
-    totalSpent: 9200,
-    lastOrderAt: "2026-07-19T13:05:00",
-  },
-  {
-    id: "cu3",
-    name: "Usman Ali",
-    phone: "03111222333",
-    ordersCount: 5,
-    totalSpent: 7600,
-    lastOrderAt: "2026-07-19T11:40:00",
-  },
-  {
-    id: "cu4",
-    name: "Hina Raza",
-    phone: "03221234567",
-    ordersCount: 3,
-    totalSpent: 2100,
-    lastOrderAt: "2026-07-18T19:10:00",
-  },
-];
 
 export const mockInventory: InventoryItem[] = [
   {

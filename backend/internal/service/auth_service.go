@@ -77,17 +77,21 @@ func (s *AuthService) RegisterCustomer(input dto.CustomerRegisterRequest) (*doma
 	return customer, token, nil
 }
 
-func (s *AuthService) CustomerLogin(input dto.CustomerLoginRequest) (string, error) {
+func (s *AuthService) CustomerLogin(input dto.CustomerLoginRequest) (*domain.Customer, string, error) {
 	customer, err := s.repo.GetCustomerByPhone(input.Phone)
 	if err != nil {
-		return "", utils.NewAppError(http.StatusUnauthorized, "invalid credentials")
+		return nil, "", utils.NewAppError(http.StatusUnauthorized, "invalid credentials")
 	}
 	user, err := s.repo.GetUserByUsername(input.Phone)
 	if err != nil || user.Role != "customer" {
-		return "", utils.NewAppError(http.StatusUnauthorized, "invalid credentials")
+		return nil, "", utils.NewAppError(http.StatusUnauthorized, "invalid credentials")
 	}
 	if !utils.CheckPassword(user.Password, input.Password) {
-		return "", utils.NewAppError(http.StatusUnauthorized, "invalid credentials")
+		return nil, "", utils.NewAppError(http.StatusUnauthorized, "invalid credentials")
 	}
-	return utils.GenerateToken(s.jwtSecret, customer.ID.String(), "customer", 7*24*time.Hour)
+	token, err := utils.GenerateToken(s.jwtSecret, customer.ID.String(), "customer", 7*24*time.Hour)
+	if err != nil {
+		return nil, "", err
+	}
+	return customer, token, nil
 }
