@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/go-playground/validator/v10"
@@ -13,11 +15,11 @@ type Config struct {
 	Port       string           `validate:"required,numeric"`
 	Database   DatabaseConfig   `validate:"required"`
 	JWT        JWTConfig        `validate:"required"`
-	Cloudinary CloudinaryConfig `validate:"required"`
+	Cloudinary CloudinaryConfig // optional — not used by API yet
 }
 
 type DatabaseConfig struct {
-	Host     string `validate:"required,hostname|ip"`
+	Host     string `validate:"required"`
 	Port     string `validate:"required,numeric"`
 	User     string `validate:"required"`
 	Password string `validate:"required"`
@@ -30,9 +32,9 @@ type JWTConfig struct {
 }
 
 type CloudinaryConfig struct {
-	CloudName string `validate:"required"`
-	APIKey    string `validate:"required"`
-	APISecret string `validate:"required"`
+	CloudName string
+	APIKey    string
+	APISecret string
 }
 
 var (
@@ -45,16 +47,16 @@ func Load() (*Config, error) {
 	once.Do(func() {
 		_ = godotenv.Load(".env", "../../.env")
 
+		dbCfg, err := loadDatabaseConfig()
+		if err != nil {
+			loadErr = err
+			return
+		}
+
 		loaded := &Config{
-			Port: getEnv("APP_PORT"),
-			Database: DatabaseConfig{
-				Host:     getEnv("DB_HOST"),
-				Port:     getEnv("DB_PORT"),
-				User:     getEnv("DB_USER"),
-				Password: getEnv("DB_PASSWORD"),
-				Name:     getEnv("DB_NAME"),
-				SSLMode:  getEnv("DB_SSLMODE"),
-			},
+			// Platforms (Render/Railway/Fly) inject PORT; keep APP_PORT for local.
+			Port:     firstNonEmpty(getEnv("PORT"), getEnv("APP_PORT"), "8080"),
+			Database: dbCfg,
 			JWT: JWTConfig{
 				Secret: getEnv("JWT_SECRET"),
 			},
@@ -86,6 +88,69 @@ func MustLoad() *Config {
 	return loaded
 }
 
+func loadDatabaseConfig() (DatabaseConfig, error) {
+	if raw := strings.TrimSpace(getEnv("DATABASE_URL")); raw != "" {
+		parsed, err := parseDatabaseURL(raw)
+		if err != nil {
+			return DatabaseConfig{}, fmt.Errorf("invalid DATABASE_URL: %w", err)
+		}
+		return parsed, nil
+	}
+
+	return DatabaseConfig{
+		Host:     getEnv("DB_HOST"),
+		Port:     firstNonEmpty(getEnv("DB_PORT"), "5432"),
+		User:     getEnv("DB_USER"),
+		Password: getEnv("DB_PASSWORD"),
+		Name:     getEnv("DB_NAME"),
+		SSLMode:  firstNonEmpty(getEnv("DB_SSLMODE"), "disable"),
+	}, nil
+}
+
+func parseDatabaseURL(raw string) (DatabaseConfig, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
+		return DatabaseConfig{}, fmt.Errorf("unsupported scheme %q (expected postgres)", u.Scheme)
+	}
+
+	password, _ := u.User.Password()
+	dbName := strings.TrimPrefix(u.Path, "/")
+	if dbName == "" {
+		return DatabaseConfig{}, fmt.Errorf("database name missing in path")
+	}
+
+	port := u.Port()
+	if port == "" {
+		port = "5432"
+	}
+
+	sslMode := u.Query().Get("sslmode")
+	if sslMode == "" {
+		sslMode = "require"
+	}
+
+	return DatabaseConfig{
+		Host:     u.Hostname(),
+		Port:     port,
+		User:     u.User.Username(),
+		Password: password,
+		Name:     dbName,
+		SSLMode:  sslMode,
+	}, nil
+}
+
 func getEnv(key string) string {
 	return os.Getenv(key)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }

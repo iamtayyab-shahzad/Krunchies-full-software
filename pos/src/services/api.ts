@@ -11,7 +11,6 @@ import {
   krunchiesCategories,
   krunchiesOffers,
   krunchiesProducts,
-  krunchiesSettings,
 } from "@/data/krunchies";
 import type {
   Category,
@@ -401,7 +400,8 @@ export const offersApi = {
 };
 
 export const settingsApi = {
-  get: async () => krunchiesSettings,
+  get: async () =>
+    withCacheFallback("settings", () => apiFetch<Settings>("/settings/public")),
   update: async (updates: Record<string, unknown>) => {
     try {
       return await apiFetch<Settings>("/settings", {

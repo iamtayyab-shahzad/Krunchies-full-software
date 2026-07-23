@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -15,56 +14,110 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  mockDeliveryLocations,
-  mockRestaurantSettings,
-  type DeliveryLocation,
-} from "@/lib/mock-data";
 import { formatPrice } from "@/lib/utils";
+import {
+  locationsApi,
+  settingsApi,
+  type DeliveryLocationRow,
+} from "@/services/api";
 
 export default function DeliveryPage() {
-  const [locations, setLocations] = useState(mockDeliveryLocations);
-  const [codFee, setCodFee] = useState(
-    mockRestaurantSettings.cashOnDeliveryFee,
-  );
+  const [locations, setLocations] = useState<DeliveryLocationRow[]>([]);
+  const [codFee, setCodFee] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [savingFee, setSavingFee] = useState(false);
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<DeliveryLocation | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    charge: 0,
-    active: true,
-  });
+  const [editing, setEditing] = useState<DeliveryLocationRow | null>(null);
+  const [form, setForm] = useState({ name: "", charge: 0 });
+
+  const reload = async () => {
+    const [locs, settings] = await Promise.all([
+      locationsApi.list(),
+      settingsApi.get(),
+    ]);
+    setLocations(locs);
+    setCodFee(settings.cash_on_delivery_fee ?? 0);
+  };
+
+  useEffect(() => {
+    reload()
+      .catch((e) =>
+        toast.error(
+          e instanceof Error ? e.message : "Failed to load delivery settings",
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", charge: 0, active: true });
+    setForm({ name: "", charge: 0 });
     setOpen(true);
   };
 
-  const openEdit = (loc: DeliveryLocation) => {
+  const openEdit = (loc: DeliveryLocationRow) => {
     setEditing(loc);
-    setForm({ name: loc.name, charge: loc.charge, active: loc.active });
+    setForm({ name: loc.name, charge: loc.charge });
     setOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.name.trim()) {
       toast.error("Location name is required");
       return;
     }
-    const payload: DeliveryLocation = {
-      id: editing?.id || `dl-${Date.now()}`,
-      ...form,
-    };
-    setLocations((prev) =>
-      editing
-        ? prev.map((l) => (l.id === editing.id ? payload : l))
-        : [...prev, payload],
-    );
-    toast.success(editing ? "Location updated" : "Location added");
-    setOpen(false);
+    try {
+      if (editing) {
+        await locationsApi.update(editing.id, {
+          name: form.name.trim(),
+          charge: form.charge,
+        });
+        toast.success("Location updated");
+      } else {
+        await locationsApi.create({
+          name: form.name.trim(),
+          charge: form.charge,
+        });
+        toast.success("Location added");
+      }
+      await reload();
+      setOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    }
   };
+
+  const remove = async (loc: DeliveryLocationRow) => {
+    if (!confirm(`Delete "${loc.name}"?`)) return;
+    try {
+      await locationsApi.remove(loc.id);
+      toast.success("Location removed");
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    }
+  };
+
+  const saveFee = async () => {
+    setSavingFee(true);
+    try {
+      await settingsApi.updateCodFee(codFee);
+      toast.success("COD fee saved");
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save COD fee");
+    } finally {
+      setSavingFee(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center text-zinc-400">
+        Loading delivery settings...
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -97,10 +150,8 @@ export default function DeliveryPage() {
                 onChange={(e) => setCodFee(Number(e.target.value))}
               />
             </div>
-            <Button
-              onClick={() => toast.success("COD fee saved (mock)")}
-            >
-              Save Fee
+            <Button onClick={saveFee} disabled={savingFee}>
+              {savingFee ? "Saving..." : "Save Fee"}
             </Button>
           </div>
         </div>
@@ -112,7 +163,6 @@ export default function DeliveryPage() {
             <tr>
               <th className="px-4 py-3">Location</th>
               <th className="px-4 py-3">Charge</th>
-              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -122,23 +172,6 @@ export default function DeliveryPage() {
                 <td className="px-4 py-3 font-bold">{loc.name}</td>
                 <td className="px-4 py-3 text-orange-400">
                   {loc.charge === 0 ? "Free" : formatPrice(loc.charge)}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <Badge tone={loc.active ? "success" : "danger"}>
-                      {loc.active ? "Active" : "Inactive"}
-                    </Badge>
-                    <Switch
-                      checked={loc.active}
-                      onCheckedChange={(v) =>
-                        setLocations((prev) =>
-                          prev.map((l) =>
-                            l.id === loc.id ? { ...l, active: v } : l,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
@@ -152,12 +185,7 @@ export default function DeliveryPage() {
                     <Button
                       size="sm"
                       variant="danger"
-                      onClick={() => {
-                        setLocations((prev) =>
-                          prev.filter((l) => l.id !== loc.id),
-                        );
-                        toast.success("Location removed");
-                      }}
+                      onClick={() => remove(loc)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -165,6 +193,16 @@ export default function DeliveryPage() {
                 </td>
               </tr>
             ))}
+            {!locations.length && (
+              <tr>
+                <td
+                  colSpan={3}
+                  className="px-4 py-8 text-center text-zinc-500"
+                >
+                  No delivery locations yet. Add one to get started.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -192,13 +230,6 @@ export default function DeliveryPage() {
                 onChange={(e) =>
                   setForm({ ...form, charge: Number(e.target.value) })
                 }
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-3">
-              <Label>Active</Label>
-              <Switch
-                checked={form.active}
-                onCheckedChange={(v) => setForm({ ...form, active: v })}
               />
             </div>
             <div className="flex justify-end gap-2">

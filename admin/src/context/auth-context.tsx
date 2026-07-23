@@ -21,6 +21,25 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Returns true when the JWT is missing, malformed, or past its `exp` claim.
+// The backend rejects expired tokens with "invalid token", so the admin must
+// treat an expired token as logged-out instead of only checking presence.
+function isTokenExpired(token: string | null): boolean {
+  if (!token) return true;
+  const parts = token.split(".");
+  if (parts.length !== 3) return true;
+  try {
+    const payload = JSON.parse(
+      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")),
+    );
+    if (typeof payload.exp !== "number") return true;
+    // 10s clock-skew leeway.
+    return Math.floor(Date.now() / 1000) >= payload.exp - 10;
+  } catch {
+    return true;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
@@ -31,8 +50,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (raw) {
         const parsed = JSON.parse(raw) as AuthUser;
         const token = localStorage.getItem(TOKEN_KEY);
-        if (parsed && token) setUser(parsed);
-        else localStorage.removeItem(AUTH_KEY);
+        if (parsed && token && !isTokenExpired(token)) {
+          setUser(parsed);
+        } else {
+          // Expired/invalid session: clear it so the app routes to /login and
+          // a fresh token is minted on the next sign-in.
+          localStorage.removeItem(AUTH_KEY);
+          localStorage.removeItem(TOKEN_KEY);
+        }
       }
     } catch {
       localStorage.removeItem(AUTH_KEY);

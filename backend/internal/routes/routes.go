@@ -1,10 +1,7 @@
 package routes
 
 import (
-	"fmt"
 	"net/http"
-	"os"
-	"time"
 
 	"backend/internal/domain"
 	"backend/internal/handler"
@@ -29,6 +26,12 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			"docs":    "/swagger/index.html",
 		})
 	})
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	router.GET("/api/v1/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 
 	router.Static("/swagger", "./docs/swagger")
 	router.StaticFile("/openapi.yaml", "./docs/openapi.yaml")
@@ -42,6 +45,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 	inventoryHandler := handler.NewCRUDHandler[domain.Inventory](services.Inventory, "inventory")
 	inventoryTxHandler := handler.NewInventoryTransactionHandler(services.InventoryTransactions)
 	recipeHandler := handler.NewCRUDHandler[domain.Recipe](services.Recipes, "recipe")
+	catalogHandler := handler.NewCatalogHandler(services.Catalog)
 	orderHandler := handler.NewOrderHandler(services.Orders)
 	paymentHandler := handler.NewPaymentHandler(services.Payments)
 	analyticsHandler := handler.NewAnalyticsHandler(services.Analytics)
@@ -78,26 +82,17 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 		api.GET("/offers", offerHandler.List)
 		api.GET("/offers/:id", offerHandler.GetByID)
 
-		// #region agent log
-		func() {
-			if f, ferr := os.OpenFile(`C:\Users\admin\Desktop\summer_work\krunchies-full-setup\debug-b5f52e.log`, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); ferr == nil {
-				defer f.Close()
-				fmt.Fprintf(f, "{\"sessionId\":\"b5f52e\",\"runId\":\"post-fix\",\"hypothesisId\":\"A\",\"location\":\"routes.go:77\",\"message\":\"public catalog GET routes registered (no JWT) - running current source\",\"data\":{\"routes\":[\"/categories\",\"/products\",\"/product-sizes\",\"/locations\",\"/offers\"]},\"timestamp\":%d}\n", time.Now().UnixMilli())
-			}
-		}()
-		// #endregion
-
 		staff := api.Group("")
 		staff.Use(middleware.JWTAuth(jwtSecret, "staff"))
 		{
 			// Mutations require staff JWT
 			staff.POST("/categories", categoryHandler.Create)
 			staff.PUT("/categories/:id", categoryHandler.Update)
-			staff.DELETE("/categories/:id", categoryHandler.Delete)
+			staff.DELETE("/categories/:id", catalogHandler.DeleteCategory)
 
 			staff.POST("/products", productHandler.Create)
 			staff.PUT("/products/:id", productHandler.Update)
-			staff.DELETE("/products/:id", productHandler.Delete)
+			staff.DELETE("/products/:id", catalogHandler.DeleteProduct)
 
 			staff.POST("/product-sizes", productSizeHandler.Create)
 			staff.PUT("/product-sizes/:id", productSizeHandler.Update)

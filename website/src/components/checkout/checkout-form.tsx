@@ -134,7 +134,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
 
     setSubmitting(true);
     try {
-      const order = await createOrder({
+      const payload = {
         ...values,
         is_guest: guestMode || !isAuthenticated,
         items: items.map((item) => ({
@@ -143,12 +143,73 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
           quantity: item.quantity,
           special_instructions: item.special_instructions,
         })),
-      });
+      };
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7888/ingest/8bfa3430-75a3-4f8f-9f4b-0fb77dfcf7ef",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "ec6f7f",
+          },
+          body: JSON.stringify({
+            sessionId: "ec6f7f",
+            hypothesisId: "A/B/C",
+            location: "checkout-form.tsx:onSubmit",
+            message: "placing order",
+            data: {
+              payment_method: payload.payment_method,
+              location_id: payload.location_id,
+              locationLooksUuid:
+                typeof payload.location_id === "string" &&
+                /^[0-9a-f-]{36}$/i.test(payload.location_id),
+              itemCount: payload.items.length,
+              items: payload.items.map((i) => ({
+                product_id: i.product_id,
+                product_size_id: i.product_size_id,
+                quantity: i.quantity,
+                productUuidOk: /^[0-9a-f-]{36}$/i.test(i.product_id || ""),
+                sizeUuidOk: /^[0-9a-f-]{36}$/i.test(i.product_size_id || ""),
+              })),
+              is_guest: payload.is_guest,
+              nameLen: (payload.customer_name || "").length,
+              phoneLen: (payload.phone || "").length,
+              addressLen: (payload.address || "").length,
+            },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
+      const order = await createOrder(payload);
       localStorage.setItem(LAST_ORDER_KEY, JSON.stringify(order));
       clearCart();
       toast.success("Order placed successfully!");
       router.push(`/order-success?order=${order.order_number}`);
     } catch (error) {
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7888/ingest/8bfa3430-75a3-4f8f-9f4b-0fb77dfcf7ef",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "ec6f7f",
+          },
+          body: JSON.stringify({
+            sessionId: "ec6f7f",
+            hypothesisId: "A/B/C",
+            location: "checkout-form.tsx:onSubmit",
+            message: "place order failed",
+            data: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
       toast.error(
         error instanceof Error
           ? error.message

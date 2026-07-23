@@ -37,13 +37,14 @@ type CreateOrderRequest struct {
 }
 
 type UpdateOrderRequest struct {
-	CustomerName  *string    `json:"customer_name" binding:"omitempty,min=2,max=120"`
-	Phone         *string    `json:"phone" binding:"omitempty,min=7,max=20"`
-	Address       *string    `json:"address" binding:"omitempty,max=500"`
-	LocationID    *uuid.UUID `json:"location_id"`
-	PaymentMethod *string    `json:"payment_method" binding:"omitempty,oneof=cash easypaisa jazzcash card cod"`
-	OrderNotes    *string    `json:"order_notes" binding:"omitempty,max=2000"`
-	OrderStatus   *string    `json:"order_status" binding:"omitempty,oneof=PENDING COMPLETED CANCELLED"`
+	CustomerName  *string                   `json:"customer_name" binding:"omitempty,min=2,max=120"`
+	Phone         *string                   `json:"phone" binding:"omitempty,min=7,max=20"`
+	Address       *string                   `json:"address" binding:"omitempty,max=500"`
+	LocationID    *uuid.UUID                `json:"location_id"`
+	PaymentMethod *string                   `json:"payment_method" binding:"omitempty,oneof=cash easypaisa jazzcash card cod"`
+	OrderNotes    *string                   `json:"order_notes" binding:"omitempty,max=2000"`
+	OrderStatus   *string                   `json:"order_status" binding:"omitempty,oneof=PENDING COMPLETED CANCELLED"`
+	Items         *[]CreateOrderItemRequest `json:"items" binding:"omitempty,min=1,dive"`
 }
 
 type CreatePaymentRequest struct {
@@ -66,6 +67,7 @@ type UpdateSettingsRequest struct {
 	Phone             *string `json:"phone" binding:"omitempty,max=20"`
 	WhatsApp          *string `json:"whatsapp" binding:"omitempty,max=20"`
 	Logo              *string `json:"logo" binding:"omitempty,max=500"`
+	Address           *string `json:"address" binding:"omitempty,max=500"`
 	OpeningTime       *string `json:"opening_time" binding:"omitempty,max=20"`
 	ClosingTime       *string `json:"closing_time" binding:"omitempty,max=20"`
 	CashOnDeliveryFee *int    `json:"cash_on_delivery_fee" binding:"omitempty,min=0"`

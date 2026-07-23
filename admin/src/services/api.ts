@@ -46,6 +46,28 @@ type BackendOffer = {
   discount_label: string;
 };
 
+type BackendLocation = {
+  id: string;
+  name: string;
+  delivery_charge: number;
+};
+
+type BackendSetting = {
+  id: string;
+  restaurant_name: string;
+  phone: string;
+  whatsapp: string;
+  logo: string;
+  address: string;
+  opening_time: string;
+  closing_time: string;
+  cash_on_delivery_fee: number;
+  currency: string;
+  google_maps: string;
+  facebook: string;
+  instagram: string;
+};
+
 type BackendInventory = {
   id: string;
   name: string;
@@ -364,6 +386,119 @@ export const offersApi = {
   disable: async (id: string) => {
     await apiFetch<unknown>(`/offers/${id}/disable`, { method: "PATCH" });
   },
+};
+
+export type DeliveryLocationRow = {
+  id: string;
+  name: string;
+  charge: number;
+};
+
+export const locationsApi = {
+  list: async (): Promise<DeliveryLocationRow[]> => {
+    const rows = await apiFetch<BackendLocation[]>("/locations");
+    return rows
+      .slice()
+      .sort((a, b) => a.delivery_charge - b.delivery_charge)
+      .map((l) => ({ id: l.id, name: l.name, charge: l.delivery_charge }));
+  },
+  create: async (payload: { name: string; charge: number }) => {
+    await apiFetch<BackendLocation>("/locations", {
+      method: "POST",
+      body: JSON.stringify({
+        name: payload.name,
+        delivery_charge: Number(payload.charge || 0),
+      }),
+    });
+  },
+  update: async (id: string, payload: { name: string; charge: number }) => {
+    await apiFetch<unknown>(`/locations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        name: payload.name,
+        delivery_charge: Number(payload.charge || 0),
+      }),
+    });
+  },
+  remove: async (id: string) => {
+    await apiFetch<unknown>(`/locations/${id}`, { method: "DELETE" });
+  },
+};
+
+export type SettingsUpdatePayload = {
+  restaurant_name?: string;
+  phone?: string;
+  whatsapp?: string;
+  logo?: string;
+  address?: string;
+  opening_time?: string;
+  closing_time?: string;
+  cash_on_delivery_fee?: number;
+  currency?: string;
+  google_maps?: string;
+  facebook?: string;
+  instagram?: string;
+};
+
+export const settingsApi = {
+  get: async (): Promise<BackendSetting> => {
+    return apiFetch<BackendSetting>("/settings/public", {}, false);
+  },
+  update: async (payload: SettingsUpdatePayload): Promise<BackendSetting> => {
+    return apiFetch<BackendSetting>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+  updateCodFee: async (fee: number) => {
+    await apiFetch<BackendSetting>("/settings", {
+      method: "PUT",
+      body: JSON.stringify({ cash_on_delivery_fee: Number(fee || 0) }),
+    });
+  },
+};
+
+export type AnalyticsSalesTotal = { total: number };
+export type AnalyticsCancelledCount = { count: number };
+export type AnalyticsBestSellingRow = {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+};
+export type AnalyticsPaymentRow = {
+  method: string;
+  total: number;
+};
+export type AnalyticsInventoryRow = {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  stock: number;
+  purchase_price: number;
+  minimum_stock: number;
+  supplier: string;
+};
+
+export const analyticsApi = {
+  todaySales: () =>
+    apiFetch<AnalyticsSalesTotal>("/analytics/today-sales"),
+  yesterdaySales: () =>
+    apiFetch<AnalyticsSalesTotal>("/analytics/yesterday-sales"),
+  weeklySales: () =>
+    apiFetch<AnalyticsSalesTotal>("/analytics/weekly-sales"),
+  monthlySales: () =>
+    apiFetch<AnalyticsSalesTotal>("/analytics/monthly-sales"),
+  bestSellingProducts: () =>
+    apiFetch<AnalyticsBestSellingRow[]>("/analytics/best-selling-products"),
+  cancelledOrders: () =>
+    apiFetch<AnalyticsCancelledCount>("/analytics/cancelled-orders"),
+  paymentBreakdown: () =>
+    apiFetch<AnalyticsPaymentRow[]>("/analytics/payment-breakdown"),
+  remainingInventory: () =>
+    apiFetch<AnalyticsInventoryRow[]>("/analytics/remaining-inventory"),
+  lowStock: () =>
+    apiFetch<AnalyticsInventoryRow[]>("/analytics/low-stock"),
 };
 
 export const inventoryApi = {

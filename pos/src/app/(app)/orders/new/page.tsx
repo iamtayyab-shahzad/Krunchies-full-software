@@ -24,10 +24,11 @@ import {
   formatPrice,
   LAST_RECEIPT_KEY,
   ORDER_TYPES,
-  PAYMENT_METHODS,
+  paymentsForOrderType,
+  WALKIN_LOCATION_ID,
 } from "@/lib/utils";
 import { printReceipt } from "@/lib/receipt";
-import { deleteDraft, saveDraft } from "@/lib/offline-db";
+import { deleteDraft } from "@/lib/offline-db";
 import {
   categoriesApi,
   locationsApi,
@@ -42,6 +43,8 @@ export default function NewOrderPage() {
   const bill = useBill();
   const [categoryId, setCategoryId] = useState("all");
   const [busy, setBusy] = useState(false);
+  const isWalkin = bill.orderType === "walkin";
+  const paymentOptions = paymentsForOrderType(bill.orderType);
 
   const { data: products = [] } = useQuery({
     queryKey: ["products"],
@@ -60,12 +63,18 @@ export default function NewOrderPage() {
     queryFn: settingsApi.get,
   });
 
+  const deliveryLocations = useMemo(
+    () => locations.filter((l) => l.id !== WALKIN_LOCATION_ID),
+    [locations],
+  );
+
   const currency = settings?.currency || "Rs";
+  const deliveryCharge = isWalkin ? 0 : bill.deliveryCharge;
   const codFee = calcCodFee(
     bill.paymentMethod,
     settings?.cash_on_delivery_fee || 0,
   );
-  const grandTotal = calcGrandTotal(bill.subtotal, bill.deliveryCharge, codFee);
+  const grandTotal = calcGrandTotal(bill.subtotal, deliveryCharge, codFee);
 
   const filtered = useMemo(() => {
     return products
@@ -88,103 +97,107 @@ export default function NewOrderPage() {
       toast.error("No sizes configured for this product");
       return;
     }
-    if (sizes.length === 1) {
-      bill.addProduct(product, sizes[0]);
-      return;
-    }
-    // Pick first size quickly; staff can change in bill
     bill.addProduct(product, sizes[0]);
-    toast.message(`${product.name} added (${sizes[0].size})`);
-  };
-
-  const savePending = async () => {
-    if (!bill.items.length) {
-      toast.error("Add items first");
-      return;
+    if (sizes.length > 1) {
+      toast.message(`${product.name} added (${sizes[0].size})`);
     }
-    const id = bill.draftId || crypto.randomUUID();
-    await saveDraft({
-      id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      order_type: bill.orderType,
-      customer_name: bill.customerName,
-      phone: bill.phone,
-      address: bill.address,
-      location_id: bill.locationId,
-      delivery_charge: bill.deliveryCharge,
-      payment_method: bill.paymentMethod,
-      order_notes: bill.orderNotes,
-      items: bill.items,
-    });
-    bill.loadDraft({ draftId: id, items: bill.items });
-    toast.success("Saved as pending");
   };
 
-  const completeOrder = async (status: "COMPLETED" | "PENDING") => {
+  const buildPayload = () => ({
+    customer_name: isWalkin ? "Walk-in Customer" : bill.customerName.trim(),
+    phone: isWalkin ? "0000000000" : bill.phone.trim(),
+    address: isWalkin ? "In Store" : bill.address.trim(),
+    location_id: isWalkin ? WALKIN_LOCATION_ID : bill.locationId,
+    payment_method: bill.paymentMethod,
+    order_notes: bill.orderNotes,
+    items: bill.items.map((i) => ({
+      product_id: i.product_id,
+      product_size_id: i.size_id,
+      quantity: i.quantity,
+      special_instructions: i.special_instructions,
+    })),
+  });
+
+  const validate = () => {
     if (!bill.items.length) {
       toast.error("Cart is empty");
-      return;
+      return false;
     }
-    if (!bill.locationId) {
-      toast.error("Select delivery location");
-      return;
+    if (!paymentOptions.some((p) => p.id === bill.paymentMethod)) {
+      toast.error("Select a valid payment method");
+      return false;
     }
-    if (!bill.customerName || !bill.phone) {
+    if (isWalkin) return true;
+    if (!bill.customerName.trim() || !bill.phone.trim()) {
       toast.error("Customer name and phone required");
-      return;
+      return false;
     }
-    if (
-      (bill.orderType === "phone" || bill.orderType === "website") &&
-      !bill.address.trim()
-    ) {
+    if (!bill.locationId || bill.locationId === WALKIN_LOCATION_ID) {
+      toast.error("Select delivery location");
+      return false;
+    }
+    if (!bill.address.trim()) {
       toast.error("Delivery address required");
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const placeOrder = async (status: "COMPLETED" | "PENDING") => {
+    if (!validate()) return;
 
     setBusy(true);
     try {
-      const payload = {
-        customer_name: bill.customerName,
-        phone: bill.phone,
-        address: bill.address,
-        location_id: bill.locationId,
-        payment_method: bill.paymentMethod,
-        order_notes: bill.orderNotes,
-        items: bill.items.map((i) => ({
-          product_id: i.product_id,
-          product_size_id: i.size_id,
-          quantity: i.quantity,
-          special_instructions: i.special_instructions,
-        })),
-      };
-
-      let order = await ordersApi.create(payload, bill.orderType);
-      if (status === "COMPLETED") {
-        await ordersApi.complete(order.id);
-        order = await ordersApi.get(order.id);
+      const payload = buildPayload();
+      let order: Order;
+      if (bill.editingOrderId) {
+        await ordersApi.update(bill.editingOrderId, {
+          customer_name: payload.customer_name,
+          phone: payload.phone,
+          address: payload.address,
+          location_id: payload.location_id,
+          payment_method: payload.payment_method,
+          order_notes: payload.order_notes,
+          items: payload.items,
+        });
+        if (status === "COMPLETED") {
+          await ordersApi.complete(bill.editingOrderId);
+        }
+        order = await ordersApi.get(bill.editingOrderId);
+      } else {
+        order = await ordersApi.create(payload, bill.orderType);
+        if (status === "COMPLETED") {
+          await ordersApi.complete(order.id);
+          order = await ordersApi.get(order.id);
+        }
       }
       if (bill.draftId) await deleteDraft(bill.draftId);
 
       localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(order));
       if (status === "COMPLETED") {
         printReceipt(order, settings || null);
-        toast.success("Order completed & receipt printed");
+        toast.success(
+          bill.editingOrderId
+            ? "Order updated & completed"
+            : "Order completed & receipt printed",
+        );
       } else {
-        toast.success("Order saved as pending");
+        toast.success(
+          bill.editingOrderId
+            ? "Pending order updated"
+            : "Order saved to Pending Orders",
+        );
       }
 
       bill.clearBill();
-      qc.invalidateQueries({ queryKey: ["orders"] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["orders"] }),
+        qc.invalidateQueries({ queryKey: ["orders", "pending"] }),
+      ]);
     } catch (err) {
-      // Offline queue already filled by API layer
-      toast.message(
-        err instanceof Error
-          ? `${err.message}. Queued for sync if offline.`
-          : "Queued for sync",
+      toast.error(
+        err instanceof Error ? err.message : "Failed to place order",
       );
-      if (bill.draftId) await deleteDraft(bill.draftId);
-      bill.clearBill();
     } finally {
       setBusy(false);
     }
@@ -263,18 +276,27 @@ export default function NewOrderPage() {
 
       <aside className="flex min-h-0 flex-col bg-zinc-950">
         <div className="border-b border-zinc-800 p-4">
-          <h2 className="text-xl font-black text-white">Current Bill</h2>
+          <h2 className="text-xl font-black text-white">
+            {bill.editingOrderId ? "Editing Pending Order" : "Current Bill"}
+          </h2>
+          {bill.editingOrderId ? (
+            <p className="mt-1 text-xs text-amber-300">
+              Changes will update the existing pending order.
+            </p>
+          ) : null}
           <div className="mt-3 flex gap-2">
             {ORDER_TYPES.map((t) => (
               <button
                 key={t.id}
                 type="button"
+                disabled={Boolean(bill.editingOrderId)}
                 onClick={() => bill.setOrderType(t.id)}
                 className={cn(
                   "flex-1 rounded-lg px-2 py-2 text-xs font-bold",
                   bill.orderType === t.id
                     ? "bg-orange-500 text-black"
                     : "bg-zinc-900 text-zinc-400",
+                  bill.editingOrderId && "opacity-60",
                 )}
               >
                 {t.label}
@@ -284,50 +306,54 @@ export default function NewOrderPage() {
         </div>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label>Customer Name</Label>
-              <Input
-                value={bill.customerName}
-                onChange={(e) => bill.setCustomerName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Phone</Label>
-              <Input
-                value={bill.phone}
-                onChange={(e) => bill.setPhone(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label>Address</Label>
-            <Input
-              value={bill.address}
-              onChange={(e) => bill.setAddress(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Delivery Location</Label>
-            <Select
-              value={bill.locationId}
-              onValueChange={(id) => {
-                const loc = locations.find((l) => l.id === id);
-                bill.setLocation(id, loc?.delivery_charge || 0);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select location" />
-              </SelectTrigger>
-              <SelectContent>
-                {locations.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.name} · {formatPrice(l.delivery_charge, currency)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!isWalkin && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label>Customer Name</Label>
+                  <Input
+                    value={bill.customerName}
+                    onChange={(e) => bill.setCustomerName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Phone</Label>
+                  <Input
+                    value={bill.phone}
+                    onChange={(e) => bill.setPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Address</Label>
+                <Input
+                  value={bill.address}
+                  onChange={(e) => bill.setAddress(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Delivery Location</Label>
+                <Select
+                  value={bill.locationId || undefined}
+                  onValueChange={(id) => {
+                    const loc = deliveryLocations.find((l) => l.id === id);
+                    bill.setLocation(id, loc?.delivery_charge || 0);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryLocations.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name} · {formatPrice(l.delivery_charge, currency)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
 
           <div className="space-y-2">
             {bill.items.map((item) => {
@@ -424,7 +450,7 @@ export default function NewOrderPage() {
           <div>
             <Label className="mb-2 block">Payment</Label>
             <div className="grid grid-cols-2 gap-2">
-              {PAYMENT_METHODS.map((m) => (
+              {paymentOptions.map((m) => (
                 <button
                   key={m.id}
                   type="button"
@@ -447,10 +473,12 @@ export default function NewOrderPage() {
               <span>Subtotal</span>
               <span>{formatPrice(bill.subtotal, currency)}</span>
             </div>
-            <div className="flex justify-between text-zinc-400">
-              <span>Delivery</span>
-              <span>{formatPrice(bill.deliveryCharge, currency)}</span>
-            </div>
+            {!isWalkin && (
+              <div className="flex justify-between text-zinc-400">
+                <span>Delivery</span>
+                <span>{formatPrice(deliveryCharge, currency)}</span>
+              </div>
+            )}
             {codFee > 0 && (
               <div className="flex justify-between text-zinc-400">
                 <span>COD Fee</span>
@@ -467,8 +495,12 @@ export default function NewOrderPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-3">
-          <Button variant="secondary" onClick={savePending} disabled={busy}>
-            Save Pending
+          <Button
+            variant="secondary"
+            onClick={() => placeOrder("PENDING")}
+            disabled={busy}
+          >
+            {bill.editingOrderId ? "Update Pending" : "Save Pending"}
           </Button>
           <Button variant="outline" onClick={reprint}>
             <Printer className="h-4 w-4" /> Reprint
@@ -478,7 +510,7 @@ export default function NewOrderPage() {
           </Button>
           <Button
             variant="success"
-            onClick={() => completeOrder("COMPLETED")}
+            onClick={() => placeOrder("COMPLETED")}
             disabled={busy}
           >
             Complete
@@ -498,7 +530,12 @@ function ProductTile({
   currency: string;
   onAdd: (p: Product) => void;
 }) {
-  const minPrice = Math.min(...(product.sizes || []).map((s) => s.price), 0);
+  const sizes = product.sizes || [];
+  const prices = sizes.map((s) => s.price);
+  const minPrice = prices.length ? Math.min(...prices) : 0;
+  const maxPrice = prices.length ? Math.max(...prices) : 0;
+  const multiSize = sizes.length > 1;
+
   return (
     <button
       type="button"
@@ -525,12 +562,33 @@ function ProductTile({
         <p className="line-clamp-1 text-base font-bold text-white">
           {product.name}
         </p>
-        <p className="mt-1 text-sm font-semibold text-orange-400">
-          From {formatPrice(minPrice, currency)}
-        </p>
-        {(product.sizes || []).length > 0 && (
-          <p className="mt-1 text-xs text-zinc-500">
-            {(product.sizes || []).map((s) => s.size).join(" · ")}
+        {multiSize ? (
+          <>
+            <p className="mt-1 text-sm font-semibold text-orange-400">
+              {formatPrice(minPrice, currency)}
+              {maxPrice !== minPrice
+                ? ` – ${formatPrice(maxPrice, currency)}`
+                : ""}
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-1">
+              {sizes.map((s) => (
+                <div
+                  key={s.id}
+                  className="rounded bg-zinc-900 px-1.5 py-1 text-center"
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                    {s.size}
+                  </p>
+                  <p className="text-xs font-semibold text-zinc-200">
+                    {formatPrice(s.price, currency)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="mt-1 text-sm font-semibold text-orange-400">
+            {formatPrice(minPrice, currency)}
           </p>
         )}
       </div>

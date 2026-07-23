@@ -51,6 +51,12 @@ export async function apiFetch<T>(
   const json = (await res.json().catch(() => null)) as ApiResponse<T> | null;
 
   if (!res.ok || !json?.success) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem(TOKEN_KEY);
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
     throw new ApiError(json?.message || `Request failed (${res.status})`, res.status);
   }
 

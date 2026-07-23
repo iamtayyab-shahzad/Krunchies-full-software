@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setToken } from "@/lib/api-client";
-import { TOKEN_KEY } from "@/lib/utils";
+import { TOKEN_KEY, isTokenExpired } from "@/lib/utils";
 import { authApi, syncKrunchiesMenu } from "@/services/api";
 import { useEffect } from "react";
 
@@ -32,7 +32,9 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (localStorage.getItem(TOKEN_KEY)) router.replace("/orders/new");
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token && !isTokenExpired(token)) router.replace("/orders/new");
+    else if (token) localStorage.removeItem(TOKEN_KEY);
   }, [router]);
 
   const onSubmit = async (values: FormValues) => {
@@ -80,6 +82,14 @@ export default function LoginPage() {
         <Button type="submit" size="xl" className="w-full" disabled={isSubmitting}>
           {isSubmitting ? "Signing in..." : "Sign In"}
         </Button>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm text-zinc-400">
+          <p>
+            Staff: <span className="text-zinc-200">staff / staff123</span>
+          </p>
+          <p className="mt-1">
+            Admin: <span className="text-zinc-200">admin / admin123</span>
+          </p>
+        </div>
       </form>
     </div>
   );

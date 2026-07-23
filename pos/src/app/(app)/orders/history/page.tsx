@@ -18,6 +18,7 @@ export default function OrderHistoryPage() {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: ordersApi.list,
+    refetchInterval: 10000,
   });
   const { data: settings } = useQuery({
     queryKey: ["settings"],
@@ -121,7 +122,7 @@ export default function OrderHistoryPage() {
                     </span>
                   </p>
                   <p className="text-sm text-zinc-400">
-                    {order.phone} · {order.payment_method} ·{" "}
+                    {order.order_type} · {order.phone} · {order.payment_method} ·{" "}
                     {formatPrice(order.grand_total, settings?.currency)} ·{" "}
                     {new Date(order.created_at).toLocaleString()}
                   </p>

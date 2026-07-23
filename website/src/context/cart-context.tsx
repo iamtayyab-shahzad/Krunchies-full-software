@@ -41,7 +41,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CART_STORAGE_KEY);
-      if (raw) setItems(JSON.parse(raw) as CartItem[]);
+      if (raw) {
+        const parsed = JSON.parse(raw) as CartItem[];
+        const uuidRe =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        setItems(
+          parsed.filter(
+            (item) =>
+              uuidRe.test(item.product_id || "") &&
+              uuidRe.test(item.size_id || "") &&
+              Number(item.quantity) > 0,
+          ),
+        );
+      }
     } catch {
       setItems([]);
     }

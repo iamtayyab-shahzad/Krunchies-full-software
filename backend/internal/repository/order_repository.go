@@ -103,6 +103,19 @@ func (r *OrderRepository) Update(tx *gorm.DB, id uuid.UUID, updates map[string]a
 	return tx.Model(&domain.Order{}).Where("id = ?", id).Updates(updates).Error
 }
 
+func (r *OrderRepository) ReplaceItems(tx *gorm.DB, orderID uuid.UUID, items []domain.OrderItem) error {
+	if err := tx.Where("order_id = ?", orderID).Delete(&domain.OrderItem{}).Error; err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	for i := range items {
+		items[i].OrderID = orderID
+	}
+	return tx.Create(&items).Error
+}
+
 func (r *OrderRepository) Delete(tx *gorm.DB, id uuid.UUID) error {
 	return tx.Delete(&domain.Order{}, "id = ?", id).Error
 }

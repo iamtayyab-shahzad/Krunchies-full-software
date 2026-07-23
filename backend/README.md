@@ -19,7 +19,23 @@ OpenAPI: `http://localhost:8080/openapi.yaml`
 go run ./cmd/seed
 ```
 
-Default credentials: `admin` / `admin123`
+Default credentials:
+- Admin: `admin` / `admin123`
+- Staff (POS): `staff` / `staff123`
+
+## Import the Krunchies menu
+
+Populates categories, products, product sizes and offers from the canonical
+`shared/krunchies-menu.json`. The command is idempotent (upsert by deterministic
+UUID) so it is safe to re-run — existing rows are updated, never duplicated.
+
+```bash
+# from backend/
+go run ./cmd/importmenu
+
+# also remove non-menu (demo) rows that are not referenced by any order
+go run ./cmd/importmenu -prune
+```
 
 ## Auth
 

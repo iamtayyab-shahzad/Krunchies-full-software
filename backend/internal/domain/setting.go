@@ -6,6 +6,7 @@ type Setting struct {
 	Phone             string `gorm:"size:20;not null" json:"phone"`
 	WhatsApp          string `gorm:"size:20" json:"whatsapp"`
 	Logo              string `gorm:"size:500" json:"logo"`
+	Address           string `gorm:"size:500" json:"address"`
 	OpeningTime       string `gorm:"size:20" json:"opening_time"`
 	ClosingTime       string `gorm:"size:20" json:"closing_time"`
 	CashOnDeliveryFee int    `gorm:"not null;default:0" json:"cash_on_delivery_fee"`

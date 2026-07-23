@@ -9,10 +9,15 @@ import {
   type ReactNode,
 } from "react";
 import type { BillLine, OrderType, PaymentMethod, Product, ProductSize } from "@/types";
-import { makeLineKey } from "@/lib/utils";
+import {
+  defaultPaymentForOrderType,
+  makeLineKey,
+  WALKIN_LOCATION_ID,
+} from "@/lib/utils";
 
 interface BillState {
   draftId: string | null;
+  editingOrderId: string | null;
   orderType: OrderType;
   customerName: string;
   phone: string;
@@ -47,11 +52,12 @@ interface BillContextValue extends BillState {
 
 const defaults: BillState = {
   draftId: null,
+  editingOrderId: null,
   orderType: "walkin",
   customerName: "Walk-in Customer",
   phone: "0000000000",
   address: "",
-  locationId: "",
+  locationId: WALKIN_LOCATION_ID,
   deliveryCharge: 0,
   paymentMethod: "cash",
   orderNotes: "",
@@ -104,7 +110,32 @@ export function BillProvider({ children }: { children: ReactNode }) {
       ...state,
       subtotal,
       setSearch: (search) => setState((p) => ({ ...p, search })),
-      setOrderType: (orderType) => setState((p) => ({ ...p, orderType })),
+      setOrderType: (orderType) =>
+        setState((p) => {
+          if (orderType === "walkin") {
+            return {
+              ...p,
+              orderType,
+              customerName: "Walk-in Customer",
+              phone: "0000000000",
+              address: "",
+              locationId: WALKIN_LOCATION_ID,
+              deliveryCharge: 0,
+              paymentMethod: defaultPaymentForOrderType(orderType),
+            };
+          }
+          return {
+            ...p,
+            orderType,
+            customerName: p.customerName === "Walk-in Customer" ? "" : p.customerName,
+            phone: p.phone === "0000000000" ? "" : p.phone,
+            locationId:
+              p.locationId === WALKIN_LOCATION_ID ? "" : p.locationId,
+            deliveryCharge:
+              p.locationId === WALKIN_LOCATION_ID ? 0 : p.deliveryCharge,
+            paymentMethod: defaultPaymentForOrderType(orderType),
+          };
+        }),
       setCustomerName: (customerName) => setState((p) => ({ ...p, customerName })),
       setPhone: (phone) => setState((p) => ({ ...p, phone })),
       setAddress: (address) => setState((p) => ({ ...p, address })),

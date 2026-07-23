@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -32,6 +31,25 @@ import {
 import { formatPrice } from "@/lib/utils";
 import { categoriesApi, productsApi } from "@/services/api";
 
+const FALLBACK_PRODUCT_IMAGE =
+  "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=800&q=80";
+
+function isDirectImageUrl(url: string) {
+  if (!url) return false;
+  if (url.startsWith("data:image/")) return true;
+  if (url.includes("images.unsplash.com/photo-")) return true;
+  try {
+    const u = new URL(url);
+    return /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function safeProductImage(url: string) {
+  return isDirectImageUrl(url) ? url : FALLBACK_PRODUCT_IMAGE;
+}
+
 const emptyForm = (categories: Category[]): Omit<Product, "id"> => ({
   name: "",
   categoryId: categories[0]?.id || "",
@@ -46,6 +64,7 @@ const emptyForm = (categories: Category[]): Omit<Product, "id"> => ({
 export default function ProductsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -89,6 +108,19 @@ export default function ProductsPage() {
     return (id: string) => map[id] || "—";
   }, [categories]);
 
+  const filteredProducts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => {
+      const cat = categoryName(p.categoryId).toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        cat.includes(q)
+      );
+    });
+  }, [products, search, categoryName]);
+
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm(categories));
@@ -126,6 +158,12 @@ export default function ProductsPage() {
     }
     if (!form.categoryId) {
       toast.error("Category is required");
+      return;
+    }
+    if (!isDirectImageUrl(form.image)) {
+      toast.error(
+        "Paste a direct image link (e.g. images.unsplash.com/photo-...), not a search page URL",
+      );
       return;
     }
     try {
@@ -208,6 +246,14 @@ export default function ProductsPage() {
         }
       />
 
+      <div className="mb-4 max-w-md">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, description, or category..."
+        />
+      </div>
+
       <div className="overflow-x-auto rounded-xl border border-zinc-800">
         <table className="w-full min-w-[900px] text-left">
           <thead className="bg-zinc-950 text-sm uppercase text-zinc-500">
@@ -221,17 +267,31 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => (
+            {filteredProducts.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-4 py-8 text-center text-zinc-500"
+                >
+                  {search.trim()
+                    ? "No products match your search."
+                    : "No products yet."}
+                </td>
+              </tr>
+            ) : (
+              filteredProducts.map((product) => (
               <tr key={product.id} className="border-t border-zinc-800">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-zinc-900">
-                      <Image
-                        src={product.image}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={safeProductImage(product.image)}
                         alt={product.name}
-                        fill
-                        className="object-cover"
-                        sizes="48px"
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
+                        }}
                       />
                     </div>
                     <div>
@@ -283,7 +343,8 @@ export default function ProductsPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>

@@ -53,6 +53,9 @@ func (s *OrderService) CreateOrder(
 	if (orderType == "website" || orderType == "guest" || orderType == "phone") && address == "" {
 		return nil, utils.NewAppError(http.StatusBadRequest, "delivery address is required")
 	}
+	if err := validatePaymentForOrderType(orderType, method); err != nil {
+		return nil, err
+	}
 	if len(input.Items) == 0 {
 		return nil, utils.NewAppError(http.StatusBadRequest, "cart cannot be empty")
 	}
@@ -164,6 +167,20 @@ func (s *OrderService) CreateOrder(
 }
 
 func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) error {
+	if input.OrderStatus != nil {
+		status := strings.ToUpper(*input.OrderStatus)
+		switch status {
+		case "COMPLETED":
+			return s.CompleteOrder(id)
+		case "CANCELLED":
+			return s.CancelOrder(id)
+		case "PENDING":
+			// fall through — allow metadata/item edits while keeping PENDING
+		default:
+			return utils.NewAppError(http.StatusBadRequest, "invalid order status")
+		}
+	}
+
 	updates := map[string]any{}
 	if input.CustomerName != nil {
 		updates["customer_name"] = *input.CustomerName
@@ -184,19 +201,9 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 		updates["order_notes"] = *input.OrderNotes
 	}
 	if input.OrderStatus != nil {
-		status := strings.ToUpper(*input.OrderStatus)
-		switch status {
-		case "COMPLETED":
-			return s.CompleteOrder(id)
-		case "CANCELLED":
-			return s.CancelOrder(id)
-		case "PENDING":
-			updates["order_status"] = status
-		default:
-			return utils.NewAppError(http.StatusBadRequest, "invalid order status")
-		}
+		updates["order_status"] = strings.ToUpper(*input.OrderStatus)
 	}
-	if len(updates) == 0 {
+	if len(updates) == 0 && input.Items == nil {
 		return utils.NewAppError(http.StatusBadRequest, "no fields to update")
 	}
 
@@ -213,10 +220,96 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 		tx.Rollback()
 		return utils.NewAppError(http.StatusConflict, "only pending orders can be edited")
 	}
+
+	locationID := current.LocationID
+	if input.LocationID != nil {
+		locationID = *input.LocationID
+	}
+	method := current.PaymentMethod
+	if input.PaymentMethod != nil {
+		method = strings.ToLower(*input.PaymentMethod)
+	}
+	if err := validatePaymentForOrderType(current.OrderType, method); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	var location domain.Location
+	if err := tx.First(&location, "id = ?", locationID).Error; err != nil {
+		tx.Rollback()
+		if err == gorm.ErrRecordNotFound {
+			return utils.NewAppError(http.StatusBadRequest, "invalid location")
+		}
+		return err
+	}
+
+	var setting domain.Setting
+	_ = tx.Order("created_at asc").First(&setting).Error
+	codFee := 0
+	if method == "cod" {
+		codFee = setting.CashOnDeliveryFee
+	}
+	updates["delivery_charge"] = location.DeliveryCharge
+	updates["cash_on_delivery_fee"] = codFee
+
+	if input.Items != nil {
+		if len(*input.Items) == 0 {
+			tx.Rollback()
+			return utils.NewAppError(http.StatusBadRequest, "cart cannot be empty")
+		}
+		subtotal := 0
+		newItems := make([]domain.OrderItem, 0, len(*input.Items))
+		for _, item := range *input.Items {
+			var size domain.ProductSize
+			if err := tx.First(&size, "id = ?", item.ProductSizeID).Error; err != nil {
+				tx.Rollback()
+				return utils.NewAppError(http.StatusBadRequest, "invalid product size")
+			}
+			if size.ProductID != item.ProductID {
+				tx.Rollback()
+				return utils.NewAppError(http.StatusBadRequest, "product size does not belong to product")
+			}
+			var product domain.Product
+			if err := tx.First(&product, "id = ?", item.ProductID).Error; err != nil {
+				tx.Rollback()
+				return utils.NewAppError(http.StatusBadRequest, "invalid product")
+			}
+			if !product.Available {
+				tx.Rollback()
+				return utils.NewAppError(http.StatusBadRequest, "product is unavailable: "+product.Name)
+			}
+			lineTotal := size.Price * item.Quantity
+			subtotal += lineTotal
+			newItems = append(newItems, domain.OrderItem{
+				ProductID:           item.ProductID,
+				ProductSizeID:       item.ProductSizeID,
+				Quantity:            item.Quantity,
+				Price:               size.Price,
+				SpecialInstructions: strings.TrimSpace(item.SpecialInstructions),
+			})
+		}
+		updates["subtotal"] = subtotal
+		updates["grand_total"] = subtotal + location.DeliveryCharge + codFee
+		if err := s.orderRepo.ReplaceItems(tx, id, newItems); err != nil {
+			tx.Rollback()
+			return err
+		}
+	} else {
+		updates["grand_total"] = current.Subtotal + location.DeliveryCharge + codFee
+	}
+
 	if err := s.orderRepo.Update(tx, id, updates); err != nil {
 		tx.Rollback()
 		return err
 	}
+
+	if payment, err := s.paymentRepo.GetByOrderID(id); err == nil {
+		_ = tx.Model(&domain.Payment{}).Where("id = ?", payment.ID).Updates(map[string]any{
+			"method": method,
+			"amount": updates["grand_total"],
+		})
+	}
+
 	return tx.Commit().Error
 }
 
@@ -385,6 +478,27 @@ func (s *OrderService) consumeInventory(tx *gorm.DB, order *domain.Order) error 
 		}
 	}
 	return nil
+}
+
+func validatePaymentForOrderType(orderType, method string) error {
+	switch orderType {
+	case "walkin":
+		switch method {
+		case "cash", "easypaisa", "jazzcash":
+			return nil
+		default:
+			return utils.NewAppError(http.StatusBadRequest, "walk-in orders only support cash, easypaisa, or jazzcash")
+		}
+	case "phone", "website", "guest":
+		switch method {
+		case "easypaisa", "jazzcash", "card", "cod":
+			return nil
+		default:
+			return utils.NewAppError(http.StatusBadRequest, "delivery orders cannot use in-store cash payment")
+		}
+	default:
+		return nil
+	}
 }
 
 func normalizeOrderType(orderType string) string {

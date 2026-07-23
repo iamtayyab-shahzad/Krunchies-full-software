@@ -15,11 +15,13 @@ import (
 	"gorm.io/gorm"
 )
 
-func main() {
-	username := envOr("SEED_USERNAME", "admin")
-	password := envOr("SEED_PASSWORD", "admin123")
-	name := envOr("SEED_NAME", "Admin")
+type seedUser struct {
+	Username string
+	Password string
+	Name     string
+}
 
+func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
@@ -34,27 +36,48 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 
-	hashed, err := utils.HashPassword(password)
+	users := []seedUser{
+		{
+			Username: envOr("SEED_USERNAME", "admin"),
+			Password: envOr("SEED_PASSWORD", "admin123"),
+			Name:     envOr("SEED_NAME", "Admin"),
+		},
+		{
+			Username: envOr("SEED_STAFF_USERNAME", "staff"),
+			Password: envOr("SEED_STAFF_PASSWORD", "staff123"),
+			Name:     envOr("SEED_STAFF_NAME", "Counter Staff"),
+		},
+	}
+
+	for _, u := range users {
+		if err := upsertStaff(db, u); err != nil {
+			log.Fatalf("seed %s: %v", u.Username, err)
+		}
+	}
+}
+
+func upsertStaff(db *gorm.DB, u seedUser) error {
+	hashed, err := utils.HashPassword(u.Password)
 	if err != nil {
-		log.Fatalf("hash: %v", err)
+		return err
 	}
 
 	var existing domain.User
-	err = db.Where("username = ?", username).First(&existing).Error
+	err = db.Where("username = ?", u.Username).First(&existing).Error
 	if err == nil {
 		if err := db.Model(&existing).Updates(map[string]any{
 			"password":   hashed,
-			"name":       name,
+			"name":       u.Name,
 			"role":       "staff",
 			"updated_at": time.Now(),
 		}).Error; err != nil {
-			log.Fatalf("update user: %v", err)
+			return err
 		}
-		fmt.Printf("Updated staff user: username=%s role=staff\n", username)
-		return
+		fmt.Printf("Updated staff user: username=%s role=staff\n", u.Username)
+		return nil
 	}
 	if err != gorm.ErrRecordNotFound {
-		log.Fatalf("lookup: %v", err)
+		return err
 	}
 
 	user := domain.User{
@@ -63,17 +86,16 @@ func main() {
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
-		Name:     name,
-		Username: username,
+		Name:     u.Name,
+		Username: u.Username,
 		Password: hashed,
 		Role:     "staff",
 	}
-
 	if err := db.Create(&user).Error; err != nil {
-		log.Fatalf("create user: %v", err)
+		return err
 	}
-
-	fmt.Printf("Created staff user: username=%s role=staff\n", username)
+	fmt.Printf("Created staff user: username=%s role=staff\n", u.Username)
+	return nil
 }
 
 func envOr(key, fallback string) string {

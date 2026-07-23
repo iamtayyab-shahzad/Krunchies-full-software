@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar, TopBar } from "@/components/layout/shell";
 import { useBill } from "@/context/bill-context";
-import { TOKEN_KEY } from "@/lib/utils";
+import { TOKEN_KEY, isTokenExpired } from "@/lib/utils";
 import { settingsApi } from "@/services/api";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -22,7 +22,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) router.replace("/login");
+    if (!token || isTokenExpired(token)) {
+      localStorage.removeItem(TOKEN_KEY);
+      router.replace("/login");
+    }
   }, [router]);
 
   return (

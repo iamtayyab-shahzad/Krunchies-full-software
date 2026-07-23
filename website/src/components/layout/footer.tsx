@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { MapPin, Phone } from "lucide-react";
-import { settings, restaurant } from "@/data/krunchies";
+import { restaurant } from "@/data/krunchies";
+import { useSettings } from "@/hooks/use-settings";
 import { NAV_LINKS } from "@/lib/constants";
 
 function FacebookIcon({ className }: { className?: string }) {
@@ -22,19 +25,30 @@ function InstagramIcon({ className }: { className?: string }) {
 }
 
 export function Footer() {
+  const { settings } = useSettings();
+  const name = settings?.restaurant_name || "Krunchies Pizza";
+  const phone = settings?.phone || "";
+  const address = settings?.address || "";
+  const opening = settings?.opening_time || "11:00 AM";
+  const closing = settings?.closing_time || "11:00 PM";
+  const facebook = settings?.facebook || "#";
+  const instagram = settings?.instagram || "#";
+
   return (
     <footer className="mt-auto border-t border-white/10 bg-zinc-950">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-3 lg:px-8">
         <div>
           <p className="font-display text-2xl text-white">
-            <span className="text-orange-500">Krunchies</span> Pizza
+            <span className="text-orange-500">
+              {name.split(" ")[0] || "Krunchies"}
+            </span>{" "}
+            {name.split(" ").slice(1).join(" ") || "Pizza"}
           </p>
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-orange-400">
             {restaurant.tagline}
           </p>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-zinc-400">
-            {restaurant.deliveryNote}. Open daily {settings.opening_time}–
-            {settings.closing_time}.
+            {restaurant.deliveryNote}. Open daily {opening}–{closing}.
           </p>
         </div>
 
@@ -69,16 +83,20 @@ export function Footer() {
             Contact
           </h3>
           <ul className="mt-4 space-y-3 text-sm text-zinc-400">
-            <li className="flex items-start gap-2">
-              <MapPin className="mt-0.5 h-4 w-4 text-orange-500" />
-              {settings.address}
-            </li>
-            <li className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-orange-500" />
-              <a href={`tel:${settings.phone}`} className="hover:text-white">
-                {settings.phone}
-              </a>
-            </li>
+            {address ? (
+              <li className="flex items-start gap-2">
+                <MapPin className="mt-0.5 h-4 w-4 text-orange-500" />
+                {address}
+              </li>
+            ) : null}
+            {phone ? (
+              <li className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-orange-500" />
+                <a href={`tel:${phone}`} className="hover:text-white">
+                  {phone}
+                </a>
+              </li>
+            ) : null}
             {restaurant.alternatePhone ? (
               <li className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-orange-500" />
@@ -91,12 +109,12 @@ export function Footer() {
               </li>
             ) : null}
             <li>
-              Open daily {settings.opening_time} – {settings.closing_time}
+              Open daily {opening} – {closing}
             </li>
           </ul>
           <div className="mt-4 flex gap-3">
             <a
-              href={settings.facebook}
+              href={facebook}
               target="_blank"
               rel="noopener noreferrer"
               className="text-zinc-400 hover:text-orange-400"
@@ -105,7 +123,7 @@ export function Footer() {
               <FacebookIcon className="h-5 w-5" />
             </a>
             <a
-              href={settings.instagram}
+              href={instagram}
               target="_blank"
               rel="noopener noreferrer"
               className="text-zinc-400 hover:text-orange-400"
@@ -117,7 +135,7 @@ export function Footer() {
         </div>
       </div>
       <div className="border-t border-white/5 py-5 text-center text-xs text-zinc-600">
-        © {new Date().getFullYear()} Krunchies Pizza. All rights reserved.
+        © {new Date().getFullYear()} {name}. All rights reserved.
       </div>
     </footer>
   );

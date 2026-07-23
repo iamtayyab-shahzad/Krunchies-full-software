@@ -17,7 +17,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { listPendingActions } from "@/lib/offline-db";
-import { syncOfflineQueue } from "@/services/api";
+import { ordersApi, syncOfflineQueue } from "@/services/api";
 
 const LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -34,6 +34,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const [online, setOnline] = useState(true);
   const [queueCount, setQueueCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -65,6 +66,24 @@ export function Sidebar() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadPending = async () => {
+      try {
+        const rows = await ordersApi.pending();
+        if (!cancelled) setPendingCount(rows.length);
+      } catch {
+        // Keep last known count if offline / unauthorized.
+      }
+    };
+    loadPending();
+    const id = setInterval(loadPending, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">
       <div className="border-b border-zinc-800 px-4 py-5">
@@ -93,6 +112,8 @@ export function Sidebar() {
           const active =
             pathname === link.href || pathname.startsWith(link.href + "/");
           const Icon = link.icon;
+          const showPendingBadge =
+            link.href === "/orders/pending" && pendingCount > 0;
           return (
             <Link
               key={link.href}
@@ -105,7 +126,17 @@ export function Sidebar() {
               )}
             >
               <Icon className="h-5 w-5" />
-              {link.label}
+              <span className="flex-1">{link.label}</span>
+              {showPendingBadge ? (
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-xs font-black",
+                    active ? "bg-black text-orange-400" : "bg-orange-500 text-black",
+                  )}
+                >
+                  {pendingCount}
+                </span>
+              ) : null}
             </Link>
           );
         })}

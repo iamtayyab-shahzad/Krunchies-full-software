@@ -33,45 +33,7 @@ func (h *SettingHandler) Update(c *gin.Context) {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	updates := map[string]any{}
-	if input.RestaurantName != nil {
-		updates["restaurant_name"] = *input.RestaurantName
-	}
-	if input.Phone != nil {
-		updates["phone"] = *input.Phone
-	}
-	if input.WhatsApp != nil {
-		updates["whatsapp"] = *input.WhatsApp
-	}
-	if input.Logo != nil {
-		updates["logo"] = *input.Logo
-	}
-	if input.OpeningTime != nil {
-		updates["opening_time"] = *input.OpeningTime
-	}
-	if input.ClosingTime != nil {
-		updates["closing_time"] = *input.ClosingTime
-	}
-	if input.CashOnDeliveryFee != nil {
-		updates["cash_on_delivery_fee"] = *input.CashOnDeliveryFee
-	}
-	if input.Currency != nil {
-		updates["currency"] = *input.Currency
-	}
-	if input.GoogleMaps != nil {
-		updates["google_maps"] = *input.GoogleMaps
-	}
-	if input.Facebook != nil {
-		updates["facebook"] = *input.Facebook
-	}
-	if input.Instagram != nil {
-		updates["instagram"] = *input.Instagram
-	}
-	if len(updates) == 0 {
-		utils.Error(c, http.StatusBadRequest, "no fields to update")
-		return
-	}
-	setting, err := h.service.Update(updates)
+	setting, err := h.service.UpdateFromDTO(input)
 	if err != nil {
 		HandleError(c, err)
 		return
