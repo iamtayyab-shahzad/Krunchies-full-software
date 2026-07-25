@@ -3,12 +3,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCart } from "@/context/cart-context";
+import {
+  DealFlavorSelector,
+  type DealFlavorState,
+} from "@/components/menu/deal-flavor-selector";
 import { cn, formatPrice } from "@/lib/utils";
 import { getProductById } from "@/services/api";
 import type { Product, ProductSize } from "@/types";
@@ -21,6 +25,16 @@ export default function ProductDetailsPage() {
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState("");
   const [loading, setLoading] = useState(true);
+  const [dealFlavors, setDealFlavors] = useState<DealFlavorState>({
+    note: "",
+    complete: true,
+    hasSlots: false,
+  });
+
+  const handleFlavorChange = useCallback(
+    (state: DealFlavorState) => setDealFlavors(state),
+    [],
+  );
 
   useEffect(() => {
     if (!params.id) return;
@@ -50,7 +64,14 @@ export default function ProductDetailsPage() {
 
   const handleAdd = () => {
     if (!selectedSize) return;
-    addItem(product, selectedSize, quantity, instructions || undefined);
+    if (dealFlavors.hasSlots && !dealFlavors.complete) {
+      toast.error("Please select a flavor for each pizza in this deal");
+      return;
+    }
+    const combinedInstructions = [dealFlavors.note, instructions.trim()]
+      .filter(Boolean)
+      .join(" | ");
+    addItem(product, selectedSize, quantity, combinedInstructions || undefined);
     toast.success(`${product.name} added to cart`);
   };
 
@@ -72,6 +93,10 @@ export default function ProductDetailsPage() {
         </p>
         <h1 className="mt-2 font-display text-5xl text-white">{product.name}</h1>
         <p className="mt-4 text-zinc-400">{product.description}</p>
+
+        <div className={dealFlavors.hasSlots ? "mt-8" : ""}>
+          <DealFlavorSelector product={product} onChange={handleFlavorChange} />
+        </div>
 
         <div className="mt-8">
           <Label className="mb-3 block">Choose Size</Label>

@@ -8,6 +8,7 @@ import {
   POS_SYNC_COMPLETE_EVENT,
   startSyncEngine,
 } from "@/lib/sync-engine";
+import { POS_ORDERS_CHANGED_EVENT } from "@/lib/offline-events";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -18,6 +19,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
             staleTime: 30_000,
             retry: 1,
             refetchOnWindowFocus: false,
+            // Queries are backed by IndexedDB and work offline. The default
+            // networkMode "online" pauses fetches (and refetchInterval) while
+            // navigator.onLine is false, which would freeze the UI on cached
+            // data. "always" lets our offline-aware queryFns run regardless.
+            networkMode: "always",
           },
         },
       }),
@@ -32,10 +38,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
       void client.invalidateQueries({ queryKey: ["categories"] });
       void client.invalidateQueries({ queryKey: ["settings"] });
     };
+    // Fired immediately after any local (offline) order mutation so the
+    // Pending/History lists refresh from IndexedDB without waiting for a sync.
+    const onOrdersChanged = () => {
+      void client.invalidateQueries({ queryKey: ["orders"] });
+    };
     window.addEventListener(POS_SYNC_COMPLETE_EVENT, onSync);
+    window.addEventListener(POS_ORDERS_CHANGED_EVENT, onOrdersChanged);
     return () => {
       stop?.();
       window.removeEventListener(POS_SYNC_COMPLETE_EVENT, onSync);
+      window.removeEventListener(POS_ORDERS_CHANGED_EVENT, onOrdersChanged);
     };
   }, [client]);
 

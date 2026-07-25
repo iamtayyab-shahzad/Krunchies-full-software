@@ -39,12 +39,12 @@ func main() {
 	users := []seedUser{
 		{
 			Username: envOr("SEED_USERNAME", "admin"),
-			Password: envOr("SEED_PASSWORD", "admin123"),
+			Password: envOr("SEED_PASSWORD", "admin@admin"),
 			Name:     envOr("SEED_NAME", "Admin"),
 		},
 		{
 			Username: envOr("SEED_STAFF_USERNAME", "staff"),
-			Password: envOr("SEED_STAFF_PASSWORD", "staff123"),
+			Password: envOr("SEED_STAFF_PASSWORD", "staff@54321"),
 			Name:     envOr("SEED_STAFF_NAME", "Counter Staff"),
 		},
 	}

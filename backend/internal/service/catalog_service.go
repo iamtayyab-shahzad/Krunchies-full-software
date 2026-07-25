@@ -89,3 +89,25 @@ func (s *CatalogService) DeleteCategory(id uuid.UUID) error {
 		return tx.Where("id = ?", id).Delete(&domain.Category{}).Error
 	})
 }
+
+// DeleteLocation removes a location. Locations referenced by existing orders are
+// protected: orders.location_id uses OnDelete:RESTRICT, so a hard delete would
+// otherwise fail with a raw FK error that surfaces to the client as HTTP 500.
+func (s *CatalogService) DeleteLocation(id uuid.UUID) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var location domain.Location
+		if err := tx.First(&location, "id = ?", id).Error; err != nil {
+			return err
+		}
+
+		var orderRefs int64
+		if err := tx.Model(&domain.Order{}).Where("location_id = ?", id).Count(&orderRefs).Error; err != nil {
+			return err
+		}
+		if orderRefs > 0 {
+			return utils.NewAppError(http.StatusConflict, "cannot delete a location that is used by existing orders")
+		}
+
+		return tx.Where("id = ?", id).Delete(&domain.Location{}).Error
+	})
+}

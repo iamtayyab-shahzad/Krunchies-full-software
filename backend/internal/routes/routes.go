@@ -100,7 +100,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 
 			staff.POST("/locations", locationHandler.Create)
 			staff.PUT("/locations/:id", locationHandler.Update)
-			staff.DELETE("/locations/:id", locationHandler.Delete)
+			staff.DELETE("/locations/:id", catalogHandler.DeleteLocation)
 
 			staff.POST("/offers", offerHandler.Create)
 			staff.PUT("/offers/:id", offerHandler.Update)

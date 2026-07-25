@@ -7,7 +7,13 @@ import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBill } from "@/context/bill-context";
-import { cn, formatPrice, makeLineKey, WALKIN_LOCATION_ID } from "@/lib/utils";
+import {
+  cn,
+  formatPkPhone,
+  formatPrice,
+  makeLineKey,
+  WALKIN_LOCATION_ID,
+} from "@/lib/utils";
 import { printCustomerReceipt, printKitchenReceipt, decodeKitchenInstructions, parseTableNumber } from "@/lib/receipt";
 import { ordersApi, settingsApi } from "@/services/api";
 import type { Order, OrderType, PaymentMethod } from "@/types";
@@ -145,7 +151,7 @@ export default function PendingOrdersPage() {
       editingOrderId: order.id,
       orderType,
       customerName: order.customer_name,
-      phone: order.phone,
+      phone: formatPkPhone(order.phone),
       address: order.address || "",
       locationId: order.location_id || WALKIN_LOCATION_ID,
       deliveryCharge: order.delivery_charge || 0,

@@ -30,8 +30,26 @@ interface CartContextValue {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-function makeCartItemId(productId: string, sizeId: string) {
-  return `${productId}__${sizeId}`;
+/** Stable short hash so distinct instructions become distinct cart lines. */
+function hashInstructions(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function makeCartItemId(
+  productId: string,
+  sizeId: string,
+  instructions?: string,
+) {
+  const base = `${productId}__${sizeId}`;
+  // Deals (and any item with special instructions) must not merge into an
+  // existing line, otherwise a second deal with different pizza flavours would
+  // silently overwrite the first line's flavour note.
+  return instructions ? `${base}__${hashInstructions(instructions)}` : base;
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
@@ -72,7 +90,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       quantity = 1,
       specialInstructions?: string,
     ) => {
-      const id = makeCartItemId(product.id, size.id);
+      const id = makeCartItemId(product.id, size.id, specialInstructions);
       setItems((prev) => {
         const existing = prev.find((item) => item.id === id);
         if (existing) {

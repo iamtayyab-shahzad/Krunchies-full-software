@@ -115,7 +115,7 @@ export type StockHistory = {
 export const MOCK_USERS = [
   {
     username: "admin",
-    password: "admin123",
+    password: "admin@admin",
     user: {
       id: "u-admin",
       name: "Krunchies Admin",
@@ -125,7 +125,7 @@ export const MOCK_USERS = [
   },
   {
     username: "staff",
-    password: "staff123",
+    password: "staff@54321",
     user: {
       id: "u-staff",
       name: "Counter Staff",

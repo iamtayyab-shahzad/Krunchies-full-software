@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProductModal } from "@/components/menu/product-modal";
 import { useCart } from "@/context/cart-context";
+import { isDealProduct, parseDealPizzaSlots } from "@/lib/deal-flavors";
 import { formatPrice } from "@/lib/utils";
 import type { Product } from "@/types";
 
@@ -21,7 +22,17 @@ export function ProductCard({ product, currency = "Rs" }: ProductCardProps) {
   const [open, setOpen] = useState(false);
   const startingPrice = Math.min(...product.sizes.map((s) => s.price));
 
+  const requiresFlavorChoice =
+    isDealProduct(product) &&
+    parseDealPizzaSlots(product.description || "").length > 0;
+
   const quickAdd = () => {
+    // Deals that include pizzas need per-size flavour selection, so send the
+    // customer to the modal instead of blindly adding a flavourless deal.
+    if (requiresFlavorChoice) {
+      setOpen(true);
+      return;
+    }
     const size = product.sizes[0];
     if (!size) return;
     addItem(product, size, 1);
@@ -63,7 +74,7 @@ export function ProductCard({ product, currency = "Rs" }: ProductCardProps) {
                 <Link href={`/menu/${product.id}`}>Details</Link>
               </Button>
               <Button size="sm" onClick={quickAdd}>
-                Add
+                {requiresFlavorChoice ? "Choose" : "Add"}
               </Button>
             </div>
           </div>

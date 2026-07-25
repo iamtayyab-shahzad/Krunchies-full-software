@@ -37,10 +37,14 @@ func (r *AnalyticsRepository) PaymentBreakdown() ([]map[string]any, error) {
 		Total  int
 	}
 	var rows []row
+	// Only count payments that belong to COMPLETED orders. A payment row can be
+	// created/marked paid independently, so joining on the order status keeps the
+	// breakdown consistent with the sales totals (which also require COMPLETED).
 	err := r.db.Model(&domain.Payment{}).
-		Select("method, COALESCE(SUM(amount), 0) as total").
-		Where("status = ?", "paid").
-		Group("method").
+		Select("payments.method as method, COALESCE(SUM(payments.amount), 0) as total").
+		Joins("JOIN orders ON orders.id = payments.order_id").
+		Where("payments.status = ? AND orders.order_status = ?", "paid", "COMPLETED").
+		Group("payments.method").
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err

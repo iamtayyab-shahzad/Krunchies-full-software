@@ -161,10 +161,10 @@ export default function LoginPage() {
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm text-zinc-400">
             <p className="text-xs text-zinc-500">Dev only credentials</p>
             <p>
-              Staff: <span className="text-zinc-200">staff / staff123</span>
+              Staff: <span className="text-zinc-200">staff / staff@54321</span>
             </p>
             <p className="mt-1">
-              Admin: <span className="text-zinc-200">admin / admin123</span>
+              Admin: <span className="text-zinc-200">admin / admin@admin</span>
             </p>
           </div>
         ) : null}

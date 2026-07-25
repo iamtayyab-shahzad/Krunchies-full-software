@@ -12,6 +12,7 @@ import {
   cacheGet,
 } from "@/lib/offline-db";
 import { isNetworkError, isOnline, isQueueableError } from "@/lib/network";
+import { notifyOrdersChanged } from "@/lib/offline-events";
 import {
   enqueueAndTrack,
   runSync,
@@ -583,6 +584,7 @@ async function buildLocalOrder(
 async function markLocalOrderStatus(
   id: string,
   order_status: "PENDING" | "COMPLETED" | "CANCELLED",
+  opts?: { pendingSync?: boolean },
 ) {
   try {
     const order = await ordersRepo.get(id);
@@ -590,9 +592,15 @@ async function markLocalOrderStatus(
       ...order,
       order_status,
       updated_at: new Date().toISOString(),
+      // When the status change is queued offline, mark it pending_sync so the
+      // pending list keeps our local status instead of the server's stale copy
+      // until the change is synced.
+      ...(opts?.pendingSync ? { sync_status: "pending_sync" } : {}),
     });
   } catch {
     // ignore
+  } finally {
+    notifyOrdersChanged();
   }
 }
 
@@ -646,6 +654,7 @@ export const ordersApi = {
           });
         }
         await upsertLocalOrder(local);
+        notifyOrdersChanged();
         return local;
       }
       throw e;
@@ -677,6 +686,7 @@ export const ordersApi = {
           type: "UPDATE_ORDER",
           payload: { id, updates },
         });
+        notifyOrdersChanged();
         return {
           offline: true as const,
           message: offlineOkMessage("Order update"),
@@ -700,7 +710,7 @@ export const ordersApi = {
         .catch(() => false);
       if (isQueueableError(e) || isLocal) {
         await enqueueAndTrack({ type: "COMPLETE_ORDER", payload: { id } });
-        await markLocalOrderStatus(id, "COMPLETED");
+        await markLocalOrderStatus(id, "COMPLETED", { pendingSync: true });
         return {
           offline: true as const,
           message: offlineOkMessage("Order completed"),
@@ -724,7 +734,7 @@ export const ordersApi = {
         .catch(() => false);
       if (isQueueableError(e) || isLocal) {
         await enqueueAndTrack({ type: "CANCEL_ORDER", payload: { id } });
-        await markLocalOrderStatus(id, "CANCELLED");
+        await markLocalOrderStatus(id, "CANCELLED", { pendingSync: true });
         return {
           offline: true as const,
           message: offlineOkMessage("Order cancelled"),

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,22 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useCart } from "@/context/cart-context";
 import {
-  flavorsForSlot,
-  isDealProduct,
-  parseDealPizzaSlots,
-  type DealPizzaSlot,
-} from "@/lib/deal-flavors";
+  DealFlavorSelector,
+  type DealFlavorState,
+} from "@/components/menu/deal-flavor-selector";
 import { cn, formatPrice } from "@/lib/utils";
-import { getProducts } from "@/services/api";
 import type { Product, ProductSize } from "@/types";
 
 interface ProductModalProps {
@@ -48,55 +38,33 @@ export function ProductModal({
   );
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState("");
-  const [menuProducts, setMenuProducts] = useState<Product[]>([]);
-  const [flavorPicks, setFlavorPicks] = useState<Record<string, string>>({});
+  const [dealFlavors, setDealFlavors] = useState<DealFlavorState>({
+    note: "",
+    complete: true,
+    hasSlots: false,
+  });
 
-  const dealSlots = useMemo(
-    () =>
-      isDealProduct(product)
-        ? parseDealPizzaSlots(product.description || "")
-        : [],
-    [product],
+  const handleFlavorChange = useCallback(
+    (state: DealFlavorState) => setDealFlavors(state),
+    [],
   );
-
-  useEffect(() => {
-    if (!open || !dealSlots.length) return;
-    getProducts()
-      .then(setMenuProducts)
-      .catch(() => setMenuProducts([]));
-  }, [open, dealSlots.length]);
 
   useEffect(() => {
     if (!open) return;
     setSelectedSize(product.sizes[0]);
     setQuantity(1);
     setInstructions("");
-    setFlavorPicks({});
   }, [open, product]);
 
   const handleAdd = () => {
     if (!selectedSize) return;
 
-    if (dealSlots.length) {
-      const missing = dealSlots.filter((slot) => !flavorPicks[slot.id]);
-      if (missing.length) {
-        toast.error("Please select a flavor for each pizza in this deal");
-        return;
-      }
+    if (dealFlavors.hasSlots && !dealFlavors.complete) {
+      toast.error("Please select a flavor for each pizza in this deal");
+      return;
     }
 
-    const flavorNote = dealSlots
-      .map((slot) => {
-        const flavorId = flavorPicks[slot.id];
-        const flavor = menuProducts.find((p) => p.id === flavorId);
-        return flavor
-          ? `${slot.label}: ${flavor.name}`
-          : null;
-      })
-      .filter(Boolean)
-      .join("; ");
-
-    const combinedInstructions = [flavorNote, instructions.trim()]
+    const combinedInstructions = [dealFlavors.note, instructions.trim()]
       .filter(Boolean)
       .join(" | ");
 
@@ -110,7 +78,6 @@ export function ProductModal({
     onOpenChange(false);
     setQuantity(1);
     setInstructions("");
-    setFlavorPicks({});
   };
 
   return (
@@ -133,27 +100,7 @@ export function ProductModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          {dealSlots.length > 0 && (
-            <div className="space-y-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
-              <Label className="block text-orange-300">
-                Choose Regular Pizza flavors (size matches deal)
-              </Label>
-              {dealSlots.map((slot) => (
-                <FlavorPicker
-                  key={slot.id}
-                  slot={slot}
-                  products={menuProducts}
-                  value={flavorPicks[slot.id] || ""}
-                  onChange={(productId) =>
-                    setFlavorPicks((prev) => ({
-                      ...prev,
-                      [slot.id]: productId,
-                    }))
-                  }
-                />
-              ))}
-            </div>
-          )}
+          <DealFlavorSelector product={product} onChange={handleFlavorChange} />
 
           <div>
             <Label className="mb-2 block">Size</Label>
@@ -218,42 +165,5 @@ export function ProductModal({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function FlavorPicker({
-  slot,
-  products,
-  value,
-  onChange,
-}: {
-  slot: DealPizzaSlot;
-  products: Product[];
-  value: string;
-  onChange: (productId: string) => void;
-}) {
-  const options = flavorsForSlot(products, slot);
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-zinc-400">{slot.label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger>
-          <SelectValue
-            placeholder={
-              options.length
-                ? `Select ${slot.size} flavor`
-                : "Loading flavors..."
-            }
-          />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
-              {p.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
   );
 }

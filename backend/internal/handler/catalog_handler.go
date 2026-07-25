@@ -44,3 +44,16 @@ func (h *CatalogHandler) DeleteCategory(c *gin.Context) {
 	}
 	utils.Success(c, http.StatusOK, "category deleted", nil)
 }
+
+func (h *CatalogHandler) DeleteLocation(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		utils.Error(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := h.service.DeleteLocation(id); err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "location deleted", nil)
+}

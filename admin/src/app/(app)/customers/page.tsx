@@ -42,7 +42,11 @@ export default function CustomersPage() {
         name: order.customer_name,
         phone: order.phone,
         ordersCount: (current?.ordersCount || 0) + 1,
-        totalSpent: (current?.totalSpent || 0) + order.grand_total,
+        // Revenue should reflect money actually earned, so only completed
+        // orders contribute to a customer's total spent.
+        totalSpent:
+          (current?.totalSpent || 0) +
+          (order.order_status === "COMPLETED" ? order.grand_total : 0),
         lastOrderAt:
           !current || new Date(order.created_at) > new Date(current.lastOrderAt)
             ? order.created_at

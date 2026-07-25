@@ -21,8 +21,11 @@ import {
   calcCodFee,
   calcGrandTotal,
   cn,
+  formatPkPhone,
   formatPrice,
+  isValidPkPhone,
   LAST_RECEIPT_KEY,
+  normalizePkPhone,
   ORDER_TYPES,
   paymentsForOrderType,
   WALKIN_LOCATION_ID,
@@ -124,7 +127,7 @@ export default function NewOrderPage() {
     }
     return {
       customer_name: isWalkin ? "Walk-in Customer" : bill.customerName.trim(),
-      phone: isWalkin ? "0000000000" : bill.phone.trim(),
+      phone: isWalkin ? "0000000000" : normalizePkPhone(bill.phone),
       address: isWalkin ? "In Store" : bill.address.trim(),
       location_id: isWalkin ? WALKIN_LOCATION_ID : bill.locationId,
       payment_method: bill.paymentMethod,
@@ -201,6 +204,10 @@ export default function NewOrderPage() {
     if (isWalkin) return true;
     if (!bill.customerName.trim() || !bill.phone.trim()) {
       toast.error("Customer name and phone required");
+      return false;
+    }
+    if (!isValidPkPhone(bill.phone)) {
+      toast.error("Enter a valid 11-digit mobile number (e.g. 0300-1234567)");
       return false;
     }
     if (!bill.locationId || bill.locationId === WALKIN_LOCATION_ID) {
@@ -422,9 +429,19 @@ export default function NewOrderPage() {
                 <div className="space-y-1">
                   <Label>Phone</Label>
                   <Input
+                    inputMode="numeric"
+                    placeholder="0300-1234567"
+                    maxLength={12}
                     value={bill.phone}
-                    onChange={(e) => bill.setPhone(e.target.value)}
+                    onChange={(e) =>
+                      bill.setPhone(formatPkPhone(e.target.value))
+                    }
                   />
+                  {bill.phone.trim() && !isValidPkPhone(bill.phone) ? (
+                    <p className="text-xs text-red-400">
+                      Enter an 11-digit number starting with 03
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <div className="space-y-1">

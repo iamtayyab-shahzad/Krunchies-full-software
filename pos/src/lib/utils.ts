@@ -98,3 +98,38 @@ export const ORDER_TYPES = [
 
 export const TOKEN_KEY = "krunchies_pos_token";
 export const LAST_RECEIPT_KEY = "krunchies_pos_last_receipt";
+
+// ---------------------------------------------------------------------------
+// Pakistani mobile number helpers
+//
+// Valid format: 11 digits starting with "03" (e.g. 0300-1234567).
+// We also accept common input variants and normalise them to 03XXXXXXXXX:
+//   +923001234567 / 923001234567 / 3001234567 -> 03001234567
+// ---------------------------------------------------------------------------
+
+/** Strip everything except digits, converting +92/92 prefixes to a leading 0. */
+export function normalizePkPhone(raw: string): string {
+  let digits = (raw || "").replace(/\D/g, "");
+  if (digits.startsWith("92")) {
+    digits = "0" + digits.slice(2);
+  } else if (digits.length === 10 && digits.startsWith("3")) {
+    // 3001234567 -> 03001234567
+    digits = "0" + digits;
+  }
+  return digits.slice(0, 11);
+}
+
+/** A valid PK mobile is exactly 11 digits and begins with 03. */
+export function isValidPkPhone(raw: string): boolean {
+  return /^03\d{9}$/.test(normalizePkPhone(raw));
+}
+
+/**
+ * Format for display/input as the user types: 03XX-XXXXXXX.
+ * Keeps partial input usable (no dash until we have more than 4 digits).
+ */
+export function formatPkPhone(raw: string): string {
+  const digits = normalizePkPhone(raw);
+  if (digits.length <= 4) return digits;
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+}
