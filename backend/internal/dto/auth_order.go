@@ -32,6 +32,7 @@ type CreateOrderRequest struct {
 	LocationID    uuid.UUID                `json:"location_id" binding:"required"`
 	PaymentMethod string                   `json:"payment_method" binding:"required,oneof=cash easypaisa jazzcash card cod"`
 	OrderNotes    string                   `json:"order_notes" binding:"max=2000"`
+	ClientOrderID *uuid.UUID               `json:"client_order_id"`
 	IsGuest       bool                     `json:"is_guest"`
 	Items         []CreateOrderItemRequest `json:"items" binding:"required,min=1,dive"`
 }

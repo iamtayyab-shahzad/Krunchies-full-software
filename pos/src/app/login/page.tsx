@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setToken } from "@/lib/api-client";
 import { TOKEN_KEY, isTokenExpired } from "@/lib/utils";
-import { authApi, syncKrunchiesMenu } from "@/services/api";
-import { useEffect } from "react";
+import { isOnline } from "@/lib/network";
+import { authApi, sessionRepo, syncKrunchiesMenu } from "@/services/api";
+import { useEffect, useState } from "react";
 
 const schema = z.object({
   username: z.string().min(1, "Username required"),
@@ -20,8 +21,14 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+const showDevHints =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS === "true";
+
 export default function LoginPage() {
   const router = useRouter();
+  const [offline, setOffline] = useState(false);
+  const [canContinueOffline, setCanContinueOffline] = useState(false);
   const {
     register,
     handleSubmit,
@@ -32,12 +39,64 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token && !isTokenExpired(token)) router.replace("/orders/new");
-    else if (token) localStorage.removeItem(TOKEN_KEY);
+    setOffline(!isOnline());
+    const sync = () => setOffline(!navigator.onLine);
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+
+    (async () => {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (token && !isTokenExpired(token)) {
+        router.replace("/orders/new");
+        return;
+      }
+      if (token) localStorage.removeItem(TOKEN_KEY);
+
+      const session = await sessionRepo.get();
+      if (
+        session?.token &&
+        (!session.exp || session.exp * 1000 > Date.now())
+      ) {
+        setCanContinueOffline(true);
+        if (!navigator.onLine) {
+          localStorage.setItem(TOKEN_KEY, session.token);
+          router.replace("/orders/new");
+        }
+      }
+    })();
+
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
   }, [router]);
 
+  const continueOffline = async () => {
+    const session = await sessionRepo.get();
+    if (!session?.token) {
+      toast.error("No saved session found");
+      return;
+    }
+    if (session.exp && session.exp * 1000 <= Date.now()) {
+      await sessionRepo.clear();
+      toast.error("Saved session expired — connect to log in again");
+      setCanContinueOffline(false);
+      return;
+    }
+    setToken(session.token);
+    toast.message("Continuing with offline session");
+    router.replace("/orders/new");
+  };
+
   const onSubmit = async (values: FormValues) => {
+    if (!isOnline()) {
+      if (canContinueOffline) {
+        await continueOffline();
+        return;
+      }
+      toast.error("Login requires internet.");
+      return;
+    }
     try {
       const data = await authApi.login(values);
       setToken(data.token);
@@ -64,6 +123,12 @@ export default function LoginPage() {
             <span className="text-orange-500">Krunchies</span> POS
           </h1>
           <p className="mt-2 text-zinc-400">Staff login</p>
+          {offline ? (
+            <p className="mt-2 rounded-lg border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-sm text-orange-200">
+              Offline — use a previous session to keep selling, or reconnect to
+              sign in.
+            </p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <Label htmlFor="username">Username</Label>
@@ -82,14 +147,27 @@ export default function LoginPage() {
         <Button type="submit" size="xl" className="w-full" disabled={isSubmitting}>
           {isSubmitting ? "Signing in..." : "Sign In"}
         </Button>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm text-zinc-400">
-          <p>
-            Staff: <span className="text-zinc-200">staff / staff123</span>
-          </p>
-          <p className="mt-1">
-            Admin: <span className="text-zinc-200">admin / admin123</span>
-          </p>
-        </div>
+        {canContinueOffline ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            onClick={() => void continueOffline()}
+          >
+            Continue offline with saved session
+          </Button>
+        ) : null}
+        {showDevHints ? (
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm text-zinc-400">
+            <p className="text-xs text-zinc-500">Dev only credentials</p>
+            <p>
+              Staff: <span className="text-zinc-200">staff / staff123</span>
+            </p>
+            <p className="mt-1">
+              Admin: <span className="text-zinc-200">admin / admin123</span>
+            </p>
+          </div>
+        ) : null}
       </form>
     </div>
   );

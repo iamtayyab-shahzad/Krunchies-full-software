@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Minus, Plus, Trash2, Printer } from "lucide-react";
@@ -27,8 +27,9 @@ import {
   paymentsForOrderType,
   WALKIN_LOCATION_ID,
 } from "@/lib/utils";
-import { printReceipt } from "@/lib/receipt";
+import { printCustomerReceipt, printKitchenReceipt, encodeKitchenInstructions } from "@/lib/receipt";
 import { deleteDraft } from "@/lib/offline-db";
+import { isOnline } from "@/lib/network";
 import {
   categoriesApi,
   locationsApi,
@@ -46,7 +47,20 @@ export default function NewOrderPage() {
   const isWalkin = bill.orderType === "walkin";
   const paymentOptions = paymentsForOrderType(bill.orderType);
 
-  const { data: products = [] } = useQuery({
+  useEffect(() => {
+    if (bill.cartRecovered && bill.items.length) {
+      toast.message("Cart restored from offline draft");
+    }
+    // only once when recovered with items
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bill.cartRecovered]);
+
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+    isError: productsError,
+    refetch: refetchProducts,
+  } = useQuery({
     queryKey: ["products"],
     queryFn: productsApi.list,
   });
@@ -103,19 +117,76 @@ export default function NewOrderPage() {
     }
   };
 
-  const buildPayload = () => ({
-    customer_name: isWalkin ? "Walk-in Customer" : bill.customerName.trim(),
-    phone: isWalkin ? "0000000000" : bill.phone.trim(),
-    address: isWalkin ? "In Store" : bill.address.trim(),
-    location_id: isWalkin ? WALKIN_LOCATION_ID : bill.locationId,
-    payment_method: bill.paymentMethod,
-    order_notes: bill.orderNotes,
-    items: bill.items.map((i) => ({
-      product_id: i.product_id,
-      product_size_id: i.size_id,
-      quantity: i.quantity,
-      special_instructions: i.special_instructions,
-    })),
+  const buildPayload = () => {
+    const notes = [bill.orderNotes.trim()];
+    if (isWalkin && bill.tableNumber.trim()) {
+      notes.push(`TABLE:${bill.tableNumber.trim()}`);
+    }
+    return {
+      customer_name: isWalkin ? "Walk-in Customer" : bill.customerName.trim(),
+      phone: isWalkin ? "0000000000" : bill.phone.trim(),
+      address: isWalkin ? "In Store" : bill.address.trim(),
+      location_id: isWalkin ? WALKIN_LOCATION_ID : bill.locationId,
+      payment_method: bill.paymentMethod,
+      order_notes: notes.filter(Boolean).join(" | "),
+      items: bill.items.map((i) => ({
+        product_id: i.product_id,
+        product_size_id: i.size_id,
+        quantity: i.quantity,
+        price: i.price,
+        special_instructions: encodeKitchenInstructions({
+          crust: i.crust,
+          toppings: i.toppings,
+          extras: i.extras,
+          notes: i.special_instructions,
+        }),
+      })),
+    };
+  };
+
+  /** Ensure kitchen/customer receipts have product names even offline. */
+  const enrichOrderForPrint = (order: Order): Order => ({
+    ...order,
+    items: (order.items || []).map((item, idx) => {
+      const billLine = bill.items[idx];
+      const match =
+        bill.items.find(
+          (b) =>
+            b.product_id === item.product_id &&
+            b.size_id === item.product_size_id,
+        ) || billLine;
+      return {
+        ...item,
+        product: item.product || {
+          id: item.product_id,
+          created_at: "",
+          updated_at: "",
+          category_id: "",
+          name: match?.product_name || "Item",
+          description: "",
+          image: match?.product_image || "",
+          featured: false,
+          available: true,
+          display_order: 0,
+        },
+        product_size: item.product_size || {
+          id: item.product_size_id,
+          created_at: "",
+          updated_at: "",
+          product_id: item.product_id,
+          size: match?.size || "-",
+          price: item.price,
+        },
+        special_instructions:
+          item.special_instructions ||
+          encodeKitchenInstructions({
+            crust: match?.crust,
+            toppings: match?.toppings,
+            extras: match?.extras,
+            notes: match?.special_instructions,
+          }),
+      };
+    }),
   });
 
   const validate = () => {
@@ -173,19 +244,29 @@ export default function NewOrderPage() {
       }
       if (bill.draftId) await deleteDraft(bill.draftId);
 
-      localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(order));
+      const printable = enrichOrderForPrint(order);
+      localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
+      const offline =
+        !isOnline() ||
+        order.order_number?.startsWith("LOCAL-") ||
+        order.sync_status === "pending_sync";
       if (status === "COMPLETED") {
-        printReceipt(order, settings || null);
+        printCustomerReceipt(printable, settings || null);
         toast.success(
-          bill.editingOrderId
-            ? "Order updated & completed"
-            : "Order completed & receipt printed",
+          offline
+            ? "Order completed offline — customer receipt printed, queued to sync"
+            : bill.editingOrderId
+              ? "Order updated & completed"
+              : "Order completed & customer receipt printed",
         );
       } else {
+        printKitchenReceipt(printable);
         toast.success(
-          bill.editingOrderId
-            ? "Pending order updated"
-            : "Order saved to Pending Orders",
+          offline
+            ? "Pending saved offline — kitchen receipt printed"
+            : bill.editingOrderId
+              ? "Pending updated — kitchen receipt printed"
+              : "Saved to Pending — kitchen receipt printed",
         );
       }
 
@@ -215,7 +296,7 @@ export default function NewOrderPage() {
         toast.error("No receipt to reprint");
         return;
       }
-      printReceipt(JSON.parse(raw) as Order, settings || null, true);
+      printCustomerReceipt(JSON.parse(raw) as Order, settings || null, true);
     } catch {
       toast.error("Reprint failed");
     }
@@ -224,6 +305,28 @@ export default function NewOrderPage() {
   return (
     <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[1fr_380px]">
       <div className="flex min-h-0 flex-col overflow-hidden border-r border-zinc-800">
+        {productsLoading ? (
+          <div className="flex flex-1 items-center justify-center p-8 text-zinc-400">
+            Loading menu…
+          </div>
+        ) : null}
+        {productsError ? (
+          <div className="m-3 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+            Could not load products.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => void refetchProducts()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {!productsLoading && !productsError && products.length === 0 ? (
+          <div className="m-3 rounded-lg border border-orange-500/40 bg-orange-500/10 p-4 text-sm text-orange-200">
+            No products cached. Connect to the internet once to sync the menu.
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2 border-b border-zinc-800 p-3">
           <button
             type="button"
@@ -355,6 +458,17 @@ export default function NewOrderPage() {
             </>
           )}
 
+          {isWalkin ? (
+            <div className="space-y-1">
+              <Label>Table Number (optional)</Label>
+              <Input
+                value={bill.tableNumber}
+                placeholder="e.g. 5"
+                onChange={(e) => bill.setTableNumber(e.target.value)}
+              />
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             {bill.items.map((item) => {
               const product = products.find((p) => p.id === item.product_id);
@@ -421,14 +535,40 @@ export default function NewOrderPage() {
                       {formatPrice(item.price * item.quantity, currency)}
                     </span>
                   </div>
-                  <Input
-                    className="mt-2 h-10 text-sm"
-                    placeholder="Special instructions"
-                    value={item.special_instructions || ""}
-                    onChange={(e) =>
-                      bill.setInstructions(item.key, e.target.value)
-                    }
-                  />
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Input
+                      className="h-9 text-xs"
+                      placeholder="Crust"
+                      value={item.crust || ""}
+                      onChange={(e) =>
+                        bill.setLineMeta(item.key, { crust: e.target.value })
+                      }
+                    />
+                    <Input
+                      className="h-9 text-xs"
+                      placeholder="Toppings"
+                      value={item.toppings || ""}
+                      onChange={(e) =>
+                        bill.setLineMeta(item.key, { toppings: e.target.value })
+                      }
+                    />
+                    <Input
+                      className="h-9 text-xs"
+                      placeholder="Extras"
+                      value={item.extras || ""}
+                      onChange={(e) =>
+                        bill.setLineMeta(item.key, { extras: e.target.value })
+                      }
+                    />
+                    <Input
+                      className="h-9 text-xs"
+                      placeholder="Special notes"
+                      value={item.special_instructions || ""}
+                      onChange={(e) =>
+                        bill.setInstructions(item.key, e.target.value)
+                      }
+                    />
+                  </div>
                 </div>
               );
             })}

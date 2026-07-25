@@ -1,12 +1,37 @@
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, ApiError } from "@/lib/api-client";
 import {
+  listLocalInventory,
+  listLocalProducts,
+  replaceProducts,
+  replaceCategories,
+  replaceInventory,
+  saveLocalSettings,
+  upsertLocalOrder,
+  getLocalSettings,
+  findPendingCreateByClientId,
   cacheGet,
-  cacheSet,
-  enqueueAction,
-  listPendingActions,
-  markActionError,
-  markActionSynced,
 } from "@/lib/offline-db";
+import { isNetworkError, isOnline, isQueueableError } from "@/lib/network";
+import {
+  enqueueAndTrack,
+  runSync,
+  startSyncEngine,
+  subscribeSync,
+  getSyncState,
+  refreshPendingCount,
+  POS_SYNC_COMPLETE_EVENT,
+} from "@/lib/sync-engine";
+import { calcCodFee, calcGrandTotal } from "@/lib/utils";
+import {
+  catalogRepo,
+  customersRepo,
+  inventoryRepo,
+  locationsRepo,
+  ordersRepo,
+  sessionRepo,
+  settingsRepo,
+  warmOfflineCache,
+} from "@/lib/repos";
 import {
   krunchiesCategories,
   krunchiesOffers,
@@ -19,6 +44,8 @@ import type {
   Location,
   Offer,
   Order,
+  OrderItem,
+  PaymentMethod,
   Product,
   ProductSize,
   Recipe,
@@ -26,37 +53,51 @@ import type {
   StaffLoginInput,
 } from "@/types";
 
-async function withCacheFallback<T>(
-  key: string,
-  fetcher: () => Promise<T>,
-): Promise<T> {
-  try {
-    const data = await fetcher();
-    await cacheSet(key, data);
-    return data;
-  } catch (err) {
-    const cached = await cacheGet<T>(key);
-    if (cached) return cached;
-    throw err;
-  }
+export {
+  catalogRepo,
+  customersRepo,
+  inventoryRepo,
+  locationsRepo,
+  ordersRepo,
+  sessionRepo,
+  settingsRepo,
+  warmOfflineCache,
+  startSyncEngine,
+  subscribeSync,
+  getSyncState,
+  refreshPendingCount,
+  runSync,
+  POS_SYNC_COMPLETE_EVENT,
+};
+
+/** @deprecated use runSync */
+export async function syncOfflineQueue() {
+  return runSync("legacy");
 }
 
 export const authApi = {
-  login: (input: StaffLoginInput) =>
-    apiFetch<{ token: string }>("/auth/staff/login", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }, false),
+  login: async (input: StaffLoginInput) => {
+    const data = await apiFetch<{ token: string }>(
+      "/auth/staff/login",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      false,
+    );
+    await sessionRepo.cacheFromToken(input.username, data.token);
+    return data;
+  },
 };
 
 export async function syncKrunchiesMenu() {
   const [remoteCategories, remoteProducts, remoteSizes, remoteOffers] =
     await Promise.all([
-    apiFetch<Category[]>("/categories"),
-    apiFetch<Product[]>("/products"),
-    apiFetch<ProductSize[]>("/product-sizes"),
-    apiFetch<Offer[]>("/offers"),
-  ]);
+      apiFetch<Category[]>("/categories"),
+      apiFetch<Product[]>("/products"),
+      apiFetch<ProductSize[]>("/product-sizes"),
+      apiFetch<Offer[]>("/offers"),
+    ]);
   const categoryIds = new Set(remoteCategories.map((item) => item.id));
   const productIds = new Set(remoteProducts.map((item) => item.id));
   const sizesById = new Map(remoteSizes.map((item) => [item.id, item]));
@@ -68,21 +109,19 @@ export async function syncKrunchiesMenu() {
     remoteSizes.length === 0;
   const shouldSeedOffers = remoteOffers.length === 0;
 
-  // Seeding is "create missing" only. Once Admin has data, we avoid overwriting it.
   if (shouldSeedCatalog) {
     await Promise.all(
       krunchiesCategories.map((category) => {
         if (categoryIds.has(category.id)) return Promise.resolve(null);
-        const payload = {
-          id: category.id,
-          name: category.name,
-          image: category.image,
-          display_order: category.display_order,
-          visible: category.visible,
-        };
         return apiFetch<Category>("/categories", {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            id: category.id,
+            name: category.name,
+            image: category.image,
+            display_order: category.display_order,
+            visible: category.visible,
+          }),
         });
       }),
     );
@@ -90,19 +129,18 @@ export async function syncKrunchiesMenu() {
     await Promise.all(
       krunchiesProducts.map((product) => {
         if (productIds.has(product.id)) return Promise.resolve(null);
-        const payload = {
-          id: product.id,
-          category_id: product.category_id,
-          name: product.name,
-          description: product.description,
-          image: product.image,
-          featured: product.featured,
-          available: product.available,
-          display_order: product.display_order,
-        };
         return apiFetch<Product>("/products", {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            id: product.id,
+            category_id: product.category_id,
+            name: product.name,
+            description: product.description,
+            image: product.image,
+            featured: product.featured,
+            available: product.available,
+            display_order: product.display_order,
+          }),
         });
       }),
     );
@@ -111,102 +149,264 @@ export async function syncKrunchiesMenu() {
       krunchiesProducts.flatMap((product) =>
         (product.sizes ?? []).map((size) => {
           if (sizesById.has(size.id)) return Promise.resolve(null);
-          const payload = {
-            id: size.id,
-            product_id: size.product_id,
-            size: size.size,
-            price: size.price,
-          };
           return apiFetch<ProductSize>("/product-sizes", {
             method: "POST",
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+              id: size.id,
+              product_id: size.product_id,
+              size: size.size,
+              price: size.price,
+            }),
           });
         }),
       ),
     );
   }
 
-  // Seed offers only when the backend has none.
   if (shouldSeedOffers) {
     await Promise.all(
       krunchiesOffers.map((offer) => {
         if (offerIds.has(offer.id)) return Promise.resolve(null);
         const isPromotion = Boolean(offer.start_date || offer.end_date);
-        const payload = {
-          id: offer.id,
-          title: offer.title,
-          description: offer.description,
-          image: offer.image,
-          active: offer.active,
-          start_date: offer.start_date,
-          end_date: offer.end_date,
-          // Backfill flags for Website offer-popup & Admin toggles.
-          offer_popup: isPromotion,
-          homepage_deal: true,
-          discount_label: offer.title,
-        };
         return apiFetch<Offer>("/offers", {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            id: offer.id,
+            title: offer.title,
+            description: offer.description,
+            image: offer.image,
+            active: offer.active,
+            start_date: offer.start_date,
+            end_date: offer.end_date,
+            offer_popup: isPromotion,
+            homepage_deal: true,
+            discount_label: offer.title,
+          }),
         });
       }),
     );
   }
+
+  await Promise.all([
+    catalogRepo.listCategories(),
+    catalogRepo.listProducts(),
+    settingsRepo.get(),
+    locationsRepo.list(),
+    inventoryRepo.list(),
+  ]);
+}
+
+function offlineOkMessage(action: string) {
+  return `${action} saved offline — will sync when online`;
 }
 
 export const productsApi = {
-  list: async () => {
-    const [remoteProducts, remoteSizes] = await Promise.all([
-      apiFetch<Product[]>("/products"),
-      apiFetch<ProductSize[]>("/product-sizes"),
-    ]);
-    const sizesByProduct = new Map<string, ProductSize[]>();
-    for (const s of remoteSizes) {
-      const arr = sizesByProduct.get(s.product_id) || [];
-      arr.push(s);
-      sizesByProduct.set(s.product_id, arr);
-    }
-    return remoteProducts.map((p) => ({
-      ...p,
-      sizes: sizesByProduct.get(p.id) || [],
-    }));
-  },
+  list: () => catalogRepo.listProducts(),
   get: async (id: string) => {
-    const product = krunchiesProducts.find((item) => item.id === id);
+    const products = await catalogRepo.listProducts();
+    const product = products.find((item) => item.id === id);
     if (!product) throw new Error("Product not found");
     return product;
   },
-  create: async (payload: Partial<Product>) => {
+
+  /**
+   * Admin-parity create: product + sizes in one call.
+   * Offline: stores locally with client UUIDs and queues idempotent sync.
+   */
+  saveWithSizes: async (input: {
+    id?: string;
+    category_id: string;
+    name: string;
+    description: string;
+    image: string;
+    featured: boolean;
+    available: boolean;
+    display_order?: number;
+    sizes: { id?: string; label: string; price: number }[];
+  }) => {
+    const productId = input.id || crypto.randomUUID();
+    const sizes: ProductSize[] = (input.sizes || [])
+      .filter((s) => s.label.trim())
+      .map((s) => ({
+        id: s.id || crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        product_id: productId,
+        size: s.label.trim(),
+        price: Number(s.price) || 0,
+      }));
+
+    const productBody = {
+      id: productId,
+      category_id: input.category_id,
+      name: input.name.trim(),
+      description: input.description || "",
+      image: input.image || "",
+      featured: input.featured,
+      available: input.available,
+      display_order: input.display_order || 0,
+    };
+
+    const applyLocal = async () => {
+      const local: Product = {
+        ...productBody,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sizes,
+      };
+      const products = await listLocalProducts();
+      await replaceProducts([
+        local,
+        ...products.filter((p) => p.id !== local.id),
+      ]);
+      return local;
+    };
+
     try {
-      return await apiFetch<Product>("/products", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+
+      if (input.id) {
+        await apiFetch<null>(`/products/${productId}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            category_id: productBody.category_id,
+            name: productBody.name,
+            description: productBody.description,
+            image: productBody.image,
+            featured: productBody.featured,
+            available: productBody.available,
+            display_order: productBody.display_order,
+          }),
+        });
+        const allSizes = await apiFetch<ProductSize[]>("/product-sizes");
+        const existing = allSizes.filter((s) => s.product_id === productId);
+        const desired = new Set(sizes.map((s) => s.size.toLowerCase()));
+        for (const e of existing) {
+          if (!desired.has(e.size.toLowerCase())) {
+            await apiFetch(`/product-sizes/${e.id}`, { method: "DELETE" });
+          }
+        }
+        for (const s of sizes) {
+          const match = existing.find(
+            (e) => e.size.toLowerCase() === s.size.toLowerCase(),
+          );
+          if (match) {
+            await apiFetch(`/product-sizes/${match.id}`, {
+              method: "PUT",
+              body: JSON.stringify({ size: s.size, price: s.price }),
+            });
+          } else {
+            await apiFetch("/product-sizes", {
+              method: "POST",
+              body: JSON.stringify({
+                id: s.id,
+                product_id: productId,
+                size: s.size,
+                price: s.price,
+              }),
+            });
+          }
+        }
+      } else {
+        await apiFetch<Product>("/products", {
+          method: "POST",
+          body: JSON.stringify(productBody),
+        });
+        for (const s of sizes) {
+          await apiFetch("/product-sizes", {
+            method: "POST",
+            body: JSON.stringify({
+              id: s.id,
+              product_id: productId,
+              size: s.size,
+              price: s.price,
+            }),
+          });
+        }
+      }
+
+      const refreshed = await catalogRepo.listProducts();
+      const saved =
+        refreshed.find((p) => p.id === productId) || (await applyLocal());
+      return { data: saved, offline: false as const };
     } catch (e) {
-      await enqueueAction({ type: "CREATE_PRODUCT", payload });
-      throw e;
+      if (!isQueueableError(e) && isOnline()) throw e;
+      const local = await applyLocal();
+      await enqueueAndTrack({
+        type: input.id ? "UPDATE_PRODUCT" : "CREATE_PRODUCT",
+        payload: {
+          id: productId,
+          product: productBody,
+          sizes: sizes.map((s) => ({
+            id: s.id,
+            size: s.size,
+            price: s.price,
+          })),
+        },
+      });
+      return {
+        data: local,
+        offline: true as const,
+        message: offlineOkMessage(
+          input.id ? "Product update" : "Product",
+        ),
+      };
     }
   },
+
+  create: async (payload: Partial<Product>) => {
+    return productsApi.saveWithSizes({
+      category_id: payload.category_id || "",
+      name: payload.name || "",
+      description: payload.description || "",
+      image: payload.image || "",
+      featured: Boolean(payload.featured),
+      available: payload.available !== false,
+      display_order: payload.display_order || 0,
+      sizes: (payload.sizes || []).map((s) => ({
+        id: s.id,
+        label: s.size,
+        price: s.price,
+      })),
+    });
+  },
   update: async (id: string, updates: Record<string, unknown>) => {
-    try {
-      return await apiFetch<null>(`/products/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(updates),
-      });
-    } catch (e) {
-      await enqueueAction({
-        type: "UPDATE_PRODUCT",
-        payload: { id, updates },
-      });
-      throw e;
-    }
+    const current = await productsApi.get(id).catch(() => null);
+    const sizes =
+      (updates.sizes as ProductSize[] | undefined) || current?.sizes || [];
+    return productsApi.saveWithSizes({
+      id,
+      category_id: String(updates.category_id || current?.category_id || ""),
+      name: String(updates.name || current?.name || ""),
+      description: String(updates.description ?? current?.description ?? ""),
+      image: String(updates.image ?? current?.image ?? ""),
+      featured: Boolean(
+        updates.featured !== undefined ? updates.featured : current?.featured,
+      ),
+      available: Boolean(
+        updates.available !== undefined
+          ? updates.available
+          : current?.available !== false,
+      ),
+      display_order: Number(
+        updates.display_order ?? current?.display_order ?? 0,
+      ),
+      sizes: sizes.map((s) => ({
+        id: s.id,
+        label: s.size,
+        price: s.price,
+      })),
+    });
   },
   remove: (id: string) =>
     apiFetch<null>(`/products/${id}`, { method: "DELETE" }),
 };
 
 export const productSizesApi = {
-  list: () => apiFetch<ProductSize[]>("/product-sizes"),
+  list: async () => {
+    const products = await catalogRepo.listProducts();
+    return products.flatMap((p) => p.sizes || []);
+  },
   create: (payload: Partial<ProductSize>) =>
     apiFetch<ProductSize>("/product-sizes", {
       method: "POST",
@@ -222,30 +422,64 @@ export const productSizesApi = {
 };
 
 export const categoriesApi = {
-  list: async () => apiFetch<Category[]>("/categories"),
+  list: () => catalogRepo.listCategories(),
   create: async (payload: Partial<Category>) => {
     try {
-      return await apiFetch<Category>("/categories", {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      const created = await apiFetch<Category>("/categories", {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      await catalogRepo.listCategories();
+      return { data: created, offline: false as const };
     } catch (e) {
-      await enqueueAction({ type: "CREATE_CATEGORY", payload });
-      throw e;
+      if (!isNetworkError(e) && isOnline()) throw e;
+      const local: Category = {
+        id: payload.id || crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        name: payload.name || "Category",
+        image: payload.image || "",
+        display_order: payload.display_order || 0,
+        visible: payload.visible !== false,
+      };
+      const cats = await catalogRepo.listCategories();
+      await replaceCategories([local, ...cats.filter((c) => c.id !== local.id)]);
+      await enqueueAndTrack({
+        type: "CREATE_CATEGORY",
+        payload: { ...payload, id: local.id },
+      });
+      return {
+        data: local,
+        offline: true as const,
+        message: offlineOkMessage("Category"),
+      };
     }
   },
   update: async (id: string, updates: Record<string, unknown>) => {
     try {
-      return await apiFetch<null>(`/categories/${id}`, {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      await apiFetch<null>(`/categories/${id}`, {
         method: "PUT",
         body: JSON.stringify(updates),
       });
+      await catalogRepo.listCategories();
+      return { offline: false as const };
     } catch (e) {
-      await enqueueAction({
-        type: "UPDATE_CATEGORY",
-        payload: { id, updates },
-      });
-      throw e;
+      if (!isNetworkError(e) && isOnline()) throw e;
+      const cats = await catalogRepo.listCategories();
+      await replaceCategories(
+        cats.map((c) =>
+          c.id === id
+            ? ({ ...c, ...updates, updated_at: new Date().toISOString() } as Category)
+            : c,
+        ),
+      );
+      await enqueueAndTrack({ type: "UPDATE_CATEGORY", payload: { id, updates } });
+      return {
+        offline: true as const,
+        message: offlineOkMessage("Category update"),
+      };
     }
   },
   remove: (id: string) =>
@@ -253,8 +487,7 @@ export const categoriesApi = {
 };
 
 export const locationsApi = {
-  list: () =>
-    withCacheFallback("locations", () => apiFetch<Location[]>("/locations")),
+  list: () => locationsRepo.list(),
   create: (payload: Partial<Location>) =>
     apiFetch<Location>("/locations", {
       method: "POST",
@@ -269,82 +502,308 @@ export const locationsApi = {
     apiFetch<null>(`/locations/${id}`, { method: "DELETE" }),
 };
 
+async function resolveLineDetails(
+  item: CreateOrderInput["items"][number],
+): Promise<{ price: number; product?: Product; size?: ProductSize }> {
+  const products = await listLocalProducts();
+  const product = products.find((p) => p.id === item.product_id);
+  const size = product?.sizes?.find((s) => s.id === item.product_size_id);
+  const price =
+    typeof item.price === "number" && item.price > 0
+      ? item.price
+      : (size?.price ?? 0);
+  return { price, product, size };
+}
+
+async function buildLocalOrder(
+  input: CreateOrderInput,
+  orderType: string,
+  clientOrderId: string,
+): Promise<Order> {
+  const id = clientOrderId;
+  const now = new Date().toISOString();
+  const items: OrderItem[] = await Promise.all(
+    input.items.map(async (item) => {
+      const { price, product, size } = await resolveLineDetails(item);
+      return {
+        id: crypto.randomUUID(),
+        created_at: now,
+        updated_at: now,
+        order_id: id,
+        product_id: item.product_id,
+        product_size_id: item.product_size_id,
+        quantity: item.quantity,
+        price,
+        special_instructions: item.special_instructions,
+        product,
+        product_size: size,
+      };
+    }),
+  );
+  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const locations =
+    (await cacheGet<Location[]>("locations")) ||
+    (await locationsRepo.list().catch(() => []));
+  const location = locations.find((l) => l.id === input.location_id);
+  const delivery_charge =
+    orderType === "walkin" ? 0 : location?.delivery_charge || 0;
+  const settings = (await getLocalSettings()) || (await settingsRepo.get());
+  const cash_on_delivery_fee = calcCodFee(
+    input.payment_method as PaymentMethod,
+    settings.cash_on_delivery_fee || 0,
+  );
+  const grand_total = calcGrandTotal(
+    subtotal,
+    delivery_charge,
+    cash_on_delivery_fee,
+  );
+  return {
+    id,
+    created_at: now,
+    updated_at: now,
+    order_number: `LOCAL-${id.slice(0, 8).toUpperCase()}`,
+    client_order_id: id,
+    customer_name: input.customer_name,
+    phone: input.phone,
+    address: input.address || "",
+    location_id: input.location_id,
+    delivery_charge,
+    cash_on_delivery_fee,
+    payment_method: input.payment_method,
+    order_status: "PENDING",
+    order_type: orderType,
+    order_notes: input.order_notes || "",
+    subtotal,
+    grand_total,
+    items,
+    sync_status: "pending_sync",
+  };
+}
+
+async function markLocalOrderStatus(
+  id: string,
+  order_status: "PENDING" | "COMPLETED" | "CANCELLED",
+) {
+  try {
+    const order = await ordersRepo.get(id);
+    await upsertLocalOrder({
+      ...order,
+      order_status,
+      updated_at: new Date().toISOString(),
+    });
+  } catch {
+    // ignore
+  }
+}
+
 export const ordersApi = {
-  list: () =>
-    withCacheFallback("orders", () => apiFetch<Order[]>("/orders")),
-  pending: () => apiFetch<Order[]>("/orders/pending"),
-  get: (id: string) => apiFetch<Order>(`/orders/${id}`),
-  create: async (input: CreateOrderInput, orderType: "walkin" | "phone" | "website" = "walkin") => {
+  list: () => ordersRepo.list(),
+  pending: () => ordersRepo.pending(),
+  get: (id: string) => ordersRepo.get(id),
+  create: async (
+    input: CreateOrderInput,
+    orderType: "walkin" | "phone" | "website" = "walkin",
+  ) => {
     const path =
       orderType === "phone"
         ? "/orders/phone"
         : orderType === "walkin"
           ? "/orders/walkin"
           : "/orders";
+    const clientOrderId = input.client_order_id || crypto.randomUUID();
+    const apiInput: CreateOrderInput = {
+      ...input,
+      client_order_id: clientOrderId,
+      items: input.items.map(
+        ({ product_id, product_size_id, quantity, special_instructions }) => ({
+          product_id,
+          product_size_id,
+          quantity,
+          special_instructions,
+        }),
+      ),
+    };
     try {
-      return await apiFetch<Order>(path, {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      const order = await apiFetch<Order>(path, {
         method: "POST",
-        body: JSON.stringify(input),
+        body: JSON.stringify(apiInput),
       });
+      await upsertLocalOrder({ ...order, sync_status: "synced" });
+      return order;
     } catch (e) {
-      await enqueueAction({
-        type: "CREATE_ORDER",
-        payload: { input, orderType },
-      });
+      if (isQueueableError(e)) {
+        const existing = await findPendingCreateByClientId(clientOrderId);
+        if (existing) {
+          const local = await ordersRepo.get(clientOrderId).catch(() => null);
+          if (local) return local;
+        }
+        const local = await buildLocalOrder(input, orderType, clientOrderId);
+        if (!existing) {
+          await enqueueAndTrack({
+            type: "CREATE_ORDER",
+            payload: { input: apiInput, orderType, localId: local.id },
+          });
+        }
+        await upsertLocalOrder(local);
+        return local;
+      }
       throw e;
     }
   },
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiFetch<null>(`/orders/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(updates),
-    }),
+  update: async (id: string, updates: Record<string, unknown>) => {
+    try {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      await apiFetch<null>(`/orders/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      });
+      return { offline: false as const };
+    } catch (e) {
+      if (isQueueableError(e)) {
+        try {
+          const existing = await ordersRepo.get(id);
+          await upsertLocalOrder({
+            ...existing,
+            ...updates,
+            id,
+            updated_at: new Date().toISOString(),
+            sync_status: "pending_sync",
+          } as Order);
+        } catch {
+          /* ignore */
+        }
+        await enqueueAndTrack({
+          type: "UPDATE_ORDER",
+          payload: { id, updates },
+        });
+        return {
+          offline: true as const,
+          message: offlineOkMessage("Order update"),
+        };
+      }
+      throw e;
+    }
+  },
   complete: async (id: string) => {
     try {
-      return await apiFetch<null>(`/orders/${id}/complete`, { method: "PATCH" });
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      const result = await apiFetch<null>(`/orders/${id}/complete`, {
+        method: "PATCH",
+      });
+      await markLocalOrderStatus(id, "COMPLETED");
+      return { offline: false as const, data: result };
     } catch (e) {
-      await enqueueAction({ type: "COMPLETE_ORDER", payload: { id } });
+      const isLocal = await ordersRepo
+        .get(id)
+        .then((o) => o.order_number.startsWith("LOCAL-"))
+        .catch(() => false);
+      if (isQueueableError(e) || isLocal) {
+        await enqueueAndTrack({ type: "COMPLETE_ORDER", payload: { id } });
+        await markLocalOrderStatus(id, "COMPLETED");
+        return {
+          offline: true as const,
+          message: offlineOkMessage("Order completed"),
+        };
+      }
       throw e;
     }
   },
   cancel: async (id: string) => {
     try {
-      return await apiFetch<null>(`/orders/${id}/cancel`, { method: "PATCH" });
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      const result = await apiFetch<null>(`/orders/${id}/cancel`, {
+        method: "PATCH",
+      });
+      await markLocalOrderStatus(id, "CANCELLED");
+      return { offline: false as const, data: result };
     } catch (e) {
-      await enqueueAction({ type: "CANCEL_ORDER", payload: { id } });
+      const isLocal = await ordersRepo
+        .get(id)
+        .then((o) => o.order_number.startsWith("LOCAL-"))
+        .catch(() => false);
+      if (isQueueableError(e) || isLocal) {
+        await enqueueAndTrack({ type: "CANCEL_ORDER", payload: { id } });
+        await markLocalOrderStatus(id, "CANCELLED");
+        return {
+          offline: true as const,
+          message: offlineOkMessage("Order cancelled"),
+        };
+      }
       throw e;
     }
   },
 };
 
 export const inventoryApi = {
-  list: () =>
-    withCacheFallback("inventory", () =>
-      apiFetch<InventoryItem[]>("/inventory"),
-    ),
+  list: () => inventoryRepo.list(),
   create: async (payload: Partial<InventoryItem>) => {
     try {
-      return await apiFetch<InventoryItem>("/inventory", {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      const created = await apiFetch<InventoryItem>("/inventory", {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      await inventoryRepo.list();
+      return { data: created, offline: false as const };
     } catch (e) {
-      await enqueueAction({ type: "CREATE_INVENTORY", payload });
-      throw e;
+      if (!isNetworkError(e) && isOnline()) throw e;
+      const local: InventoryItem = {
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        name: payload.name || "Item",
+        unit: payload.unit || "g",
+        stock: Number(payload.stock) || 0,
+        purchase_price: Number(payload.purchase_price) || 0,
+        minimum_stock: Number(payload.minimum_stock) || 0,
+      };
+      const items = await listLocalInventory();
+      await replaceInventory([local, ...items]);
+      await enqueueAndTrack({
+        type: "CREATE_INVENTORY",
+        payload: { ...payload, id: local.id },
+      });
+      return {
+        data: local,
+        offline: true as const,
+        message: offlineOkMessage("Inventory item"),
+      };
     }
   },
   update: async (id: string, updates: Record<string, unknown>) => {
+    const current = (await listLocalInventory()).find((i) => i.id === id);
+    const expected_stock = current?.stock;
     try {
-      return await apiFetch<null>(`/inventory/${id}`, {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      await apiFetch<null>(`/inventory/${id}`, {
         method: "PUT",
         body: JSON.stringify(updates),
       });
+      await inventoryRepo.list();
+      return { offline: false as const };
     } catch (e) {
-      await enqueueAction({
+      if (!isNetworkError(e) && isOnline()) throw e;
+      const items = await listLocalInventory();
+      await replaceInventory(
+        items.map((i) =>
+          i.id === id
+            ? ({
+                ...i,
+                ...updates,
+                updated_at: new Date().toISOString(),
+              } as InventoryItem)
+            : i,
+        ),
+      );
+      await enqueueAndTrack({
         type: "UPDATE_INVENTORY",
-        payload: { id, updates },
+        payload: { id, updates, expected_stock },
       });
-      throw e;
+      return {
+        offline: true as const,
+        message: offlineOkMessage("Inventory update"),
+      };
     }
   },
   remove: (id: string) =>
@@ -352,12 +811,32 @@ export const inventoryApi = {
 };
 
 export const recipesApi = {
-  list: () => apiFetch<Recipe[]>("/recipes"),
-  create: (payload: Partial<Recipe>) =>
-    apiFetch<Recipe>("/recipes", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+  list: async () => {
+    const { cacheGet, cacheSet } = await import("@/lib/offline-db");
+    if (isOnline()) {
+      try {
+        const data = await apiFetch<Recipe[]>("/recipes");
+        await cacheSet("recipes", data);
+        return data;
+      } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        return (await cacheGet<Recipe[]>("recipes")) || [];
+      }
+    }
+    return (await cacheGet<Recipe[]>("recipes")) || [];
+  },
+  create: async (payload: Partial<Recipe>) => {
+    try {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      return await apiFetch<Recipe>("/recipes", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      if (!isNetworkError(e) && isOnline()) throw e;
+      throw new Error("Recipes require internet connection");
+    }
+  },
   update: (id: string, updates: Record<string, unknown>) =>
     apiFetch<null>(`/recipes/${id}`, {
       method: "PUT",
@@ -368,27 +847,55 @@ export const recipesApi = {
 };
 
 export const offersApi = {
-  list: async () => apiFetch<Offer[]>("/offers"),
+  list: async () => {
+    const { cacheGet, cacheSet } = await import("@/lib/offline-db");
+    if (isOnline()) {
+      try {
+        const data = await apiFetch<Offer[]>("/offers");
+        await cacheSet("offers", data);
+        return data;
+      } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        return (await cacheGet<Offer[]>("offers")) || [];
+      }
+    }
+    return (await cacheGet<Offer[]>("offers")) || [];
+  },
   create: async (payload: Partial<Offer>) => {
     try {
-      return await apiFetch<Offer>("/offers", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      return {
+        data: await apiFetch<Offer>("/offers", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }),
+        offline: false as const,
+      };
     } catch (e) {
-      await enqueueAction({ type: "CREATE_OFFER", payload });
-      throw e;
+      if (!isNetworkError(e) && isOnline()) throw e;
+      await enqueueAndTrack({ type: "CREATE_OFFER", payload });
+      return {
+        data: null,
+        offline: true as const,
+        message: offlineOkMessage("Offer"),
+      };
     }
   },
   update: async (id: string, updates: Record<string, unknown>) => {
     try {
-      return await apiFetch<null>(`/offers/${id}`, {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      await apiFetch<null>(`/offers/${id}`, {
         method: "PUT",
         body: JSON.stringify(updates),
       });
+      return { offline: false as const };
     } catch (e) {
-      await enqueueAction({ type: "UPDATE_OFFER", payload: { id, updates } });
-      throw e;
+      if (!isNetworkError(e) && isOnline()) throw e;
+      await enqueueAndTrack({ type: "UPDATE_OFFER", payload: { id, updates } });
+      return {
+        offline: true as const,
+        message: offlineOkMessage("Offer update"),
+      };
     }
   },
   enable: (id: string) =>
@@ -400,17 +907,31 @@ export const offersApi = {
 };
 
 export const settingsApi = {
-  get: async () =>
-    withCacheFallback("settings", () => apiFetch<Settings>("/settings/public")),
+  get: () => settingsRepo.get(),
   update: async (updates: Record<string, unknown>) => {
     try {
-      return await apiFetch<Settings>("/settings", {
+      if (!isOnline()) throw new ApiError("Network unavailable", 0);
+      const data = await apiFetch<Settings>("/settings", {
         method: "PUT",
         body: JSON.stringify(updates),
       });
+      await saveLocalSettings(data);
+      return { data, offline: false as const };
     } catch (e) {
-      await enqueueAction({ type: "UPDATE_SETTINGS", payload: updates });
-      throw e;
+      if (!isNetworkError(e) && isOnline()) throw e;
+      const current = (await getLocalSettings()) || (await settingsRepo.get());
+      const merged = {
+        ...current,
+        ...updates,
+        updated_at: new Date().toISOString(),
+      } as Settings;
+      await saveLocalSettings(merged);
+      await enqueueAndTrack({ type: "UPDATE_SETTINGS", payload: updates });
+      return {
+        data: merged,
+        offline: true as const,
+        message: offlineOkMessage("Settings"),
+      };
     }
   },
 };
@@ -433,108 +954,3 @@ export const analyticsApi = {
   remainingInventory: () =>
     apiFetch<unknown>("/analytics/remaining-inventory"),
 };
-
-export async function syncOfflineQueue() {
-  const pending = await listPendingActions();
-  for (const action of pending) {
-    try {
-      switch (action.type) {
-        case "CREATE_ORDER": {
-          const p = action.payload as {
-            input: CreateOrderInput;
-            orderType: "walkin" | "phone" | "website";
-          };
-          const path =
-            p.orderType === "phone"
-              ? "/orders/phone"
-              : p.orderType === "walkin"
-                ? "/orders/walkin"
-                : "/orders";
-          await apiFetch(path, {
-            method: "POST",
-            body: JSON.stringify(p.input),
-          });
-          break;
-        }
-        case "COMPLETE_ORDER":
-          await apiFetch(`/orders/${(action.payload as { id: string }).id}/complete`, {
-            method: "PATCH",
-          });
-          break;
-        case "CANCEL_ORDER":
-          await apiFetch(`/orders/${(action.payload as { id: string }).id}/cancel`, {
-            method: "PATCH",
-          });
-          break;
-        case "CREATE_PRODUCT":
-          await apiFetch("/products", {
-            method: "POST",
-            body: JSON.stringify(action.payload),
-          });
-          break;
-        case "UPDATE_PRODUCT": {
-          const p = action.payload as { id: string; updates: Record<string, unknown> };
-          await apiFetch(`/products/${p.id}`, {
-            method: "PUT",
-            body: JSON.stringify(p.updates),
-          });
-          break;
-        }
-        case "CREATE_CATEGORY":
-          await apiFetch("/categories", {
-            method: "POST",
-            body: JSON.stringify(action.payload),
-          });
-          break;
-        case "UPDATE_CATEGORY": {
-          const p = action.payload as { id: string; updates: Record<string, unknown> };
-          await apiFetch(`/categories/${p.id}`, {
-            method: "PUT",
-            body: JSON.stringify(p.updates),
-          });
-          break;
-        }
-        case "CREATE_INVENTORY":
-          await apiFetch("/inventory", {
-            method: "POST",
-            body: JSON.stringify(action.payload),
-          });
-          break;
-        case "UPDATE_INVENTORY": {
-          const p = action.payload as { id: string; updates: Record<string, unknown> };
-          await apiFetch(`/inventory/${p.id}`, {
-            method: "PUT",
-            body: JSON.stringify(p.updates),
-          });
-          break;
-        }
-        case "UPDATE_SETTINGS":
-          await apiFetch("/settings", {
-            method: "PUT",
-            body: JSON.stringify(action.payload),
-          });
-          break;
-        case "CREATE_OFFER":
-          await apiFetch("/offers", {
-            method: "POST",
-            body: JSON.stringify(action.payload),
-          });
-          break;
-        case "UPDATE_OFFER": {
-          const p = action.payload as { id: string; updates: Record<string, unknown> };
-          await apiFetch(`/offers/${p.id}`, {
-            method: "PUT",
-            body: JSON.stringify(p.updates),
-          });
-          break;
-        }
-      }
-      await markActionSynced(action.id);
-    } catch (err) {
-      await markActionError(
-        action.id,
-        err instanceof Error ? err.message : "Sync failed",
-      );
-    }
-  }
-}

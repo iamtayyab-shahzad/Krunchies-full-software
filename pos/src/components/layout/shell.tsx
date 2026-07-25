@@ -9,15 +9,23 @@ import {
   History,
   LayoutDashboard,
   Package,
+  RefreshCw,
   Settings,
   ShoppingCart,
+  Warehouse,
   Wifi,
   WifiOff,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { listPendingActions } from "@/lib/offline-db";
-import { ordersApi, syncOfflineQueue } from "@/services/api";
+import { ordersApi, sessionRepo } from "@/services/api";
+import {
+  getSyncState,
+  runSync,
+  subscribeSync,
+  type SyncEngineState,
+} from "@/lib/sync-engine";
+import { setToken } from "@/lib/api-client";
 
 const LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -26,58 +34,48 @@ const LINKS = [
   { href: "/orders/history", label: "Order History", icon: History },
   { href: "/products", label: "Products", icon: Package },
   { href: "/categories", label: "Categories", icon: FolderTree },
+  { href: "/inventory", label: "Inventory", icon: Warehouse },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+function formatLastSync(iso: string | null) {
+  if (!iso) return "Never";
+  try {
+    return new Date(iso).toLocaleTimeString("en-PK", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
+
 export function Sidebar() {
   const pathname = usePathname();
-  const [online, setOnline] = useState(true);
-  const [queueCount, setQueueCount] = useState(0);
+  const [sync, setSync] = useState<SyncEngineState>(getSyncState());
   const [pendingCount, setPendingCount] = useState(0);
 
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, []);
-
-  useEffect(() => {
-    const refresh = async () => {
-      const pending = await listPendingActions();
-      setQueueCount(pending.length);
-      if (navigator.onLine && pending.length) {
-        await syncOfflineQueue();
-        const after = await listPendingActions();
-        setQueueCount(after.length);
-      }
-    };
-    refresh();
-    const id = setInterval(refresh, 15000);
-    window.addEventListener("online", refresh);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener("online", refresh);
-    };
-  }, []);
+  useEffect(() => subscribeSync(setSync), []);
 
   useEffect(() => {
     let cancelled = false;
     const loadPending = async () => {
       try {
-        const rows = await ordersApi.pending();
-        if (!cancelled) setPendingCount(rows.length);
+        // Prefer local pending count to reduce API thrash; refresh from API less often.
+        const { listLocalPendingOrders } = await import("@/lib/offline-db");
+        const local = await listLocalPendingOrders();
+        if (!cancelled) setPendingCount(local.length);
+        if (navigator.onLine) {
+          const rows = await ordersApi.pending();
+          if (!cancelled) setPendingCount(rows.length);
+        }
       } catch {
-        // Keep last known count if offline / unauthorized.
+        // Keep last known count
       }
     };
     loadPending();
-    const id = setInterval(loadPending, 5000);
+    const id = setInterval(loadPending, 10_000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -90,8 +88,8 @@ export function Sidebar() {
         <p className="text-lg font-black text-white">
           <span className="text-orange-500">Krunchies</span> POS
         </p>
-        <div className="mt-2 flex items-center gap-2 text-xs">
-          {online ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          {sync.online ? (
             <span className="flex items-center gap-1 text-emerald-400">
               <Wifi className="h-3.5 w-3.5" /> Online
             </span>
@@ -100,12 +98,39 @@ export function Sidebar() {
               <WifiOff className="h-3.5 w-3.5" /> Offline
             </span>
           )}
-          {queueCount > 0 && (
+          {sync.pending_count > 0 && (
             <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-orange-300">
-              {queueCount} queued
+              {sync.pending_count} to sync
             </span>
           )}
         </div>
+        <div className="mt-2 space-y-1 text-[11px] text-zinc-500">
+          <p>Last sync: {formatLastSync(sync.last_sync_at)}</p>
+          {sync.syncing ? (
+            <p className="flex items-center gap-1 text-orange-300">
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              Syncing {sync.completed}/{sync.total || "…"}
+              {sync.current_action ? ` · ${sync.current_action}` : ""}
+            </p>
+          ) : null}
+          {sync.conflicts.length > 0 || sync.dead_count > 0 ? (
+            <p className="text-amber-400">
+              {sync.dead_count > 0
+                ? `${sync.dead_count} failed sync item${sync.dead_count === 1 ? "" : "s"}`
+                : `${sync.conflicts.length} conflict${sync.conflicts.length === 1 ? "" : "s"}`}
+            </p>
+          ) : null}
+        </div>
+        {sync.pending_count > 0 && sync.online ? (
+          <button
+            type="button"
+            onClick={() => void runSync("manual")}
+            disabled={sync.syncing}
+            className="mt-2 w-full rounded-md border border-zinc-700 px-2 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-900 disabled:opacity-50"
+          >
+            Sync now
+          </button>
+        ) : null}
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {LINKS.map((link) => {
@@ -131,7 +156,9 @@ export function Sidebar() {
                 <span
                   className={cn(
                     "rounded-full px-2 py-0.5 text-xs font-black",
-                    active ? "bg-black text-orange-400" : "bg-orange-500 text-black",
+                    active
+                      ? "bg-black text-orange-400"
+                      : "bg-orange-500 text-black",
                   )}
                 >
                   {pendingCount}
@@ -155,13 +182,24 @@ export function TopBar({
   onSearch?: (v: string) => void;
 }) {
   const router = useRouter();
-  // Avoid SSR/client clock mismatch: only render time after mount
   const [now, setNow] = useState<Date | null>(null);
+  const [online, setOnline] = useState(true);
 
   useEffect(() => {
     setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
   }, []);
 
   const clockLabel = now
@@ -179,6 +217,9 @@ export function TopBar({
         <p className="truncate text-lg font-black text-white">{restaurantName}</p>
         <p className="text-xs text-zinc-400" suppressHydrationWarning>
           {clockLabel}
+          {!online ? (
+            <span className="ml-2 text-orange-400">· Working offline</span>
+          ) : null}
         </p>
       </div>
       {onSearch && (
@@ -200,7 +241,8 @@ export function TopBar({
         <button
           type="button"
           onClick={() => {
-            localStorage.removeItem("krunchies_pos_token");
+            setToken(null);
+            void sessionRepo.clear();
             router.push("/login");
           }}
           className="h-11 rounded-lg border border-zinc-700 px-4 text-sm font-bold text-zinc-300 hover:bg-zinc-900"

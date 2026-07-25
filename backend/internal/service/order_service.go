@@ -44,6 +44,15 @@ func (s *OrderService) CreateOrder(
 	phone := strings.TrimSpace(input.Phone)
 	address := strings.TrimSpace(input.Address)
 
+	// Idempotent create: return existing order for the same client_order_id.
+	if input.ClientOrderID != nil {
+		if existing, err := s.orderRepo.GetByClientOrderID(*input.ClientOrderID); err == nil && existing != nil {
+			return existing, nil
+		} else if err != nil && err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+	}
+
 	if customerName == "" {
 		return nil, utils.NewAppError(http.StatusBadRequest, "customer name is required")
 	}
@@ -91,19 +100,20 @@ func (s *OrderService) CreateOrder(
 
 	orderID := uuid.New()
 	order := &domain.Order{
-		BaseModel:       domain.BaseModel{ID: orderID},
-		OrderNumber:     "KR-" + strings.ToUpper(strings.ReplaceAll(orderID.String(), "-", "")[:16]),
-		CustomerID:      customerID,
-		CustomerName:    customerName,
-		Phone:           phone,
-		Address:         address,
-		LocationID:     input.LocationID,
-		DeliveryCharge: location.DeliveryCharge,
+		BaseModel:         domain.BaseModel{ID: orderID},
+		OrderNumber:       "KR-" + strings.ToUpper(strings.ReplaceAll(orderID.String(), "-", "")[:16]),
+		ClientOrderID:     input.ClientOrderID,
+		CustomerID:        customerID,
+		CustomerName:      customerName,
+		Phone:             phone,
+		Address:           address,
+		LocationID:        input.LocationID,
+		DeliveryCharge:    location.DeliveryCharge,
 		CashOnDeliveryFee: codFee,
-		PaymentMethod:  method,
-		OrderStatus:    "PENDING",
-		OrderType:      orderType,
-		OrderNotes:     input.OrderNotes,
+		PaymentMethod:     method,
+		OrderStatus:       "PENDING",
+		OrderType:         orderType,
+		OrderNotes:        input.OrderNotes,
 	}
 
 	subtotal := 0
@@ -145,6 +155,12 @@ func (s *OrderService) CreateOrder(
 
 	if err := s.orderRepo.Create(tx, order); err != nil {
 		tx.Rollback()
+		// Concurrent duplicate create with same client_order_id → return existing.
+		if input.ClientOrderID != nil {
+			if existing, lookupErr := s.orderRepo.GetByClientOrderID(*input.ClientOrderID); lookupErr == nil && existing != nil {
+				return existing, nil
+			}
+		}
 		return nil, err
 	}
 

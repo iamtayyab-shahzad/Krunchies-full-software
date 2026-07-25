@@ -6,7 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar, TopBar } from "@/components/layout/shell";
 import { useBill } from "@/context/bill-context";
 import { TOKEN_KEY, isTokenExpired } from "@/lib/utils";
-import { settingsApi } from "@/services/api";
+import { isOnline } from "@/lib/network";
+import { sessionRepo, settingsApi, warmOfflineCache } from "@/services/api";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -21,11 +22,36 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token || isTokenExpired(token)) {
-      localStorage.removeItem(TOKEN_KEY);
-      router.replace("/login");
-    }
+    let cancelled = false;
+    (async () => {
+      let token = localStorage.getItem(TOKEN_KEY);
+
+      // Restore session from IndexedDB when localStorage is empty
+      if (!token || isTokenExpired(token)) {
+        const session = await sessionRepo.get();
+        if (
+          session?.token &&
+          (!session.exp || session.exp * 1000 > Date.now())
+        ) {
+          localStorage.setItem(TOKEN_KEY, session.token);
+          token = session.token;
+        }
+      }
+
+      if (!token || isTokenExpired(token)) {
+        localStorage.removeItem(TOKEN_KEY);
+        await sessionRepo.clear();
+        if (!cancelled) router.replace("/login");
+        return;
+      }
+
+      if (isOnline()) {
+        void warmOfflineCache();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   return (

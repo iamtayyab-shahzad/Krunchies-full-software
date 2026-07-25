@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { printReceipt } from "@/lib/receipt";
+import { printCustomerReceipt } from "@/lib/receipt";
 import { cn, formatPrice, LAST_RECEIPT_KEY } from "@/lib/utils";
 import { ordersApi, settingsApi } from "@/services/api";
 import type { Order } from "@/types";
@@ -66,7 +66,7 @@ export default function OrderHistoryPage() {
 
   const reprint = (order: Order) => {
     localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(order));
-    printReceipt(order, settings || null, true);
+    printCustomerReceipt(order, settings || null, true);
   };
 
   return (

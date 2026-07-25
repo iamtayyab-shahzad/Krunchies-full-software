@@ -56,11 +56,15 @@ export default function CategoriesPage() {
     }
     try {
       if (editing) {
-        await categoriesApi.update(editing.id, form);
-        toast.success("Category updated");
+        const res = await categoriesApi.update(editing.id, form);
+        toast.success(
+          res.offline ? res.message || "Saved offline" : "Category updated",
+        );
       } else {
-        await categoriesApi.create(form);
-        toast.success("Category created");
+        const res = await categoriesApi.create(form);
+        toast.success(
+          res.offline ? res.message || "Saved offline" : "Category created",
+        );
       }
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["categories"] });

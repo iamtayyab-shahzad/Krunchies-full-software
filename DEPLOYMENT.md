@@ -258,6 +258,23 @@ cd admin && npm run dev      # :3002
 | DB auth failed | Check Neon URL encoding of password special chars |
 | Settings save 500 | Ensure latest backend (WhatsApp column fix) is deployed |
 | Build can’t find `shared/` | Confirm Root Directory and monorepo layout on Vercel |
+| Offline POS duplicates orders | Redeploy API so `client_order_id` unique column exists |
+| POS won’t install as PWA | Must be HTTPS; check Application → Manifest |
+
+---
+
+## POS offline-first docs
+
+Full production documentation (architecture, sync, IndexedDB, offline workflows, security, readiness):
+
+→ [`pos/docs/PRODUCTION.md`](./pos/docs/PRODUCTION.md)
+
+After deploying POS + API together:
+
+1. Login online once (warms IndexedDB)
+2. Airplane mode: create/complete cash orders
+3. Reconnect: sidebar “to sync” returns to 0
+4. Confirm Admin/history shows each order once
 
 ---
 
@@ -267,3 +284,4 @@ cd admin && npm run dev      # :3002
 - `GET /health` and `GET /api/v1/health`
 - `backend/Dockerfile` + `backend/render.yaml`
 - Sanitized `backend/.env.example` + frontend `.env.example` files
+- POS offline-first foundation + sync engine (`pos/docs/PRODUCTION.md`)

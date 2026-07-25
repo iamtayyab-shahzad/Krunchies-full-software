@@ -86,6 +86,7 @@ export interface OrderItem extends BaseEntity {
 
 export interface Order extends BaseEntity {
   order_number: string;
+  client_order_id?: string | null;
   customer_id?: string;
   customer_name: string;
   phone: string;
@@ -101,6 +102,7 @@ export interface Order extends BaseEntity {
   subtotal: number;
   grand_total: number;
   items?: OrderItem[];
+  sync_status?: "local" | "pending_sync" | "synced";
 }
 
 export interface Settings extends BaseEntity {
@@ -128,10 +130,20 @@ export type OrderType = "walkin" | "phone" | "website";
 
 export type OrderStatus = "PENDING" | "COMPLETED" | "CANCELLED";
 
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  last_order_at: string;
+  order_count: number;
+}
+
 export interface CreateOrderItemInput {
   product_id: string;
   product_size_id: string;
   quantity: number;
+  price?: number;
   special_instructions?: string;
 }
 
@@ -142,6 +154,7 @@ export interface CreateOrderInput {
   location_id: string;
   payment_method: string;
   order_notes?: string;
+  client_order_id?: string;
   items: CreateOrderItemInput[];
 }
 
@@ -155,6 +168,15 @@ export interface BillLine {
   price: number;
   quantity: number;
   special_instructions?: string;
+  crust?: string;
+  toppings?: string;
+  extras?: string;
+}
+
+export interface ProductSizeInput {
+  id?: string;
+  label: string;
+  price: number;
 }
 
 export interface PendingDraft {
@@ -179,8 +201,12 @@ export interface OfflineAction {
     | "CREATE_ORDER"
     | "COMPLETE_ORDER"
     | "CANCEL_ORDER"
+    | "UPDATE_ORDER"
     | "UPDATE_PRODUCT"
     | "CREATE_PRODUCT"
+    | "CREATE_PRODUCT_SIZE"
+    | "UPDATE_PRODUCT_SIZE"
+    | "DELETE_PRODUCT_SIZE"
     | "UPDATE_CATEGORY"
     | "CREATE_CATEGORY"
     | "UPDATE_INVENTORY"
@@ -190,7 +216,29 @@ export interface OfflineAction {
     | "UPDATE_OFFER";
   payload: unknown;
   synced: boolean;
+  /** Permanently failed — excluded from active sync until discarded/retried. */
+  dead?: boolean;
   error?: string;
+  attempts?: number;
+  next_retry_at?: string;
+}
+
+export interface SyncConflict {
+  id: string;
+  created_at: string;
+  entity: string;
+  entity_id: string;
+  message: string;
+  local?: unknown;
+  server?: unknown;
+}
+
+export interface SyncStatus {
+  syncing: boolean;
+  pending_count: number;
+  completed: number;
+  total: number;
+  current_action: string | null;
 }
 
 export interface StaffLoginInput {

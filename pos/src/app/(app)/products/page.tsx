@@ -22,12 +22,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatPrice } from "@/lib/utils";
-import {
-  categoriesApi,
-  productSizesApi,
-  productsApi,
-} from "@/services/api";
+import { categoriesApi, productsApi } from "@/services/api";
 import type { Product } from "@/types";
+
+type SizeRow = { id?: string; label: string; price: number };
 
 const emptyForm = {
   name: "",
@@ -37,7 +35,7 @@ const emptyForm = {
   featured: false,
   available: true,
   display_order: 0,
-  sizesText: "Small:799\nMedium:1199\nLarge:1599",
+  basePrice: 0,
 };
 
 export default function ProductsPage() {
@@ -45,7 +43,15 @@ export default function ProductsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [useSizes, setUseSizes] = useState(true);
+  const [sizes, setSizes] = useState<SizeRow[]>([
+    { label: "S", price: 0 },
+    { label: "M", price: 0 },
+    { label: "L", price: 0 },
+    { label: "XL", price: 0 },
+  ]);
   const [q, setQ] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const { data: products = [] } = useQuery({
     queryKey: ["products"],
@@ -66,12 +72,20 @@ export default function ProductsPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, category_id: categories[0]?.id || "" });
+    setUseSizes(true);
+    setSizes([
+      { label: "S", price: 0 },
+      { label: "M", price: 0 },
+      { label: "L", price: 0 },
+      { label: "XL", price: 0 },
+    ]);
     setOpen(true);
   };
 
   const openEdit = (p: Product) => {
     setEditing(p);
+    const hasMulti = (p.sizes || []).length > 1;
     setForm({
       name: p.name,
       description: p.description || "",
@@ -80,10 +94,23 @@ export default function ProductsPage() {
       featured: p.featured,
       available: p.available,
       display_order: p.display_order,
-      sizesText: (p.sizes || [])
-        .map((s) => `${s.size}:${s.price}`)
-        .join("\n"),
+      basePrice: p.sizes?.[0]?.price || 0,
     });
+    setUseSizes(hasMulti || (p.sizes || []).length > 0);
+    setSizes(
+      (p.sizes || []).length
+        ? (p.sizes || []).map((s) => ({
+            id: s.id,
+            label: s.size,
+            price: s.price,
+          }))
+        : [
+            { label: "S", price: 0 },
+            { label: "M", price: 0 },
+            { label: "L", price: 0 },
+            { label: "XL", price: 0 },
+          ],
+    );
     setOpen(true);
   };
 
@@ -97,75 +124,53 @@ export default function ProductsPage() {
   };
 
   const save = async () => {
-    if (!form.name || !form.category_id) {
+    if (!form.name.trim() || !form.category_id) {
       toast.error("Name and category required");
       return;
     }
+    const pizzaSizes: SizeRow[] = useSizes
+      ? sizes.filter((s) => s.label.trim())
+      : [{ label: "Regular", price: Number(form.basePrice) || 0 }];
+
+    if (!pizzaSizes.length || pizzaSizes.every((s) => !s.price && s.price !== 0)) {
+      toast.error("Add at least one size with a price");
+      return;
+    }
+    if (pizzaSizes.some((s) => Number.isNaN(Number(s.price)))) {
+      toast.error("All size prices must be numbers");
+      return;
+    }
+
+    setSaving(true);
     try {
-      if (editing) {
-        await productsApi.update(editing.id, {
-          name: form.name,
-          description: form.description,
-          image: form.image,
-          category_id: form.category_id,
-          featured: form.featured,
-          available: form.available,
-          display_order: Number(form.display_order),
-        });
-        // Update sizes simply: create missing ones
-        const lines = form.sizesText
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean);
-        for (const line of lines) {
-          const [size, price] = line.split(":");
-          if (!size || !price) continue;
-          const existing = (editing.sizes || []).find(
-            (s) => s.size.toLowerCase() === size.trim().toLowerCase(),
-          );
-          if (existing) {
-            await productSizesApi.update(existing.id, {
-              price: Number(price),
-              size: size.trim(),
-            });
-          } else {
-            await productSizesApi.create({
-              product_id: editing.id,
-              size: size.trim(),
-              price: Number(price),
-            });
-          }
-        }
-        toast.success("Product updated");
-      } else {
-        const created = await productsApi.create({
-          name: form.name,
-          description: form.description,
-          image: form.image,
-          category_id: form.category_id,
-          featured: form.featured,
-          available: form.available,
-          display_order: Number(form.display_order),
-        });
-        const lines = form.sizesText
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean);
-        for (const line of lines) {
-          const [size, price] = line.split(":");
-          if (!size || !price) continue;
-          await productSizesApi.create({
-            product_id: created.id,
-            size: size.trim(),
-            price: Number(price),
-          });
-        }
-        toast.success("Product created");
-      }
+      const res = await productsApi.saveWithSizes({
+        id: editing?.id,
+        category_id: form.category_id,
+        name: form.name,
+        description: form.description,
+        image: form.image,
+        featured: form.featured,
+        available: form.available,
+        display_order: Number(form.display_order) || 0,
+        sizes: pizzaSizes.map((s) => ({
+          id: s.id,
+          label: s.label.trim(),
+          price: Number(s.price) || 0,
+        })),
+      });
+      toast.success(
+        res.offline
+          ? res.message || "Product saved offline — will sync with prices"
+          : editing
+            ? "Product updated"
+            : "Product created",
+      );
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["products"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -182,7 +187,21 @@ export default function ProductsPage() {
 
   const toggle = async (p: Product, field: "available" | "featured") => {
     try {
-      await productsApi.update(p.id, { [field]: !p[field] });
+      await productsApi.saveWithSizes({
+        id: p.id,
+        category_id: p.category_id,
+        name: p.name,
+        description: p.description || "",
+        image: p.image || "",
+        featured: field === "featured" ? !p.featured : p.featured,
+        available: field === "available" ? !p.available : p.available,
+        display_order: p.display_order,
+        sizes: (p.sizes || []).map((s) => ({
+          id: s.id,
+          label: s.size,
+          price: s.price,
+        })),
+      });
       qc.invalidateQueries({ queryKey: ["products"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
@@ -301,15 +320,70 @@ export default function ProductsPage() {
                 onChange={(e) => onImage(e.target.files?.[0])}
               />
             </div>
-            <div className="space-y-1">
-              <Label>Sizes (one per line: Size:Price)</Label>
-              <Textarea
-                value={form.sizesText}
-                onChange={(e) =>
-                  setForm({ ...form, sizesText: e.target.value })
-                }
-              />
-            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={useSizes} onCheckedChange={setUseSizes} />
+              Use multiple sizes (S / M / L / XL)
+            </label>
+
+            {useSizes ? (
+              <div className="space-y-2 rounded-lg border border-zinc-800 p-3">
+                <Label>Sizes &amp; Prices</Label>
+                {sizes.map((s, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                    <Input
+                      placeholder="Size"
+                      value={s.label}
+                      onChange={(e) => {
+                        const next = [...sizes];
+                        next[idx] = { ...s, label: e.target.value };
+                        setSizes(next);
+                      }}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Price"
+                      value={s.price}
+                      onChange={(e) => {
+                        const next = [...sizes];
+                        next[idx] = { ...s, price: Number(e.target.value) };
+                        setSizes(next);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        setSizes(sizes.filter((_, i) => i !== idx))
+                      }
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    setSizes([...sizes, { label: "", price: 0 }])
+                  }
+                >
+                  Add size
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Label>Price (Regular)</Label>
+                <Input
+                  type="number"
+                  value={form.basePrice}
+                  onChange={(e) =>
+                    setForm({ ...form, basePrice: Number(e.target.value) })
+                  }
+                />
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <label className="flex items-center gap-2 text-sm">
                 <Switch
@@ -323,11 +397,16 @@ export default function ProductsPage() {
                   checked={form.featured}
                   onCheckedChange={(v) => setForm({ ...form, featured: v })}
                 />
-                Featured
+                Featured / Status
               </label>
             </div>
-            <Button className="w-full" size="lg" onClick={save}>
-              Save Product
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={save}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Save Product"}
             </Button>
           </div>
         </DialogContent>

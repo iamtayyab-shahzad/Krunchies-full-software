@@ -76,11 +76,15 @@ export default function InventoryPage() {
   const saveItem = async () => {
     try {
       if (editing) {
-        await inventoryApi.update(editing.id, form);
-        toast.success("Inventory updated");
+        const res = await inventoryApi.update(editing.id, form);
+        toast.success(
+          res.offline ? res.message || "Saved offline" : "Inventory updated",
+        );
       } else {
-        await inventoryApi.create(form);
-        toast.success("Inventory created");
+        const res = await inventoryApi.create(form);
+        toast.success(
+          res.offline ? res.message || "Saved offline" : "Inventory created",
+        );
       }
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["inventory"] });

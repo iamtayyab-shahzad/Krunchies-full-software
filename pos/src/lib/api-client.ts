@@ -23,6 +23,16 @@ export function setToken(token: string | null) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+async function clearSessionEverywhere() {
+  setToken(null);
+  try {
+    const { clearSession } = await import("@/lib/offline-db");
+    await clearSession();
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
@@ -52,12 +62,15 @@ export async function apiFetch<T>(
 
   if (!res.ok || !json?.success) {
     if (res.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem(TOKEN_KEY);
+      await clearSessionEverywhere();
       if (!window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
       }
     }
-    throw new ApiError(json?.message || `Request failed (${res.status})`, res.status);
+    throw new ApiError(
+      json?.message || `Request failed (${res.status})`,
+      res.status,
+    );
   }
 
   return json.data;

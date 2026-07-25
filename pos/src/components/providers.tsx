@@ -1,9 +1,13 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { BillProvider } from "@/context/bill-context";
+import {
+  POS_SYNC_COMPLETE_EVENT,
+  startSyncEngine,
+} from "@/lib/sync-engine";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -18,6 +22,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       }),
   );
+
+  useEffect(() => {
+    const stop = startSyncEngine();
+    const onSync = () => {
+      void client.invalidateQueries({ queryKey: ["orders"] });
+      void client.invalidateQueries({ queryKey: ["inventory"] });
+      void client.invalidateQueries({ queryKey: ["products"] });
+      void client.invalidateQueries({ queryKey: ["categories"] });
+      void client.invalidateQueries({ queryKey: ["settings"] });
+    };
+    window.addEventListener(POS_SYNC_COMPLETE_EVENT, onSync);
+    return () => {
+      stop?.();
+      window.removeEventListener(POS_SYNC_COMPLETE_EVENT, onSync);
+    };
+  }, [client]);
 
   return (
     <QueryClientProvider client={client}>

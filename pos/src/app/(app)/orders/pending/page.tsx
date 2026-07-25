@@ -8,7 +8,8 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBill } from "@/context/bill-context";
 import { cn, formatPrice, makeLineKey, WALKIN_LOCATION_ID } from "@/lib/utils";
-import { ordersApi } from "@/services/api";
+import { printCustomerReceipt, printKitchenReceipt, decodeKitchenInstructions, parseTableNumber } from "@/lib/receipt";
+import { ordersApi, settingsApi } from "@/services/api";
 import type { Order, OrderType, PaymentMethod } from "@/types";
 
 type FilterType = "all" | "website" | "phone" | "walkin";
@@ -47,6 +48,11 @@ export default function PendingOrdersPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterType>("all");
 
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: settingsApi.get,
+  });
+
   const { data: orders = [], isLoading, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["orders", "pending"],
     queryFn: ordersApi.pending,
@@ -84,13 +90,23 @@ export default function PendingOrdersPage() {
   const complete = async (order: Order) => {
     try {
       await ordersApi.complete(order.id);
-      toast.success("Order completed");
+      const latest = await ordersApi.get(order.id).catch(() => ({
+        ...order,
+        order_status: "COMPLETED",
+      }));
+      printCustomerReceipt(latest, settings || null);
+      toast.success("Order completed — customer receipt printed");
       await refresh();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to complete order",
       );
     }
+  };
+
+  const reprintKitchen = (order: Order) => {
+    printKitchenReceipt(order);
+    toast.message("Kitchen receipt sent to printer");
   };
 
   const cancel = async (order: Order) => {
@@ -107,17 +123,23 @@ export default function PendingOrdersPage() {
 
   const edit = (order: Order) => {
     const orderType = toBillOrderType(order.order_type);
-    const items = (order.items || []).map((item) => ({
-      key: makeLineKey(item.product_id, item.product_size_id),
-      product_id: item.product_id,
-      product_name: item.product?.name || "Item",
-      product_image: item.product?.image || "",
-      size_id: item.product_size_id,
-      size: item.product_size?.size || "",
-      price: item.price,
-      quantity: item.quantity,
-      special_instructions: item.special_instructions,
-    }));
+    const items = (order.items || []).map((item) => {
+      const meta = decodeKitchenInstructions(item.special_instructions);
+      return {
+        key: makeLineKey(item.product_id, item.product_size_id),
+        product_id: item.product_id,
+        product_name: item.product?.name || "Item",
+        product_image: item.product?.image || "",
+        size_id: item.product_size_id,
+        size: item.product_size?.size || "",
+        price: item.price,
+        quantity: item.quantity,
+        special_instructions: meta.notes || "",
+        crust: meta.crust,
+        toppings: meta.toppings,
+        extras: meta.extras,
+      };
+    });
     bill.loadDraft({
       draftId: null,
       editingOrderId: order.id,
@@ -128,7 +150,8 @@ export default function PendingOrdersPage() {
       locationId: order.location_id || WALKIN_LOCATION_ID,
       deliveryCharge: order.delivery_charge || 0,
       paymentMethod: order.payment_method as PaymentMethod,
-      orderNotes: order.order_notes || "",
+      orderNotes: order.order_notes?.replace(/(?:^|\|\s*)TABLE:[^\s|]+/gi, "").trim() || "",
+      tableNumber: parseTableNumber(order.order_notes),
       items,
     });
     toast.message(`Editing ${order.order_number}`);
@@ -202,6 +225,12 @@ export default function PendingOrdersPage() {
                     <p className="text-lg font-bold text-white">
                       {order.order_number}
                     </p>
+                    {(order.order_number.startsWith("LOCAL-") ||
+                      order.sync_status === "pending_sync") && (
+                      <span className="rounded border border-orange-500/40 bg-orange-500/15 px-2 py-0.5 text-xs font-bold text-orange-300">
+                        Pending sync
+                      </span>
+                    )}
                     <span
                       className={cn(
                         "rounded border px-2 py-0.5 text-xs font-bold uppercase",
@@ -270,6 +299,12 @@ export default function PendingOrdersPage() {
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => edit(order)}>
                     Edit
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => reprintKitchen(order)}
+                  >
+                    Kitchen
                   </Button>
                   <Button onClick={() => complete(order)}>Complete</Button>
                   <Button variant="danger" onClick={() => cancel(order)}>

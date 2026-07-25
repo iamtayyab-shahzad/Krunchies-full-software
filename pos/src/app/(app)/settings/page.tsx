@@ -76,11 +76,13 @@ export default function SettingsPage() {
 
   const saveSettings = async () => {
     try {
-      await settingsApi.update({
+      const res = await settingsApi.update({
         ...form,
         cash_on_delivery_fee: Number(form.cash_on_delivery_fee),
       });
-      toast.success("Settings saved");
+      toast.success(
+        res.offline ? res.message || "Settings saved offline" : "Settings saved",
+      );
       qc.invalidateQueries({ queryKey: ["settings"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");

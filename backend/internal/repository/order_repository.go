@@ -19,6 +19,22 @@ func (r *OrderRepository) Create(tx *gorm.DB, order *domain.Order) error {
 	return tx.Create(order).Error
 }
 
+func (r *OrderRepository) GetByClientOrderID(clientOrderID uuid.UUID) (*domain.Order, error) {
+	var order domain.Order
+	if err := r.db.
+		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.ProductSize").
+		Preload("Customer").
+		Preload("Location").
+		Preload("Payment").
+		Where("client_order_id = ?", clientOrderID).
+		First(&order).Error; err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
 func (r *OrderRepository) GetByID(id uuid.UUID) (*domain.Order, error) {
 	return r.GetByIDTx(r.db, id)
 }

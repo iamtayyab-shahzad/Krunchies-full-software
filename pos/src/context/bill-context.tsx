@@ -4,16 +4,28 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import type { BillLine, OrderType, PaymentMethod, Product, ProductSize } from "@/types";
+import type {
+  BillLine,
+  OrderType,
+  PaymentMethod,
+  PendingDraft,
+  Product,
+  ProductSize,
+} from "@/types";
 import {
   defaultPaymentForOrderType,
   makeLineKey,
   WALKIN_LOCATION_ID,
 } from "@/lib/utils";
+import { deleteDraft, getDraft, saveDraft } from "@/lib/offline-db";
+
+const ACTIVE_DRAFT_ID = "active-cart";
 
 interface BillState {
   draftId: string | null;
@@ -26,6 +38,7 @@ interface BillState {
   deliveryCharge: number;
   paymentMethod: PaymentMethod;
   orderNotes: string;
+  tableNumber: string;
   items: BillLine[];
   search: string;
 }
@@ -39,15 +52,21 @@ interface BillContextValue extends BillState {
   setLocation: (id: string, charge: number) => void;
   setPaymentMethod: (v: PaymentMethod) => void;
   setOrderNotes: (v: string) => void;
+  setTableNumber: (v: string) => void;
   addProduct: (product: Product, size: ProductSize) => void;
   changeSize: (key: string, size: ProductSize) => void;
   increase: (key: string) => void;
   decrease: (key: string) => void;
   remove: (key: string) => void;
   setInstructions: (key: string, text: string) => void;
+  setLineMeta: (
+    key: string,
+    meta: Partial<Pick<BillLine, "crust" | "toppings" | "extras" | "special_instructions">>,
+  ) => void;
   loadDraft: (partial: Partial<BillState> & { items: BillLine[] }) => void;
   clearBill: () => void;
   subtotal: number;
+  cartRecovered: boolean;
 }
 
 const defaults: BillState = {
@@ -61,14 +80,101 @@ const defaults: BillState = {
   deliveryCharge: 0,
   paymentMethod: "cash",
   orderNotes: "",
+  tableNumber: "",
   items: [],
   search: "",
 };
 
 const BillContext = createContext<BillContextValue | null>(null);
 
+function toPendingDraft(state: BillState): PendingDraft {
+  const now = new Date().toISOString();
+  return {
+    id: state.draftId || ACTIVE_DRAFT_ID,
+    created_at: now,
+    updated_at: now,
+    order_type: state.orderType,
+    customer_name: state.customerName,
+    phone: state.phone,
+    address: state.address,
+    location_id: state.locationId,
+    delivery_charge: state.deliveryCharge,
+    payment_method: state.paymentMethod,
+    order_notes: state.tableNumber
+      ? [state.orderNotes, `TABLE:${state.tableNumber}`].filter(Boolean).join(" | ")
+      : state.orderNotes,
+    items: state.items,
+  };
+}
+
 export function BillProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<BillState>(defaults);
+  const [cartRecovered, setCartRecovered] = useState(false);
+  const hydrated = useRef(false);
+  const skipPersist = useRef(true);
+
+  // Restore cart draft on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const draft = await getDraft(ACTIVE_DRAFT_ID);
+        if (cancelled) return;
+        if (draft && draft.items?.length) {
+          const tableMatch = draft.order_notes?.match(/TABLE:([^\s|]+)/i);
+          const notes = (draft.order_notes || "")
+            .replace(/(?:^|\|\s*)TABLE:[^\s|]+/gi, "")
+            .replace(/\s*\|\s*/g, " | ")
+            .replace(/^\s*\|\s*|\s*\|\s*$/g, "")
+            .trim();
+          setState({
+            draftId: draft.id,
+            editingOrderId: null,
+            orderType: draft.order_type,
+            customerName: draft.customer_name,
+            phone: draft.phone,
+            address: draft.address,
+            locationId: draft.location_id,
+            deliveryCharge: draft.delivery_charge,
+            paymentMethod: draft.payment_method,
+            orderNotes: notes,
+            tableNumber: tableMatch?.[1] || "",
+            items: draft.items,
+            search: "",
+          });
+          setCartRecovered(true);
+        } else {
+          setState((p) => ({ ...p, draftId: ACTIVE_DRAFT_ID }));
+        }
+      } catch {
+        setState((p) => ({ ...p, draftId: ACTIVE_DRAFT_ID }));
+      } finally {
+        hydrated.current = true;
+        skipPersist.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Autosave cart draft (debounced)
+  useEffect(() => {
+    if (!hydrated.current || skipPersist.current) return;
+    if (state.editingOrderId) return; // don't overwrite active cart while editing pending
+    const timer = setTimeout(() => {
+      const draft = toPendingDraft({
+        ...state,
+        draftId: state.draftId || ACTIVE_DRAFT_ID,
+      });
+      if (!draft.items.length) {
+        void deleteDraft(ACTIVE_DRAFT_ID);
+        return;
+      }
+      void saveDraft(draft);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [state]);
 
   const addProduct = useCallback((product: Product, size: ProductSize) => {
     const key = makeLineKey(product.id, size.id);
@@ -77,6 +183,7 @@ export function BillProvider({ children }: { children: ReactNode }) {
       if (existing) {
         return {
           ...prev,
+          draftId: prev.draftId || ACTIVE_DRAFT_ID,
           items: prev.items.map((i) =>
             i.key === key ? { ...i, quantity: i.quantity + 1 } : i,
           ),
@@ -84,6 +191,7 @@ export function BillProvider({ children }: { children: ReactNode }) {
       }
       return {
         ...prev,
+        draftId: prev.draftId || ACTIVE_DRAFT_ID,
         items: [
           ...prev.items,
           {
@@ -108,6 +216,7 @@ export function BillProvider({ children }: { children: ReactNode }) {
     );
     return {
       ...state,
+      cartRecovered,
       subtotal,
       setSearch: (search) => setState((p) => ({ ...p, search })),
       setOrderType: (orderType) =>
@@ -127,7 +236,8 @@ export function BillProvider({ children }: { children: ReactNode }) {
           return {
             ...p,
             orderType,
-            customerName: p.customerName === "Walk-in Customer" ? "" : p.customerName,
+            customerName:
+              p.customerName === "Walk-in Customer" ? "" : p.customerName,
             phone: p.phone === "0000000000" ? "" : p.phone,
             locationId:
               p.locationId === WALKIN_LOCATION_ID ? "" : p.locationId,
@@ -136,7 +246,8 @@ export function BillProvider({ children }: { children: ReactNode }) {
             paymentMethod: defaultPaymentForOrderType(orderType),
           };
         }),
-      setCustomerName: (customerName) => setState((p) => ({ ...p, customerName })),
+      setCustomerName: (customerName) =>
+        setState((p) => ({ ...p, customerName })),
       setPhone: (phone) => setState((p) => ({ ...p, phone })),
       setAddress: (address) => setState((p) => ({ ...p, address })),
       setLocation: (locationId, deliveryCharge) =>
@@ -144,22 +255,56 @@ export function BillProvider({ children }: { children: ReactNode }) {
       setPaymentMethod: (paymentMethod) =>
         setState((p) => ({ ...p, paymentMethod })),
       setOrderNotes: (orderNotes) => setState((p) => ({ ...p, orderNotes })),
+      setTableNumber: (tableNumber) => setState((p) => ({ ...p, tableNumber })),
       addProduct,
       changeSize: (key, size) =>
-        setState((p) => ({
-          ...p,
-          items: p.items.map((i) =>
-            i.key === key
-              ? {
-                  ...i,
-                  key: makeLineKey(i.product_id, size.id),
-                  size_id: size.id,
-                  size: size.size,
-                  price: size.price,
-                }
-              : i,
-          ),
-        })),
+        setState((p) => {
+          const line = p.items.find((i) => i.key === key);
+          if (!line) return p;
+          const newKey = makeLineKey(line.product_id, size.id);
+          if (newKey === key) {
+            return {
+              ...p,
+              items: p.items.map((i) =>
+                i.key === key
+                  ? {
+                      ...i,
+                      size_id: size.id,
+                      size: size.size,
+                      price: size.price,
+                    }
+                  : i,
+              ),
+            };
+          }
+          const existing = p.items.find((i) => i.key === newKey);
+          if (existing) {
+            return {
+              ...p,
+              items: p.items
+                .filter((i) => i.key !== key)
+                .map((i) =>
+                  i.key === newKey
+                    ? { ...i, quantity: i.quantity + line.quantity }
+                    : i,
+                ),
+            };
+          }
+          return {
+            ...p,
+            items: p.items.map((i) =>
+              i.key === key
+                ? {
+                    ...i,
+                    key: newKey,
+                    size_id: size.id,
+                    size: size.size,
+                    price: size.price,
+                  }
+                : i,
+            ),
+          };
+        }),
       increase: (key) =>
         setState((p) => ({
           ...p,
@@ -188,19 +333,28 @@ export function BillProvider({ children }: { children: ReactNode }) {
             i.key === key ? { ...i, special_instructions: text } : i,
           ),
         })),
+      setLineMeta: (key, meta) =>
+        setState((p) => ({
+          ...p,
+          items: p.items.map((i) => (i.key === key ? { ...i, ...meta } : i)),
+        })),
       loadDraft: (partial) =>
         setState((p) => ({
           ...p,
           ...partial,
         })),
-      clearBill: () =>
+      clearBill: () => {
+        void deleteDraft(ACTIVE_DRAFT_ID);
+        setCartRecovered(false);
         setState((p) => ({
           ...defaults,
+          draftId: ACTIVE_DRAFT_ID,
           search: p.search,
           orderType: p.orderType,
-        })),
+        }));
+      },
     };
-  }, [state, addProduct]);
+  }, [state, addProduct, cartRecovered]);
 
   return <BillContext.Provider value={value}>{children}</BillContext.Provider>;
 }
