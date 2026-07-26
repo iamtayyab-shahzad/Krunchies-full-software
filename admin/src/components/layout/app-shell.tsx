@@ -5,11 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Boxes,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   Menu,
   Package,
   Percent,
+  Receipt,
   Settings,
   ShoppingBag,
   Store,
@@ -17,6 +19,7 @@ import {
   Truck,
   Users,
   Globe,
+  Wallet,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -34,6 +37,10 @@ const NAV = [
   { href: "/orders", label: "Orders", icon: ShoppingBag },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/inventory", label: "Inventory", icon: Boxes },
+  { href: "/purchases", label: "Purchases", icon: ClipboardList },
+  { href: "/recipes", label: "Recipes", icon: Store },
+  { href: "/expenses", label: "Expenses", icon: Wallet },
+  { href: "/profit-loss", label: "Profit & Loss", icon: Receipt },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/restaurant-settings", label: "Restaurant Settings", icon: Settings },
 ];

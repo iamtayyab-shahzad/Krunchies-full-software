@@ -1,0 +1,476 @@
+package service
+
+import (
+	"net/http"
+	"strings"
+	"time"
+
+	"backend/internal/domain"
+	"backend/internal/repository"
+	"backend/internal/utils"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type InventoryService struct {
+	db   *gorm.DB
+	repo *repository.InventoryRepository
+}
+
+func NewInventoryService(db *gorm.DB) *InventoryService {
+	return &InventoryService{db: db, repo: repository.NewInventoryRepository(db)}
+}
+
+// InventoryInput is the payload used to create or update an ingredient.
+type InventoryInput struct {
+	Name             string     `json:"name"`
+	Category         string     `json:"category"`
+	UnitKind         string     `json:"unit_kind"`
+	Unit             string     `json:"unit"`
+	PurchaseUnit     string     `json:"purchase_unit"`
+	UnitsPerPurchase int64      `json:"units_per_purchase"`
+	Stock            *int64     `json:"stock"`
+	MinimumStock     int64      `json:"minimum_stock"`
+	PurchasePrice    int        `json:"purchase_price"`
+	SupplierID       *uuid.UUID `json:"supplier_id"`
+	Supplier         string     `json:"supplier"`
+	IsActive         *bool      `json:"is_active"`
+}
+
+// normalize fills in the derived unit fields so the caller only has to supply
+// what it actually knows. The owner picks "KG" and the rest is inferred.
+func (in *InventoryInput) normalize() {
+	in.UnitKind = domain.NormalizeUnitKind(in.UnitKind)
+	base := domain.BaseUnitForKind(in.UnitKind)
+	if strings.TrimSpace(in.Unit) == "" {
+		in.Unit = base
+	}
+	if strings.TrimSpace(in.PurchaseUnit) == "" {
+		in.PurchaseUnit = in.Unit
+	}
+	if in.UnitsPerPurchase <= 0 {
+		in.UnitsPerPurchase = domain.DefaultUnitsPerPurchase(in.PurchaseUnit)
+	}
+}
+
+func (s *InventoryService) List() ([]domain.Inventory, error) {
+	return s.repo.List()
+}
+
+func (s *InventoryService) GetByID(id uuid.UUID) (*domain.Inventory, error) {
+	return s.repo.GetByID(id)
+}
+
+// Create adds an ingredient. Any opening stock is written through the ledger so
+// the item's history starts with an explicit OPENING movement rather than a
+// value that appeared from nowhere.
+func (s *InventoryService) Create(in InventoryInput) (*domain.Inventory, error) {
+	if strings.TrimSpace(in.Name) == "" {
+		return nil, utils.NewAppError(http.StatusBadRequest, "item name is required")
+	}
+	in.normalize()
+
+	item := &domain.Inventory{
+		Name:             strings.TrimSpace(in.Name),
+		Category:         strings.TrimSpace(in.Category),
+		UnitKind:         in.UnitKind,
+		Unit:             in.Unit,
+		PurchaseUnit:     in.PurchaseUnit,
+		UnitsPerPurchase: in.UnitsPerPurchase,
+		MinimumStock:     in.MinimumStock,
+		PurchasePrice:    in.PurchasePrice,
+		SupplierID:       in.SupplierID,
+		Supplier:         strings.TrimSpace(in.Supplier),
+		IsActive:         true,
+	}
+	if in.IsActive != nil {
+		item.IsActive = *in.IsActive
+	}
+	// Seed the average cost from the stated purchase price so stock has a value
+	// even before the first recorded delivery.
+	if in.PurchasePrice > 0 && in.UnitsPerPurchase > 0 {
+		item.AvgCostMicros = (int64(in.PurchasePrice) * domain.CostScale) / in.UnitsPerPurchase
+	}
+
+	opening := int64(0)
+	if in.Stock != nil {
+		opening = *in.Stock
+	}
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(item).Error; err != nil {
+			return err
+		}
+		if opening != 0 {
+			_, err := s.repo.ApplyMovement(tx, repository.Movement{
+				InventoryID:    item.ID,
+				QuantityBase:   opening,
+				Type:           domain.StockOpening,
+				Reason:         "Opening stock",
+				UnitCostMicros: item.AvgCostMicros,
+				ReferenceType:  domain.RefManual,
+			})
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	item.Stock = opening
+	return item, nil
+}
+
+// Update edits an ingredient's descriptive fields. A stock value supplied here
+// is treated as a correction and routed through the ledger as an ADJUSTMENT so
+// the change is always explainable. Empty string fields are left alone so
+// partial POS offline updates do not wipe category / unit metadata.
+func (s *InventoryService) Update(id uuid.UUID, in InventoryInput) error {
+	existing, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+
+	updates := map[string]any{}
+	if strings.TrimSpace(in.Name) != "" {
+		updates["name"] = strings.TrimSpace(in.Name)
+	}
+	if strings.TrimSpace(in.Category) != "" {
+		updates["category"] = strings.TrimSpace(in.Category)
+	}
+	if strings.TrimSpace(in.UnitKind) != "" {
+		updates["unit_kind"] = domain.NormalizeUnitKind(in.UnitKind)
+		if strings.TrimSpace(in.Unit) == "" {
+			updates["unit"] = domain.BaseUnitForKind(in.UnitKind)
+		}
+	}
+	if strings.TrimSpace(in.Unit) != "" {
+		updates["unit"] = strings.TrimSpace(in.Unit)
+	}
+	if strings.TrimSpace(in.PurchaseUnit) != "" {
+		updates["purchase_unit"] = strings.TrimSpace(in.PurchaseUnit)
+		if in.UnitsPerPurchase <= 0 {
+			updates["units_per_purchase"] = domain.DefaultUnitsPerPurchase(in.PurchaseUnit)
+		}
+	}
+	if in.UnitsPerPurchase > 0 {
+		updates["units_per_purchase"] = in.UnitsPerPurchase
+	}
+	if in.MinimumStock > 0 || (in.MinimumStock == 0 && in.Name != "") {
+		// Allow explicitly setting minimum to 0 when this is a full form save
+		// (name present). Pure stock-only patches leave minimum alone.
+		if strings.TrimSpace(in.Name) != "" || in.MinimumStock > 0 {
+			updates["minimum_stock"] = in.MinimumStock
+		}
+	}
+	if in.PurchasePrice > 0 || strings.TrimSpace(in.Name) != "" {
+		updates["purchase_price"] = in.PurchasePrice
+	}
+	if strings.TrimSpace(in.Supplier) != "" || strings.TrimSpace(in.Name) != "" {
+		updates["supplier"] = strings.TrimSpace(in.Supplier)
+	}
+	if in.SupplierID != nil {
+		updates["supplier_id"] = *in.SupplierID
+	}
+	if in.IsActive != nil {
+		updates["is_active"] = *in.IsActive
+	}
+
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if len(updates) > 0 {
+			if err := tx.Model(&domain.Inventory{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+		if in.Stock != nil && *in.Stock != existing.Stock {
+			delta := *in.Stock - existing.Stock
+			_, err := s.repo.ApplyMovement(tx, repository.Movement{
+				InventoryID:   id,
+				QuantityBase:  delta,
+				Type:          domain.StockAdjustment,
+				Reason:        "Manual stock correction",
+				ReferenceType: domain.RefManual,
+			})
+			return err
+		}
+		return nil
+	})
+}
+
+// Delete removes an ingredient, refusing when it is still referenced so history
+// and recipes stay intact.
+func (s *InventoryService) Delete(id uuid.UUID) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var recipeRefs int64
+		if err := tx.Model(&domain.Recipe{}).Where("inventory_id = ?", id).Count(&recipeRefs).Error; err != nil {
+			return err
+		}
+		if recipeRefs > 0 {
+			return utils.NewAppError(http.StatusConflict,
+				"cannot delete an ingredient used by a recipe; remove it from recipes first")
+		}
+		var purchaseRefs int64
+		if err := tx.Model(&domain.PurchaseItem{}).Where("inventory_id = ?", id).Count(&purchaseRefs).Error; err != nil {
+			return err
+		}
+		if purchaseRefs > 0 {
+			return utils.NewAppError(http.StatusConflict,
+				"cannot delete an ingredient that appears on a purchase; mark it inactive instead")
+		}
+		if err := tx.Where("inventory_id = ?", id).Delete(&domain.InventoryTransaction{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ?", id).Delete(&domain.Inventory{}).Error
+	})
+}
+
+// StockChangeInput records a manual stock movement (wastage or correction).
+type StockChangeInput struct {
+	InventoryID uuid.UUID `json:"inventory_id"`
+	// Quantity is always positive; the movement type decides the direction.
+	Quantity int64  `json:"quantity"`
+	Reason   string `json:"reason"`
+}
+
+// RecordWastage removes spoiled or damaged stock and books the money lost.
+func (s *InventoryService) RecordWastage(in StockChangeInput) error {
+	if in.Quantity <= 0 {
+		return utils.NewAppError(http.StatusBadRequest, "wastage quantity must be greater than zero")
+	}
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" {
+		reason = "Wastage"
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		_, err := s.repo.ApplyMovement(tx, repository.Movement{
+			InventoryID:   in.InventoryID,
+			QuantityBase:  -in.Quantity,
+			Type:          domain.StockWastage,
+			Reason:        reason,
+			ReferenceType: domain.RefManual,
+		})
+		return err
+	})
+}
+
+// AdjustStock applies a signed correction, used for stock-takes.
+func (s *InventoryService) AdjustStock(in StockChangeInput) error {
+	if in.Quantity == 0 {
+		return utils.NewAppError(http.StatusBadRequest, "adjustment quantity cannot be zero")
+	}
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" {
+		reason = "Stock adjustment"
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		_, err := s.repo.ApplyMovement(tx, repository.Movement{
+			InventoryID:   in.InventoryID,
+			QuantityBase:  in.Quantity,
+			Type:          domain.StockAdjustment,
+			Reason:        reason,
+			ReferenceType: domain.RefManual,
+		})
+		return err
+	})
+}
+
+func (s *InventoryService) ListTransactions(
+	inventoryID *uuid.UUID,
+	movementType string,
+	limit int,
+) ([]domain.InventoryTransaction, error) {
+	return s.repo.ListTransactions(inventoryID, movementType, limit)
+}
+
+// AlertSet is the "what needs my attention" payload for the dashboard.
+type AlertSet struct {
+	OutOfStock     []domain.Inventory `json:"out_of_stock"`
+	LowStock       []domain.Inventory `json:"low_stock"`
+	NegativeStock  []domain.Inventory `json:"negative_stock"`
+	NeverPurchased []domain.Inventory `json:"never_purchased"`
+	NeverUsed      []domain.Inventory `json:"never_used"`
+	StockValue     int                `json:"stock_value"`
+}
+
+// Alerts groups every stock condition the owner should act on.
+func (s *InventoryService) Alerts() (*AlertSet, error) {
+	items, err := s.repo.List()
+	if err != nil {
+		return nil, err
+	}
+
+	out := &AlertSet{
+		OutOfStock:    []domain.Inventory{},
+		LowStock:      []domain.Inventory{},
+		NegativeStock: []domain.Inventory{},
+	}
+	for _, item := range items {
+		if !item.IsActive {
+			continue
+		}
+		switch {
+		case item.Stock < 0:
+			out.NegativeStock = append(out.NegativeStock, item)
+		case item.Stock == 0:
+			out.OutOfStock = append(out.OutOfStock, item)
+		case item.IsLow():
+			out.LowStock = append(out.LowStock, item)
+		}
+	}
+
+	if out.NeverPurchased, err = s.repo.NeverPurchased(); err != nil {
+		return nil, err
+	}
+	if out.NeverUsed, err = s.repo.NeverUsed(); err != nil {
+		return nil, err
+	}
+	if out.StockValue, err = s.repo.StockValue(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Recommendation is a suggested purchase for one ingredient.
+type Recommendation struct {
+	InventoryID  uuid.UUID `json:"inventory_id"`
+	Name         string    `json:"name"`
+	Category     string    `json:"category"`
+	Unit         string    `json:"unit"`
+	PurchaseUnit string    `json:"purchase_unit"`
+	CurrentStock int64     `json:"current_stock"`
+	MinimumStock int64     `json:"minimum_stock"`
+	// AvgDailyUsage is in base units per day.
+	AvgDailyUsage int64 `json:"avg_daily_usage"`
+	// DaysRemaining is how long current stock lasts at that rate; -1 means the
+	// item has no recorded usage so it cannot be projected.
+	DaysRemaining float64 `json:"days_remaining"`
+	// SuggestedQtyBase / SuggestedQtyPurchase are what to buy.
+	SuggestedQtyBase     int64  `json:"suggested_qty_base"`
+	SuggestedQtyPurchase int64  `json:"suggested_qty_purchase"`
+	EstimatedCost        int    `json:"estimated_cost"`
+	Urgency              string `json:"urgency"`
+	Reason               string `json:"reason"`
+}
+
+// RecommendPurchases works out what the owner should buy next.
+//
+// It does not simply compare stock against the reorder level: it measures how
+// fast each ingredient is actually being consumed and orders enough to cover a
+// target number of days, which is what stops a kitchen running out mid-service.
+func (s *InventoryService) RecommendPurchases(lookbackDays, coverDays int) ([]Recommendation, error) {
+	if lookbackDays <= 0 {
+		lookbackDays = 14
+	}
+	if coverDays <= 0 {
+		coverDays = 7
+	}
+
+	items, err := s.repo.List()
+	if err != nil {
+		return nil, err
+	}
+	usage, err := s.repo.UsageSince(time.Now().AddDate(0, 0, -lookbackDays))
+	if err != nil {
+		return nil, err
+	}
+	usedByItem := make(map[uuid.UUID]int64, len(usage))
+	for _, u := range usage {
+		usedByItem[u.InventoryID] = u.UsedBase
+	}
+
+	recs := []Recommendation{}
+	for _, item := range items {
+		if !item.IsActive {
+			continue
+		}
+		daily := usedByItem[item.ID] / int64(lookbackDays)
+		target := item.MinimumStock
+		if daily > 0 {
+			// Cover the forecast window plus keep the safety buffer intact.
+			target = daily*int64(coverDays) + item.MinimumStock
+		}
+
+		if item.Stock > target {
+			continue
+		}
+
+		shortfall := target - item.Stock
+		if shortfall <= 0 {
+			continue
+		}
+
+		perPurchase := item.UnitsPerPurchase
+		if perPurchase <= 0 {
+			perPurchase = 1
+		}
+		// Round up to whole purchase units — you cannot buy 0.3 of a carton.
+		purchaseQty := (shortfall + perPurchase - 1) / perPurchase
+		if purchaseQty < 1 {
+			purchaseQty = 1
+		}
+
+		days := -1.0
+		if daily > 0 {
+			days = float64(item.Stock) / float64(daily)
+		}
+
+		rec := Recommendation{
+			InventoryID:          item.ID,
+			Name:                 item.Name,
+			Category:             item.Category,
+			Unit:                 item.Unit,
+			PurchaseUnit:         item.PurchaseUnit,
+			CurrentStock:         item.Stock,
+			MinimumStock:         item.MinimumStock,
+			AvgDailyUsage:        daily,
+			DaysRemaining:        days,
+			SuggestedQtyBase:     purchaseQty * perPurchase,
+			SuggestedQtyPurchase: purchaseQty,
+			EstimatedCost:        domain.ValueFromMicros(item.AvgCostMicros, purchaseQty*perPurchase),
+		}
+
+		switch {
+		case item.Stock < 0:
+			rec.Urgency = "CRITICAL"
+			rec.Reason = "Stock is negative — sales were completed without recorded deliveries"
+		case item.Stock == 0:
+			rec.Urgency = "CRITICAL"
+			rec.Reason = "Out of stock"
+		case days >= 0 && days <= 2:
+			rec.Urgency = "HIGH"
+			rec.Reason = "Stock will run out within two days at the current usage rate"
+		case days >= 0 && days <= float64(coverDays):
+			rec.Urgency = "MEDIUM"
+			rec.Reason = "Stock will not cover the next " + itoa(coverDays) + " days"
+		default:
+			rec.Urgency = "LOW"
+			rec.Reason = "At or below the reorder level"
+		}
+
+		recs = append(recs, rec)
+	}
+	return recs, nil
+}
+
+func itoa(v int) string {
+	if v == 0 {
+		return "0"
+	}
+	neg := v < 0
+	if neg {
+		v = -v
+	}
+	var buf [20]byte
+	i := len(buf)
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}

@@ -20,7 +20,9 @@ func NewInventoryTransactionService(db *gorm.DB) *InventoryTransactionService {
 
 func (s *InventoryTransactionService) ListTransactions(
 	inventoryID *uuid.UUID,
+	movementType string,
+	limit int,
 ) ([]domain.InventoryTransaction, error) {
-	return s.repo.ListTransactions(inventoryID)
+	return s.repo.ListTransactions(inventoryID, movementType, limit)
 }
 

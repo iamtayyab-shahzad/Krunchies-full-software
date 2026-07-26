@@ -51,10 +51,18 @@ export interface Offer extends BaseEntity {
 
 export interface InventoryItem extends BaseEntity {
   name: string;
+  category?: string;
   unit: string;
+  unit_kind?: string;
+  purchase_unit?: string;
+  units_per_purchase?: number;
   stock: number;
   purchase_price: number;
+  avg_cost_micros?: number;
   minimum_stock: number;
+  supplier?: string;
+  supplier_id?: string;
+  is_active?: boolean;
   inventory_transactions?: InventoryTransaction[];
 }
 
@@ -63,10 +71,13 @@ export interface InventoryTransaction extends BaseEntity {
   quantity: number;
   transaction_type: string;
   reason: string;
+  total_cost?: number;
+  balance_after?: number;
 }
 
 export interface Recipe extends BaseEntity {
   product_id: string;
+  product_size_id?: string | null;
   inventory_id: string;
   quantity_required: number;
   product?: Product;

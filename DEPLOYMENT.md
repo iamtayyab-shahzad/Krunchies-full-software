@@ -97,9 +97,12 @@ $env:DATABASE_URL="postgres://..."
 $env:JWT_SECRET="same-as-render"
 go run ./cmd/seed
 go run ./cmd/importmenu
+go run ./cmd/seedinventory
 ```
 
 Or use Render **Shell** if available on your plan.
+
+`seedinventory` loads ~90 kitchen ingredients from `shared/krunchies-inventory.json` (cheese, chicken, flour, sauces, spices, packaging, cleaning, etc.). Safe to re-run — it upserts by name.
 
 Default seed logins (change immediately):
 

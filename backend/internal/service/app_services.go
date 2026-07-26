@@ -8,37 +8,45 @@ import (
 )
 
 type AppServices struct {
-	Auth         *AuthService
-	Categories   *CRUDService[domain.Category]
-	Products     *CRUDService[domain.Product]
-	ProductSizes *CRUDService[domain.ProductSize]
-	Catalog      *CatalogService
-	Locations    *CRUDService[domain.Location]
-	Offers       *OfferService
-	Inventory    *CRUDService[domain.Inventory]
+	Auth                  *AuthService
+	Categories            *CRUDService[domain.Category]
+	Products              *CRUDService[domain.Product]
+	ProductSizes          *CRUDService[domain.ProductSize]
+	Catalog               *CatalogService
+	Locations             *CRUDService[domain.Location]
+	Offers                *OfferService
+	Inventory             *InventoryService
 	InventoryTransactions *InventoryTransactionService
-	Recipes      *CRUDService[domain.Recipe]
-	Orders       *OrderService
-	Payments     *PaymentService
-	Analytics    *AnalyticsService
-	Settings     *SettingService
+	Recipes               *RecipeService
+	Suppliers             *SupplierService
+	Purchases             *PurchaseService
+	Expenses              *ExpenseService
+	Reports               *ReportService
+	Orders                *OrderService
+	Payments              *PaymentService
+	Analytics             *AnalyticsService
+	Settings              *SettingService
 }
 
 func NewAppServices(db *gorm.DB, jwtSecret string) *AppServices {
 	return &AppServices{
-		Auth:         NewAuthService(db, jwtSecret),
-		Categories:   NewCRUDService(repository.NewGenericRepository[domain.Category](db)),
-		Products:     NewCRUDService(repository.NewGenericRepository[domain.Product](db)),
-		ProductSizes: NewCRUDService(repository.NewGenericRepository[domain.ProductSize](db)),
-		Catalog:      NewCatalogService(db),
-		Locations:    NewCRUDService(repository.NewGenericRepository[domain.Location](db)),
-		Offers:       NewOfferService(db),
-		Inventory:    NewCRUDService(repository.NewGenericRepository[domain.Inventory](db)),
+		Auth:                  NewAuthService(db, jwtSecret),
+		Categories:            NewCRUDService(repository.NewGenericRepository[domain.Category](db)),
+		Products:              NewCRUDService(repository.NewGenericRepository[domain.Product](db)),
+		ProductSizes:          NewCRUDService(repository.NewGenericRepository[domain.ProductSize](db)),
+		Catalog:               NewCatalogService(db),
+		Locations:             NewCRUDService(repository.NewGenericRepository[domain.Location](db)),
+		Offers:                NewOfferService(db),
+		Inventory:             NewInventoryService(db),
 		InventoryTransactions: NewInventoryTransactionService(db),
-		Recipes:      NewCRUDService(repository.NewGenericRepository[domain.Recipe](db)),
-		Orders:       NewOrderService(db),
-		Payments:     NewPaymentService(db),
-		Analytics:    NewAnalyticsService(db),
-		Settings:     NewSettingService(db),
+		Recipes:               NewRecipeService(db),
+		Suppliers:             NewSupplierService(db),
+		Purchases:             NewPurchaseService(db),
+		Expenses:              NewExpenseService(db),
+		Reports:               NewReportService(db),
+		Orders:                NewOrderService(db),
+		Payments:              NewPaymentService(db),
+		Analytics:             NewAnalyticsService(db),
+		Settings:              NewSettingService(db),
 	}
 }

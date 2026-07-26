@@ -2,9 +2,12 @@ import { apiFetch } from "@/lib/api-client";
 import type {
   Category,
   Deal,
+  Expense,
   InventoryItem,
   PizzaSize,
   Product,
+  Purchase,
+  Supplier,
 } from "@/lib/mock-data";
 
 type BackendCategory = {
@@ -73,10 +76,16 @@ type BackendInventory = {
   name: string;
   category: string;
   unit: string;
+  unit_kind?: string;
+  purchase_unit?: string;
+  units_per_purchase?: number;
   stock: number;
   purchase_price: number;
+  avg_cost_micros?: number;
   minimum_stock: number;
   supplier: string;
+  supplier_id?: string;
+  is_active?: boolean;
 };
 
 type BackendInventoryTransaction = {
@@ -86,14 +95,20 @@ type BackendInventoryTransaction = {
   transaction_type: string;
   reason: string;
   created_at: string;
-  inventory?: { id: string; name: string };
+  total_cost?: number;
+  balance_after?: number;
+  inventory?: { id: string; name: string; unit?: string };
 };
 
 type BackendRecipe = {
   id: string;
   product_id: string;
+  product_size_id?: string | null;
   inventory_id: string;
   quantity_required: number;
+  product?: { id: string; name: string };
+  product_size?: { id: string; size: string } | null;
+  inventory?: { id: string; name: string; unit: string };
 };
 
 export type BackendOrderItem = {
@@ -177,15 +192,24 @@ function mapOffer(o: BackendOffer): Deal {
 }
 
 function mapInventory(i: BackendInventory): InventoryItem {
+  const stock = Number(i.stock || 0);
+  const avg = Number(i.avg_cost_micros || 0);
   return {
     id: i.id,
     name: i.name,
-    category: i.category,
-    currentStock: i.stock,
+    category: i.category || "",
+    currentStock: stock,
     unit: i.unit,
-    purchasePrice: i.purchase_price,
-    minimumStock: i.minimum_stock,
-    supplier: i.supplier,
+    unitKind: i.unit_kind || "WEIGHT",
+    purchaseUnit: i.purchase_unit || i.unit,
+    unitsPerPurchase: Number(i.units_per_purchase || 1),
+    purchasePrice: Number(i.purchase_price || 0),
+    avgCostMicros: avg,
+    minimumStock: Number(i.minimum_stock || 0),
+    supplier: i.supplier || "",
+    supplierId: i.supplier_id,
+    isActive: i.is_active !== false,
+    stockValue: Math.round((Math.max(stock, 0) * avg) / 1_000_000),
   };
 }
 
@@ -501,6 +525,38 @@ export const analyticsApi = {
     apiFetch<AnalyticsInventoryRow[]>("/analytics/low-stock"),
 };
 
+export type InventoryPayload = {
+  name: string;
+  category: string;
+  unitKind?: string;
+  unit?: string;
+  purchaseUnit?: string;
+  unitsPerPurchase?: number;
+  currentStock: number;
+  minimumStock: number;
+  purchasePrice: number;
+  supplier: string;
+  supplierId?: string;
+  isActive?: boolean;
+};
+
+function inventoryBody(payload: InventoryPayload) {
+  return {
+    name: payload.name,
+    category: payload.category,
+    unit_kind: payload.unitKind || undefined,
+    unit: payload.unit,
+    purchase_unit: payload.purchaseUnit,
+    units_per_purchase: Number(payload.unitsPerPurchase || 0) || undefined,
+    stock: Number(payload.currentStock || 0),
+    minimum_stock: Number(payload.minimumStock || 0),
+    purchase_price: Number(payload.purchasePrice || 0),
+    supplier: payload.supplier,
+    supplier_id: payload.supplierId || undefined,
+    is_active: payload.isActive,
+  };
+}
+
 export const inventoryApi = {
   list: async (): Promise<InventoryItem[]> => {
     const inv = await apiFetch<BackendInventory[]>("/inventory");
@@ -509,25 +565,164 @@ export const inventoryApi = {
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(mapInventory);
   },
+  create: async (payload: InventoryPayload) => {
+    await apiFetch<unknown>("/inventory", {
+      method: "POST",
+      body: JSON.stringify(inventoryBody(payload)),
+    });
+  },
+  update: async (id: string, payload: InventoryPayload) => {
+    await apiFetch<unknown>(`/inventory/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(inventoryBody(payload)),
+    });
+  },
+  remove: async (id: string) => {
+    await apiFetch<unknown>(`/inventory/${id}`, { method: "DELETE" });
+  },
+  wastage: async (inventoryId: string, quantity: number, reason: string) => {
+    await apiFetch<unknown>("/inventory/wastage", {
+      method: "POST",
+      body: JSON.stringify({
+        inventory_id: inventoryId,
+        quantity,
+        reason,
+      }),
+    });
+  },
+  adjust: async (inventoryId: string, quantity: number, reason: string) => {
+    await apiFetch<unknown>("/inventory/adjust", {
+      method: "POST",
+      body: JSON.stringify({
+        inventory_id: inventoryId,
+        quantity,
+        reason,
+      }),
+    });
+  },
+  alerts: () =>
+    apiFetch<{
+      out_of_stock: BackendInventory[];
+      low_stock: BackendInventory[];
+      negative_stock: BackendInventory[];
+      never_purchased: BackendInventory[];
+      never_used: BackendInventory[];
+      stock_value: number;
+    }>("/inventory/alerts"),
+  recommendations: () =>
+    apiFetch<
+      {
+        inventory_id: string;
+        name: string;
+        category: string;
+        unit: string;
+        purchase_unit: string;
+        current_stock: number;
+        minimum_stock: number;
+        avg_daily_usage: number;
+        days_remaining: number;
+        suggested_qty_base: number;
+        suggested_qty_purchase: number;
+        estimated_cost: number;
+        urgency: string;
+        reason: string;
+      }[]
+    >("/inventory/recommendations"),
+};
+
+export const inventoryTransactionsApi = {
+  list: async (inventoryId?: string, type?: string) => {
+    const params = new URLSearchParams();
+    if (inventoryId) params.set("inventory_id", inventoryId);
+    if (type) params.set("type", type);
+    const qs = params.toString() ? `?${params}` : "";
+    return apiFetch<BackendInventoryTransaction[]>(`/inventory/transactions${qs}`);
+  },
+};
+
+export const recipesApi = {
+  list: () => apiFetch<BackendRecipe[]>("/recipes"),
+  listByProduct: (productId: string) =>
+    apiFetch<BackendRecipe[]>(`/recipes/product/${productId}`),
+  create: (payload: {
+    product_id: string;
+    inventory_id: string;
+    quantity_required: number;
+    product_size_id?: string | null;
+  }) =>
+    apiFetch<BackendRecipe>("/recipes", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  update: (
+    id: string,
+    payload: {
+      inventory_id?: string;
+      quantity_required?: number;
+      product_size_id?: string | null;
+    },
+  ) =>
+    apiFetch<null>(`/recipes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  remove: (id: string) =>
+    apiFetch<null>(`/recipes/${id}`, { method: "DELETE" }),
+  replaceSet: (payload: {
+    product_id: string;
+    product_size_id?: string | null;
+    lines: { inventory_id: string; quantity_required: number }[];
+  }) =>
+    apiFetch<BackendRecipe[]>("/recipes/set", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+};
+
+const COST_SCALE = 1_000_000;
+
+export const suppliersApi = {
+  list: async (): Promise<Supplier[]> => {
+    const rows = await apiFetch<
+      {
+        id: string;
+        name: string;
+        phone: string;
+        email: string;
+        address: string;
+        contact_name: string;
+        notes: string;
+        is_active: boolean;
+      }[]
+    >("/suppliers");
+    return rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      phone: s.phone || "",
+      email: s.email || "",
+      address: s.address || "",
+      contactName: s.contact_name || "",
+      notes: s.notes || "",
+      isActive: s.is_active !== false,
+    }));
+  },
   create: async (payload: {
     name: string;
-    category: string;
-    unit: string;
-    currentStock: number;
-    minimumStock: number;
-    purchasePrice: number;
-    supplier: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    contactName?: string;
+    notes?: string;
   }) => {
-    await apiFetch<unknown>("/inventory", {
+    await apiFetch("/suppliers", {
       method: "POST",
       body: JSON.stringify({
         name: payload.name,
-        category: payload.category,
-        unit: payload.unit,
-        stock: Number(payload.currentStock || 0),
-        minimum_stock: Number(payload.minimumStock || 0),
-        purchase_price: Number(payload.purchasePrice || 0),
-        supplier: payload.supplier,
+        phone: payload.phone || "",
+        email: payload.email || "",
+        address: payload.address || "",
+        contact_name: payload.contactName || "",
+        notes: payload.notes || "",
       }),
     });
   },
@@ -535,44 +730,325 @@ export const inventoryApi = {
     id: string,
     payload: {
       name: string;
-      category: string;
-      unit: string;
-      currentStock: number;
-      minimumStock: number;
-      purchasePrice: number;
-      supplier: string;
+      phone?: string;
+      email?: string;
+      address?: string;
+      contactName?: string;
+      notes?: string;
+      isActive?: boolean;
     },
   ) => {
-    await apiFetch<unknown>(`/inventory/${id}`, {
+    await apiFetch(`/suppliers/${id}`, {
       method: "PUT",
       body: JSON.stringify({
         name: payload.name,
-        category: payload.category,
-        unit: payload.unit,
-        stock: Number(payload.currentStock || 0),
-        minimum_stock: Number(payload.minimumStock || 0),
-        purchase_price: Number(payload.purchasePrice || 0),
-        supplier: payload.supplier,
+        phone: payload.phone || "",
+        email: payload.email || "",
+        address: payload.address || "",
+        contact_name: payload.contactName || "",
+        notes: payload.notes || "",
+        is_active: payload.isActive,
       }),
     });
   },
-  remove: async (id: string) => {
-    await apiFetch<unknown>(`/inventory/${id}`, { method: "DELETE" });
-  },
+  remove: (id: string) =>
+    apiFetch(`/suppliers/${id}`, { method: "DELETE" }),
 };
 
-export const inventoryTransactionsApi = {
-  list: async (inventoryId?: string) => {
-    const qs = inventoryId ? `?inventory_id=${encodeURIComponent(inventoryId)}` : "";
-    const rows = await apiFetch<BackendInventoryTransaction[]>(
-      `/inventory/transactions${qs}`,
+type BackendPurchase = {
+  id: string;
+  invoice_number: string;
+  supplier_id?: string;
+  supplier_name: string;
+  purchase_date: string;
+  subtotal: number;
+  discount: number;
+  other_cost: number;
+  grand_total: number;
+  payment_method: string;
+  amount_paid: number;
+  status: string;
+  notes: string;
+  items?: {
+    id: string;
+    inventory_id: string;
+    purchase_unit: string;
+    quantity_micros: number;
+    quantity_base: number;
+    unit_price: number;
+    line_total: number;
+    inventory?: { name: string };
+  }[];
+};
+
+function mapPurchase(p: BackendPurchase): Purchase {
+  return {
+    id: p.id,
+    invoiceNumber: p.invoice_number || "",
+    supplierId: p.supplier_id,
+    supplierName: p.supplier_name || "",
+    purchaseDate: (p.purchase_date || "").slice(0, 10),
+    subtotal: Number(p.subtotal || 0),
+    discount: Number(p.discount || 0),
+    otherCost: Number(p.other_cost || 0),
+    grandTotal: Number(p.grand_total || 0),
+    paymentMethod: p.payment_method || "cash",
+    amountPaid: Number(p.amount_paid || 0),
+    status: p.status,
+    notes: p.notes || "",
+    items: (p.items || []).map((i) => ({
+      id: i.id,
+      inventoryId: i.inventory_id,
+      inventoryName: i.inventory?.name,
+      purchaseUnit: i.purchase_unit,
+      quantity: Number(i.quantity_micros || 0) / COST_SCALE,
+      unitPrice: Number(i.unit_price || 0),
+      lineTotal: Number(i.line_total || 0),
+      quantityBase: Number(i.quantity_base || 0),
+    })),
+  };
+}
+
+export const purchasesApi = {
+  list: async (): Promise<Purchase[]> => {
+    const rows = await apiFetch<BackendPurchase[]>("/purchases");
+    return rows.map(mapPurchase);
+  },
+  get: async (id: string) => mapPurchase(await apiFetch<BackendPurchase>(`/purchases/${id}`)),
+  create: async (payload: {
+    invoiceNumber: string;
+    supplierId?: string;
+    supplierName?: string;
+    purchaseDate: string;
+    discount?: number;
+    otherCost?: number;
+    paymentMethod?: string;
+    amountPaid?: number;
+    notes?: string;
+    items: {
+      inventoryId: string;
+      purchaseUnit: string;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+    }[];
+  }) => {
+    const body = {
+      invoice_number: payload.invoiceNumber,
+      supplier_id: payload.supplierId || null,
+      supplier_name: payload.supplierName || "",
+      purchase_date: new Date(payload.purchaseDate).toISOString(),
+      discount: Number(payload.discount || 0),
+      other_cost: Number(payload.otherCost || 0),
+      payment_method: payload.paymentMethod || "cash",
+      amount_paid: Number(payload.amountPaid || 0),
+      notes: payload.notes || "",
+      items: payload.items.map((i) => ({
+        inventory_id: i.inventoryId,
+        purchase_unit: i.purchaseUnit,
+        quantity_micros: Math.round(Number(i.quantity || 0) * COST_SCALE),
+        unit_price: Number(i.unitPrice || 0),
+        line_total: Number(i.lineTotal || 0),
+      })),
+    };
+    return mapPurchase(
+      await apiFetch<BackendPurchase>("/purchases", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
     );
-    return rows;
   },
+  update: async (
+    id: string,
+    payload: {
+      invoiceNumber: string;
+      supplierId?: string;
+      supplierName?: string;
+      purchaseDate: string;
+      discount?: number;
+      otherCost?: number;
+      paymentMethod?: string;
+      amountPaid?: number;
+      notes?: string;
+      items: {
+        inventoryId: string;
+        purchaseUnit: string;
+        quantity: number;
+        unitPrice: number;
+        lineTotal: number;
+      }[];
+    },
+  ) => {
+    const body = {
+      invoice_number: payload.invoiceNumber,
+      supplier_id: payload.supplierId || null,
+      supplier_name: payload.supplierName || "",
+      purchase_date: new Date(payload.purchaseDate).toISOString(),
+      discount: Number(payload.discount || 0),
+      other_cost: Number(payload.otherCost || 0),
+      payment_method: payload.paymentMethod || "cash",
+      amount_paid: Number(payload.amountPaid || 0),
+      notes: payload.notes || "",
+      items: payload.items.map((i) => ({
+        inventory_id: i.inventoryId,
+        purchase_unit: i.purchaseUnit,
+        quantity_micros: Math.round(Number(i.quantity || 0) * COST_SCALE),
+        unit_price: Number(i.unitPrice || 0),
+        line_total: Number(i.lineTotal || 0),
+      })),
+    };
+    return mapPurchase(
+      await apiFetch<BackendPurchase>(`/purchases/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    );
+  },
+  reverse: (id: string) =>
+    apiFetch(`/purchases/${id}/reverse`, { method: "PATCH" }),
 };
 
-export const recipesApi = {
-  list: () => apiFetch<BackendRecipe[]>("/recipes"),
+export const expensesApi = {
+  categories: () => apiFetch<string[]>("/expenses/categories"),
+  list: async (): Promise<Expense[]> => {
+    const rows = await apiFetch<
+      {
+        id: string;
+        category: string;
+        title: string;
+        amount: number;
+        expense_date: string;
+        payment_method: string;
+        notes: string;
+        receipt_image: string;
+        recurrence: string;
+      }[]
+    >("/expenses");
+    return rows.map((e) => ({
+      id: e.id,
+      category: e.category,
+      title: e.title || "",
+      amount: Number(e.amount || 0),
+      expenseDate: (e.expense_date || "").slice(0, 10),
+      paymentMethod: e.payment_method || "cash",
+      notes: e.notes || "",
+      receiptImage: e.receipt_image || "",
+      recurrence: e.recurrence || "NONE",
+    }));
+  },
+  create: async (payload: {
+    category: string;
+    title?: string;
+    amount: number;
+    expenseDate: string;
+    paymentMethod?: string;
+    notes?: string;
+    recurrence?: string;
+  }) => {
+    await apiFetch("/expenses", {
+      method: "POST",
+      body: JSON.stringify({
+        category: payload.category,
+        title: payload.title || "",
+        amount: Number(payload.amount || 0),
+        expense_date: new Date(payload.expenseDate).toISOString(),
+        payment_method: payload.paymentMethod || "cash",
+        notes: payload.notes || "",
+        recurrence: payload.recurrence || "NONE",
+      }),
+    });
+  },
+  update: async (
+    id: string,
+    payload: {
+      category: string;
+      title?: string;
+      amount: number;
+      expenseDate: string;
+      paymentMethod?: string;
+      notes?: string;
+      recurrence?: string;
+    },
+  ) => {
+    await apiFetch(`/expenses/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        category: payload.category,
+        title: payload.title || "",
+        amount: Number(payload.amount || 0),
+        expense_date: new Date(payload.expenseDate).toISOString(),
+        payment_method: payload.paymentMethod || "cash",
+        notes: payload.notes || "",
+        recurrence: payload.recurrence || "NONE",
+      }),
+    });
+  },
+  remove: (id: string) =>
+    apiFetch(`/expenses/${id}`, { method: "DELETE" }),
+};
+
+export type ProfitLossReport = {
+  start: string;
+  end: string;
+  revenue: number;
+  completed_orders: number;
+  cancelled_orders: number;
+  cogs: number;
+  gross_profit: number;
+  expenses: number;
+  wastage_cost: number;
+  net_profit: number;
+  food_cost_percent: number;
+  inventory_value: number;
+  purchases_spend: number;
+  best_selling: {
+    product_id: string;
+    product_name: string;
+    quantity: number;
+    revenue: number;
+    cost: number;
+    profit: number;
+    margin_pct: number;
+  }[];
+  least_selling: {
+    product_id: string;
+    product_name: string;
+    quantity: number;
+    revenue: number;
+    cost: number;
+    profit: number;
+    margin_pct: number;
+  }[];
+  most_profitable: {
+    product_id: string;
+    product_name: string;
+    quantity: number;
+    revenue: number;
+    cost: number;
+    profit: number;
+    margin_pct: number;
+  }[];
+  least_profitable: {
+    product_id: string;
+    product_name: string;
+    quantity: number;
+    revenue: number;
+    cost: number;
+    profit: number;
+    margin_pct: number;
+  }[];
+  expense_breakdown: { category: string; total: number }[];
+};
+
+export const reportsApi = {
+  profitLoss: (params?: { range?: string; start?: string; end?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.range) q.set("range", params.range);
+    if (params?.start) q.set("start", params.start);
+    if (params?.end) q.set("end", params.end);
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<ProfitLossReport>(`/reports/profit-loss${qs}`);
+  },
 };
 
 export const ordersApi = {

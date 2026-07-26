@@ -465,30 +465,39 @@ func (s *OrderService) GetOrderByID(id uuid.UUID) (*domain.Order, error) {
 	return s.orderRepo.GetByID(id)
 }
 
+// consumeInventory deducts recipe ingredients when an order is completed.
+//
+// Design rules for a live restaurant counter:
+//   - Only COMPLETED orders consume stock (PENDING never does).
+//   - Recipes are size-aware: a Large pizza uses more than a Small one.
+//   - Products without recipes (drinks without BOM, new items) simply skip.
+//   - Stock is allowed to go negative so a sale is never blocked mid-service;
+//     negative balances surface as dashboard alerts for the owner to reconcile.
 func (s *OrderService) consumeInventory(tx *gorm.DB, order *domain.Order) error {
+	orderID := order.ID
+	reason := fmt.Sprintf("Order %s completed", order.OrderNumber)
+	if order.OrderNumber == "" {
+		reason = fmt.Sprintf("Order %s completed", order.ID.String())
+	}
+
 	for _, item := range order.Items {
-		recipes, err := s.inventoryRepo.GetRecipeByProductID(tx, item.ProductID)
+		recipes, err := s.inventoryRepo.RecipeLinesFor(tx, item.ProductID, item.ProductSizeID)
 		if err != nil {
 			return err
 		}
 		for _, recipe := range recipes {
-			consumeQty := recipe.QuantityRequired * item.Quantity
+			consumeQty := recipe.QuantityRequired * int64(item.Quantity)
 			if consumeQty <= 0 {
 				continue
 			}
-			if _, err := s.inventoryRepo.LockInventory(tx, recipe.InventoryID); err != nil {
-				return err
-			}
-			if err := s.inventoryRepo.DecreaseStock(tx, recipe.InventoryID, consumeQty); err != nil {
-				return err
-			}
-			tr := &domain.InventoryTransaction{
-				InventoryID:     recipe.InventoryID,
-				Quantity:        -consumeQty,
-				TransactionType: "CONSUMPTION",
-				Reason:          fmt.Sprintf("Order %s completed", order.ID.String()),
-			}
-			if err := s.inventoryRepo.AddTransaction(tx, tr); err != nil {
+			if _, err := s.inventoryRepo.ApplyMovement(tx, repository.Movement{
+				InventoryID:   recipe.InventoryID,
+				QuantityBase:  -consumeQty,
+				Type:          domain.StockConsumption,
+				Reason:        reason,
+				ReferenceType: domain.RefOrder,
+				ReferenceID:   &orderID,
+			}); err != nil {
 				return err
 			}
 		}

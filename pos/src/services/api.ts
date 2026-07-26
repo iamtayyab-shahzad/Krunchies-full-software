@@ -763,10 +763,17 @@ export const inventoryApi = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         name: payload.name || "Item",
+        category: payload.category || "",
         unit: payload.unit || "g",
+        unit_kind: payload.unit_kind || "WEIGHT",
+        purchase_unit: payload.purchase_unit || payload.unit || "g",
+        units_per_purchase: Number(payload.units_per_purchase) || 1,
         stock: Number(payload.stock) || 0,
         purchase_price: Number(payload.purchase_price) || 0,
+        avg_cost_micros: Number(payload.avg_cost_micros) || 0,
         minimum_stock: Number(payload.minimum_stock) || 0,
+        supplier: payload.supplier || "",
+        is_active: payload.is_active !== false,
       };
       const items = await listLocalInventory();
       await replaceInventory([local, ...items]);

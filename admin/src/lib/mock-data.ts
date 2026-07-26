@@ -93,9 +93,68 @@ export type InventoryItem = {
   category: string;
   currentStock: number;
   unit: string;
+  unitKind: string;
+  purchaseUnit: string;
+  unitsPerPurchase: number;
   purchasePrice: number;
+  avgCostMicros: number;
   supplier: string;
+  supplierId?: string;
   minimumStock: number;
+  isActive: boolean;
+  /** Stock value in whole Rupees (derived). */
+  stockValue: number;
+};
+
+export type Supplier = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  contactName: string;
+  notes: string;
+  isActive: boolean;
+};
+
+export type PurchaseLine = {
+  id?: string;
+  inventoryId: string;
+  inventoryName?: string;
+  purchaseUnit: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  quantityBase?: number;
+};
+
+export type Purchase = {
+  id: string;
+  invoiceNumber: string;
+  supplierId?: string;
+  supplierName: string;
+  purchaseDate: string;
+  subtotal: number;
+  discount: number;
+  otherCost: number;
+  grandTotal: number;
+  paymentMethod: string;
+  amountPaid: number;
+  status: string;
+  notes: string;
+  items: PurchaseLine[];
+};
+
+export type Expense = {
+  id: string;
+  category: string;
+  title: string;
+  amount: number;
+  expenseDate: string;
+  paymentMethod: string;
+  notes: string;
+  receiptImage: string;
+  recurrence: string;
 };
 
 export type Recipe = {
@@ -349,21 +408,33 @@ export const mockInventory: InventoryItem[] = [
     id: "i1",
     name: "Mozzarella Cheese",
     category: "Dairy",
-    currentStock: 8,
-    unit: "kg",
+    currentStock: 8000,
+    unit: "g",
+    unitKind: "WEIGHT",
+    purchaseUnit: "KG",
+    unitsPerPurchase: 1000,
     purchasePrice: 1200,
+    avgCostMicros: 1_200_000,
     supplier: "Dairy Fresh",
-    minimumStock: 10,
+    minimumStock: 10000,
+    isActive: true,
+    stockValue: 9600,
   },
   {
     id: "i2",
     name: "Chicken Breast",
     category: "Meat",
-    currentStock: 25,
-    unit: "kg",
+    currentStock: 25000,
+    unit: "g",
+    unitKind: "WEIGHT",
+    purchaseUnit: "KG",
+    unitsPerPurchase: 1000,
     purchasePrice: 650,
+    avgCostMicros: 650_000,
     supplier: "Meat Hub",
-    minimumStock: 15,
+    minimumStock: 15000,
+    isActive: true,
+    stockValue: 16250,
   },
   {
     id: "i3",
@@ -371,9 +442,15 @@ export const mockInventory: InventoryItem[] = [
     category: "Bakery",
     currentStock: 40,
     unit: "pcs",
+    unitKind: "COUNT",
+    purchaseUnit: "pcs",
+    unitsPerPurchase: 1,
     purchasePrice: 40,
+    avgCostMicros: 40_000_000,
     supplier: "Bakery Co",
     minimumStock: 30,
+    isActive: true,
+    stockValue: 1600,
   },
   {
     id: "i4",
@@ -381,19 +458,31 @@ export const mockInventory: InventoryItem[] = [
     category: "Bakery",
     currentStock: 12,
     unit: "pcs",
+    unitKind: "COUNT",
+    purchaseUnit: "pcs",
+    unitsPerPurchase: 1,
     purchasePrice: 25,
+    avgCostMicros: 25_000_000,
     supplier: "Bakery Co",
     minimumStock: 20,
+    isActive: true,
+    stockValue: 300,
   },
   {
     id: "i5",
     name: "Cooking Oil",
     category: "Pantry",
-    currentStock: 6,
-    unit: "L",
+    currentStock: 6000,
+    unit: "ml",
+    unitKind: "VOLUME",
+    purchaseUnit: "Litre",
+    unitsPerPurchase: 1000,
     purchasePrice: 480,
+    avgCostMicros: 480_000,
     supplier: "Wholesale Mart",
-    minimumStock: 8,
+    minimumStock: 8000,
+    isActive: true,
+    stockValue: 2880,
   },
 ];
 

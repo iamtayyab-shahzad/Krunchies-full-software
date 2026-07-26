@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"backend/internal/service"
@@ -32,12 +33,18 @@ func (h *InventoryTransactionHandler) List(c *gin.Context) {
 		}
 		inventoryID = &id
 	}
+	movementType := strings.TrimSpace(c.Query("type"))
+	limit := 0
+	if rawLimit := strings.TrimSpace(c.Query("limit")); rawLimit != "" {
+		if n, err := strconv.Atoi(rawLimit); err == nil && n > 0 {
+			limit = n
+		}
+	}
 
-	data, err := h.service.ListTransactions(inventoryID)
+	data, err := h.service.ListTransactions(inventoryID, movementType, limit)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
 	utils.Success(c, http.StatusOK, "inventory transactions", data)
 }
-
