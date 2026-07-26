@@ -88,14 +88,6 @@ export default function LoginPage() {
         <Button type="submit" size="xl" className="w-full" disabled={submitting}>
           {submitting ? "Signing in..." : "Sign In"}
         </Button>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm text-zinc-400">
-          <p>
-            Admin: <span className="text-zinc-200">admin / admin@admin</span>
-          </p>
-          <p className="mt-1">
-            Staff: <span className="text-zinc-200">staff / staff@54321</span> → POS
-          </p>
-        </div>
       </form>
     </div>
   );

@@ -21,10 +21,6 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-const showDevHints =
-  process.env.NODE_ENV === "development" ||
-  process.env.NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS === "true";
-
 export default function LoginPage() {
   const router = useRouter();
   const [offline, setOffline] = useState(false);
@@ -156,17 +152,6 @@ export default function LoginPage() {
           >
             Continue offline with saved session
           </Button>
-        ) : null}
-        {showDevHints ? (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm text-zinc-400">
-            <p className="text-xs text-zinc-500">Dev only credentials</p>
-            <p>
-              Staff: <span className="text-zinc-200">staff / staff@54321</span>
-            </p>
-            <p className="mt-1">
-              Admin: <span className="text-zinc-200">admin / admin@admin</span>
-            </p>
-          </div>
         ) : null}
       </form>
     </div>

@@ -67,29 +67,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
-    await new Promise((r) => setTimeout(r, 300));
-    const match = MOCK_USERS.find(
-      (u) =>
-        u.username.toLowerCase() === username.trim().toLowerCase() &&
-        u.password === password,
-    );
-    if (!match) throw new Error("Invalid username or password");
+    const userKey = username.trim().toLowerCase();
 
-    if (match.user.type === "staff") {
-      return "staff" as const;
-    }
-
+    // Authenticate against the backend — the database password is the source
+    // of truth (seeded via backend/cmd/seed).
     const resp = await apiFetch<{ token: string }>(
       "/auth/staff/login",
       {
         method: "POST",
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: username.trim(), password }),
       },
       false,
     );
+
+    const match = MOCK_USERS.find((u) => u.username.toLowerCase() === userKey);
+    const profile =
+      match?.user ||
+      ({
+        id: userKey,
+        name: username.trim(),
+        username: username.trim(),
+        type: userKey === "staff" ? ("staff" as const) : ("admin" as const),
+      } satisfies AuthUser);
+
+    if (profile.type === "staff" || userKey === "staff") {
+      return "staff" as const;
+    }
+
     localStorage.setItem(TOKEN_KEY, resp.token);
-    localStorage.setItem(AUTH_KEY, JSON.stringify(match.user));
-    setUser(match.user);
+    localStorage.setItem(AUTH_KEY, JSON.stringify(profile));
+    setUser(profile);
     return "admin" as const;
   }, []);
 
