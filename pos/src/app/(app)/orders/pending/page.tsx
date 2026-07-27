@@ -126,16 +126,20 @@ export default function PendingOrdersPage() {
   };
 
   const complete = async (order: Order) => {
+    // Optimistic remove so the UI feels instant offline.
+    queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
+      (old || []).filter((o) => o.id !== order.id),
+    );
     try {
       await ordersApi.complete(order.id);
-      const latest = await ordersApi.get(order.id).catch(() => ({
-        ...order,
-        order_status: "COMPLETED",
-      }));
-      printCustomerReceipt(latest, settings || null);
-      toast.success("Order completed — customer receipt printed");
-      await refresh();
+      // Use local order for receipt — avoid network get after offline complete.
+      printCustomerReceipt(
+        { ...order, order_status: "COMPLETED" },
+        settings || null,
+      );
+      toast.success("Order completed");
     } catch (error) {
+      await refresh();
       toast.error(
         error instanceof Error ? error.message : "Failed to complete order",
       );
@@ -148,11 +152,14 @@ export default function PendingOrdersPage() {
   };
 
   const cancel = async (order: Order) => {
+    queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
+      (old || []).filter((o) => o.id !== order.id),
+    );
     try {
       await ordersApi.cancel(order.id);
       toast.success("Order cancelled");
-      await refresh();
     } catch (error) {
+      await refresh();
       toast.error(
         error instanceof Error ? error.message : "Failed to cancel order",
       );

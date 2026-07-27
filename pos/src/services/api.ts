@@ -2,6 +2,7 @@ import { apiFetch, ApiError } from "@/lib/api-client";
 import {
   listLocalInventory,
   listLocalProducts,
+  listLocalOrders,
   replaceProducts,
   replaceCategories,
   replaceInventory,
@@ -599,18 +600,21 @@ async function markLocalOrderStatus(
         sessionId: "ec6f7f",
         hypothesisId: "D",
         location: "api.ts:markLocalOrderStatus:start",
-        message: "markLocalOrderStatus starting (may hit network via ordersRepo.get)",
+        message: "markLocalOrderStatus starting (local IndexedDB only)",
         data: {
           idPrefix: id.slice(0, 8),
           order_status,
           online: typeof navigator !== "undefined" ? navigator.onLine : null,
         },
         timestamp: Date.now(),
-        runId: "pre-fix",
+        runId: "post-fix",
       }),
     }).catch(() => {});
     // #endregion
-    const order = await ordersRepo.get(id);
+    // Always read from IndexedDB — never hit the network for status marks.
+    // ordersRepo.get() used to call the API when navigator.onLine was true,
+    // which made cancel/complete hang on flaky connections.
+    const order = (await listLocalOrders()).find((o) => o.id === id);
     // #region agent log
     fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
       method: "POST",
@@ -622,7 +626,7 @@ async function markLocalOrderStatus(
         sessionId: "ec6f7f",
         hypothesisId: "D",
         location: "api.ts:markLocalOrderStatus:afterGet",
-        message: "ordersRepo.get finished",
+        message: "local order lookup finished",
         data: {
           idPrefix: id.slice(0, 8),
           getMs: Date.now() - t0,
@@ -630,10 +634,11 @@ async function markLocalOrderStatus(
           online: typeof navigator !== "undefined" ? navigator.onLine : null,
         },
         timestamp: Date.now(),
-        runId: "pre-fix",
+        runId: "post-fix",
       }),
     }).catch(() => {});
     // #endregion
+    if (!order) return;
     await upsertLocalOrder({
       ...order,
       order_status,
@@ -648,6 +653,11 @@ async function markLocalOrderStatus(
   } finally {
     notifyOrdersChanged();
   }
+}
+
+async function isLocalOrderId(id: string) {
+  const order = (await listLocalOrders()).find((o) => o.id === id);
+  return Boolean(order?.order_number?.startsWith("LOCAL-"));
 }
 
 export const ordersApi = {
@@ -750,10 +760,7 @@ export const ordersApi = {
       await markLocalOrderStatus(id, "COMPLETED");
       return { offline: false as const, data: result };
     } catch (e) {
-      const isLocal = await ordersRepo
-        .get(id)
-        .then((o) => o.order_number.startsWith("LOCAL-"))
-        .catch(() => false);
+      const isLocal = await isLocalOrderId(id);
       if (isQueueableError(e) || isLocal) {
         await enqueueAndTrack({ type: "COMPLETE_ORDER", payload: { id } });
         await markLocalOrderStatus(id, "COMPLETED", { pendingSync: true });
@@ -784,7 +791,7 @@ export const ordersApi = {
           online: typeof navigator !== "undefined" ? navigator.onLine : null,
         },
         timestamp: Date.now(),
-        runId: "pre-fix",
+        runId: "post-fix",
       }),
     }).catch(() => {});
     // #endregion
@@ -808,16 +815,13 @@ export const ordersApi = {
           message: "cancel finished online path",
           data: { totalMs: Date.now() - t0 },
           timestamp: Date.now(),
-          runId: "pre-fix",
+          runId: "post-fix",
         }),
       }).catch(() => {});
       // #endregion
       return { offline: false as const, data: result };
     } catch (e) {
-      const isLocal = await ordersRepo
-        .get(id)
-        .then((o) => o.order_number.startsWith("LOCAL-"))
-        .catch(() => false);
+      const isLocal = await isLocalOrderId(id);
       if (isQueueableError(e) || isLocal) {
         await enqueueAndTrack({ type: "CANCEL_ORDER", payload: { id } });
         await markLocalOrderStatus(id, "CANCELLED", { pendingSync: true });
@@ -839,7 +843,7 @@ export const ordersApi = {
               queueable: isQueueableError(e),
             },
             timestamp: Date.now(),
-            runId: "pre-fix",
+            runId: "post-fix",
           }),
         }).catch(() => {});
         // #endregion

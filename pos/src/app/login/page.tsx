@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setToken } from "@/lib/api-client";
-import { TOKEN_KEY, isTokenExpired } from "@/lib/utils";
+import { TOKEN_KEY, isTokenExpired, isOfflineSessionValid } from "@/lib/utils";
 import { isOnline } from "@/lib/network";
 import { authApi, sessionRepo, syncKrunchiesMenu } from "@/services/api";
 import { useEffect, useState } from "react";
@@ -59,16 +59,12 @@ export default function LoginPage() {
             hasLsToken: Boolean(token),
             lsExpired: token ? isTokenExpired(token) : null,
             hasSession: Boolean(session?.token),
-            sessionExpired: session?.exp
-              ? session.exp * 1000 <= Date.now()
-              : session
-                ? false
-                : null,
+            offlineSessionValid: isOfflineSessionValid(session),
             online: navigator.onLine,
             savedAt: session?.saved_at ?? null,
           },
           timestamp: Date.now(),
-          runId: "pre-fix",
+          runId: "post-fix",
         }),
       }).catch(() => {});
       // #endregion
@@ -76,14 +72,13 @@ export default function LoginPage() {
         router.replace("/orders/new");
         return;
       }
-      if (token) localStorage.removeItem(TOKEN_KEY);
+      if (token && isTokenExpired(token) && navigator.onLine) {
+        localStorage.removeItem(TOKEN_KEY);
+      }
 
-      if (
-        session?.token &&
-        (!session.exp || session.exp * 1000 > Date.now())
-      ) {
+      if (isOfflineSessionValid(session)) {
         setCanContinueOffline(true);
-        if (!navigator.onLine) {
+        if (!navigator.onLine && session?.token) {
           localStorage.setItem(TOKEN_KEY, session.token);
           router.replace("/orders/new");
         }
@@ -98,13 +93,8 @@ export default function LoginPage() {
 
   const continueOffline = async () => {
     const session = await sessionRepo.get();
-    if (!session?.token) {
-      toast.error("No saved session found");
-      return;
-    }
-    if (session.exp && session.exp * 1000 <= Date.now()) {
-      await sessionRepo.clear();
-      toast.error("Saved session expired — connect to log in again");
+    if (!isOfflineSessionValid(session) || !session?.token) {
+      toast.error("No saved session found — connect once to log in");
       setCanContinueOffline(false);
       return;
     }

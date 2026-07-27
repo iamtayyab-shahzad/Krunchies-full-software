@@ -26,6 +26,23 @@ export function isTokenExpired(token: string | null): boolean {
   }
 }
 
+/** How long a previously-logged-in cashier may keep using POS offline after JWT exp. */
+export const OFFLINE_SESSION_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** True when IndexedDB session can unlock POS without a fresh internet login. */
+export function isOfflineSessionValid(session: {
+  token?: string;
+  exp?: number | null;
+  saved_at?: string;
+} | null): boolean {
+  if (!session?.token) return false;
+  if (!session.exp || session.exp * 1000 > Date.now()) return true;
+  if (!session.saved_at) return false;
+  const saved = new Date(session.saved_at).getTime();
+  if (Number.isNaN(saved)) return false;
+  return Date.now() - saved < OFFLINE_SESSION_GRACE_MS;
+}
+
 /** Deterministic walk-in location seeded by importmenu. */
 export const WALKIN_LOCATION_ID = "50000000-0000-4000-8000-000000000000";
 

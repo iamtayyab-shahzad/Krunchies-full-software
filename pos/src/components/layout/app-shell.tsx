@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar, TopBar } from "@/components/layout/shell";
 import { useBill } from "@/context/bill-context";
-import { TOKEN_KEY, isTokenExpired } from "@/lib/utils";
+import { TOKEN_KEY, isTokenExpired, isOfflineSessionValid } from "@/lib/utils";
 import { isOnline } from "@/lib/network";
 import { sessionRepo, settingsApi, warmOfflineCache } from "@/services/api";
 
@@ -25,18 +25,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       let token = localStorage.getItem(TOKEN_KEY);
+      const session = await sessionRepo.get();
 
-      // Restore session from IndexedDB when localStorage is empty
+      // Restore session from IndexedDB when localStorage is empty / JWT expired.
+      // Offline: allow grace period so cashiers keep selling without re-login.
       if (!token || isTokenExpired(token)) {
-        const session = await sessionRepo.get();
-        if (
-          session?.token &&
-          (!session.exp || session.exp * 1000 > Date.now())
-        ) {
-          localStorage.setItem(TOKEN_KEY, session.token);
-          token = session.token;
+        if (isOfflineSessionValid(session) && session?.token) {
+          if (!isOnline() || !token) {
+            localStorage.setItem(TOKEN_KEY, session.token);
+            token = session.token;
+          }
         }
       }
+
+      const allowOffline =
+        !isOnline() && isOfflineSessionValid(session) && Boolean(token);
 
       // #region agent log
       fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
@@ -53,19 +56,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           data: {
             hasToken: Boolean(token),
             expired: token ? isTokenExpired(token) : null,
+            offlineSessionValid: isOfflineSessionValid(session),
+            allowOffline,
             online: typeof navigator !== "undefined" ? navigator.onLine : null,
             path: pathname,
-            willRedirectLogin: !token || isTokenExpired(token),
+            willRedirectLogin:
+              !token || (isTokenExpired(token) && !allowOffline),
           },
           timestamp: Date.now(),
-          runId: "pre-fix",
+          runId: "post-fix",
         }),
       }).catch(() => {});
       // #endregion
 
-      if (!token || isTokenExpired(token)) {
+      if (!token || (isTokenExpired(token) && !allowOffline)) {
         localStorage.removeItem(TOKEN_KEY);
-        await sessionRepo.clear();
+        if (isOnline()) await sessionRepo.clear();
         if (!cancelled) router.replace("/login");
         return;
       }
@@ -77,7 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, pathname]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-black text-white">

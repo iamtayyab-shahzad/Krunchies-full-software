@@ -1,14 +1,34 @@
 /* Krunchies POS Service Worker — App Shell + static assets */
-const CACHE_VERSION = "krunchies-pos-v3";
+const CACHE_VERSION = "krunchies-pos-v4";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
-const RUNTIME_MAX_ENTRIES = 80;
+const RUNTIME_MAX_ENTRIES = 100;
 
+/** Core POS routes that must open while offline (no login wall / offline stub). */
 const PRECACHE_URLS = [
+  "/",
+  "/login",
+  "/orders/new",
+  "/orders/pending",
+  "/orders/history",
+  "/dashboard",
+  "/products",
+  "/categories",
+  "/inventory",
+  "/analytics",
+  "/settings",
   "/offline",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
+];
+
+const APP_SHELL_FALLBACKS = [
+  "/orders/new",
+  "/orders/pending",
+  "/",
+  "/login",
+  "/offline",
 ];
 
 self.addEventListener("install", (event) => {
@@ -50,7 +70,24 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+  if (event.data && event.data.type === "WARM_SHELL") {
+    event.waitUntil(warmShellRoutes());
+  }
 });
+
+async function warmShellRoutes() {
+  const cache = await caches.open(SHELL_CACHE);
+  await Promise.all(
+    PRECACHE_URLS.map(async (url) => {
+      try {
+        const response = await fetch(url, { credentials: "same-origin" });
+        if (response.ok) await cache.put(url, response.clone());
+      } catch {
+        /* ignore — may already be offline */
+      }
+    }),
+  );
+}
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -76,19 +113,32 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigations — network first, then cached shell / offline page
+  // Soft navigations (RSC) — network first; on fail let client hard-navigate
+  // so our navigate handler can serve cached HTML shell.
+  const isRsc =
+    request.headers.get("RSC") === "1" ||
+    request.headers.get("Next-Router-State-Tree") != null ||
+    request.headers.get("Next-Router-Prefetch") != null;
+  if (isRsc) {
+    event.respondWith(
+      fetch(request).catch(() => Response.error()),
+    );
+    return;
+  }
+
+  // Navigations — network first, then cached app shell (never only /offline)
   if (request.mode === "navigate") {
     event.respondWith(navigationHandler(request));
     return;
   }
 
-  // Icons / manifest only for remaining same-origin GETs
+  // Icons / manifest / known app HTML routes
   if (
     url.pathname.startsWith("/icons/") ||
     url.pathname.endsWith(".webmanifest") ||
-    url.pathname === "/offline"
+    PRECACHE_URLS.includes(url.pathname)
   ) {
-    event.respondWith(staleWhileRevalidate(request, RUNTIME_CACHE));
+    event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
   }
 });
 
@@ -133,25 +183,76 @@ async function staleWhileRevalidate(request, cacheName) {
   return cached || networkPromise;
 }
 
+async function matchShell(cache, request) {
+  const url = new URL(request.url);
+  const pathname = url.pathname === "" ? "/" : url.pathname;
+
+  return (
+    (await cache.match(request)) ||
+    (await cache.match(pathname)) ||
+    (await cache.match(new Request(pathname))) ||
+    null
+  );
+}
+
 async function navigationHandler(request) {
   try {
     const response = await fetch(request);
     if (response.ok) {
       const cache = await caches.open(SHELL_CACHE);
-      cache.put(request, response.clone());
-      await trimCache(SHELL_CACHE, 30);
+      const url = new URL(request.url);
+      const pathname = url.pathname === "" ? "/" : url.pathname;
+      await cache.put(request, response.clone());
+      await cache.put(pathname, response.clone());
+      await trimCache(SHELL_CACHE, 40);
     }
     return response;
   } catch {
+    // #region agent log
+    try {
+      fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "ec6f7f",
+        },
+        body: JSON.stringify({
+          sessionId: "ec6f7f",
+          hypothesisId: "A",
+          location: "sw.js:navigationHandler:catch",
+          message: "SW navigation offline — resolving shell fallback",
+          data: { url: request.url },
+          timestamp: Date.now(),
+          runId: "post-fix",
+        }),
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+    // #endregion
+
     const cache = await caches.open(SHELL_CACHE);
-    const cached =
-      (await cache.match(request)) ||
-      (await cache.match("/offline")) ||
-      (await caches.match("/offline"));
+    let cached = await matchShell(cache, request);
+
+    if (!cached) {
+      for (const path of APP_SHELL_FALLBACKS) {
+        cached =
+          (await cache.match(path)) ||
+          (await cache.match(new Request(path)));
+        if (cached) break;
+      }
+    }
+
+    if (!cached) {
+      cached =
+        (await caches.match("/offline")) ||
+        (await caches.match(new Request("/offline")));
+    }
+
     return (
       cached ||
       new Response(
-        "<!doctype html><title>Offline</title><h1>Krunchies POS Offline</h1><p>Open New Order from the home screen.</p>",
+        "<!doctype html><title>Offline</title><h1>Krunchies POS</h1><p>Open New Order from the home screen after connecting once.</p><p><a href='/orders/new'>New Order</a> · <a href='/orders/pending'>Pending</a></p>",
         {
           status: 503,
           headers: { "Content-Type": "text/html" },
