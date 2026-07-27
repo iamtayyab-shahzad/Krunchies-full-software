@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -150,7 +151,32 @@ func (h *OrderHandler) CreateWalkin(c *gin.Context) {
 }
 
 func (h *OrderHandler) List(c *gin.Context) {
-	orders, err := h.service.ListOrders()
+	limit := 50
+	offset := 0
+
+	if rawLimit := strings.TrimSpace(c.Query("limit")); rawLimit != "" {
+		if v, err := strconv.Atoi(rawLimit); err == nil {
+			limit = v
+		}
+	}
+	if rawOffset := strings.TrimSpace(c.Query("offset")); rawOffset != "" {
+		if v, err := strconv.Atoi(rawOffset); err == nil {
+			offset = v
+		}
+	}
+
+	// Clamp to keep responses bounded even if the client sends bad values.
+	if limit < 1 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	orders, err := h.service.ListOrders(limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return

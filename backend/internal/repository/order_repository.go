@@ -54,7 +54,16 @@ func (r *OrderRepository) GetByIDTx(tx *gorm.DB, id uuid.UUID) (*domain.Order, e
 	return &order, nil
 }
 
-func (r *OrderRepository) List() ([]domain.Order, error) {
+// ListPaged returns orders newest-first with heavy relation preloads, but
+// always bounded by limit/offset to prevent high memory usage.
+func (r *OrderRepository) ListPaged(limit, offset int) ([]domain.Order, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	var orders []domain.Order
 	if err := r.db.
 		Preload("Items").
@@ -64,10 +73,16 @@ func (r *OrderRepository) List() ([]domain.Order, error) {
 		Preload("Payment").
 		Preload("Location").
 		Order("created_at desc").
+		Limit(limit).
+		Offset(offset).
 		Find(&orders).Error; err != nil {
 		return nil, err
 	}
 	return orders, nil
+}
+
+func (r *OrderRepository) List() ([]domain.Order, error) {
+	return r.ListPaged(50, 0)
 }
 
 func (r *OrderRepository) ListByStatus(status string) ([]domain.Order, error) {
