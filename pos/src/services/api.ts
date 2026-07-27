@@ -586,8 +586,54 @@ async function markLocalOrderStatus(
   order_status: "PENDING" | "COMPLETED" | "CANCELLED",
   opts?: { pendingSync?: boolean },
 ) {
+  const t0 = Date.now();
   try {
+    // #region agent log
+    fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "ec6f7f",
+      },
+      body: JSON.stringify({
+        sessionId: "ec6f7f",
+        hypothesisId: "D",
+        location: "api.ts:markLocalOrderStatus:start",
+        message: "markLocalOrderStatus starting (may hit network via ordersRepo.get)",
+        data: {
+          idPrefix: id.slice(0, 8),
+          order_status,
+          online: typeof navigator !== "undefined" ? navigator.onLine : null,
+        },
+        timestamp: Date.now(),
+        runId: "pre-fix",
+      }),
+    }).catch(() => {});
+    // #endregion
     const order = await ordersRepo.get(id);
+    // #region agent log
+    fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "ec6f7f",
+      },
+      body: JSON.stringify({
+        sessionId: "ec6f7f",
+        hypothesisId: "D",
+        location: "api.ts:markLocalOrderStatus:afterGet",
+        message: "ordersRepo.get finished",
+        data: {
+          idPrefix: id.slice(0, 8),
+          getMs: Date.now() - t0,
+          found: Boolean(order),
+          online: typeof navigator !== "undefined" ? navigator.onLine : null,
+        },
+        timestamp: Date.now(),
+        runId: "pre-fix",
+      }),
+    }).catch(() => {});
+    // #endregion
     await upsertLocalOrder({
       ...order,
       order_status,
@@ -720,12 +766,52 @@ export const ordersApi = {
     }
   },
   cancel: async (id: string) => {
+    const t0 = Date.now();
+    // #region agent log
+    fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "ec6f7f",
+      },
+      body: JSON.stringify({
+        sessionId: "ec6f7f",
+        hypothesisId: "E",
+        location: "api.ts:cancel:start",
+        message: "cancel started",
+        data: {
+          idPrefix: id.slice(0, 8),
+          online: typeof navigator !== "undefined" ? navigator.onLine : null,
+        },
+        timestamp: Date.now(),
+        runId: "pre-fix",
+      }),
+    }).catch(() => {});
+    // #endregion
     try {
       if (!isOnline()) throw new ApiError("Network unavailable", 0);
       const result = await apiFetch<null>(`/orders/${id}/cancel`, {
         method: "PATCH",
       });
       await markLocalOrderStatus(id, "CANCELLED");
+      // #region agent log
+      fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "ec6f7f",
+        },
+        body: JSON.stringify({
+          sessionId: "ec6f7f",
+          hypothesisId: "E",
+          location: "api.ts:cancel:onlineOk",
+          message: "cancel finished online path",
+          data: { totalMs: Date.now() - t0 },
+          timestamp: Date.now(),
+          runId: "pre-fix",
+        }),
+      }).catch(() => {});
+      // #endregion
       return { offline: false as const, data: result };
     } catch (e) {
       const isLocal = await ordersRepo
@@ -735,6 +821,28 @@ export const ordersApi = {
       if (isQueueableError(e) || isLocal) {
         await enqueueAndTrack({ type: "CANCEL_ORDER", payload: { id } });
         await markLocalOrderStatus(id, "CANCELLED", { pendingSync: true });
+        // #region agent log
+        fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "ec6f7f",
+          },
+          body: JSON.stringify({
+            sessionId: "ec6f7f",
+            hypothesisId: "E",
+            location: "api.ts:cancel:offlineOk",
+            message: "cancel finished offline/queue path",
+            data: {
+              totalMs: Date.now() - t0,
+              isLocal,
+              queueable: isQueueableError(e),
+            },
+            timestamp: Date.now(),
+            runId: "pre-fix",
+          }),
+        }).catch(() => {});
+        // #endregion
         return {
           offline: true as const,
           message: offlineOkMessage("Order cancelled"),

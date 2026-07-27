@@ -42,13 +42,42 @@ export default function LoginPage() {
 
     (async () => {
       const token = localStorage.getItem(TOKEN_KEY);
+      const session = await sessionRepo.get();
+      // #region agent log
+      fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "ec6f7f",
+        },
+        body: JSON.stringify({
+          sessionId: "ec6f7f",
+          hypothesisId: "B",
+          location: "login/page.tsx:sessionRestore",
+          message: "Login page session restore check",
+          data: {
+            hasLsToken: Boolean(token),
+            lsExpired: token ? isTokenExpired(token) : null,
+            hasSession: Boolean(session?.token),
+            sessionExpired: session?.exp
+              ? session.exp * 1000 <= Date.now()
+              : session
+                ? false
+                : null,
+            online: navigator.onLine,
+            savedAt: session?.saved_at ?? null,
+          },
+          timestamp: Date.now(),
+          runId: "pre-fix",
+        }),
+      }).catch(() => {});
+      // #endregion
       if (token && !isTokenExpired(token)) {
         router.replace("/orders/new");
         return;
       }
       if (token) localStorage.removeItem(TOKEN_KEY);
 
-      const session = await sessionRepo.get();
       if (
         session?.token &&
         (!session.exp || session.exp * 1000 > Date.now())

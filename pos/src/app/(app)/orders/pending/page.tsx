@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -65,6 +65,38 @@ export default function PendingOrdersPage() {
     refetchInterval: 5000,
     refetchOnWindowFocus: true,
   });
+
+  // #region agent log
+  useEffect(() => {
+    fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "ec6f7f",
+      },
+      body: JSON.stringify({
+        sessionId: "ec6f7f",
+        hypothesisId: "C",
+        location: "pending/page.tsx:ordersState",
+        message: "Real pending page loaded (not /offline stub)",
+        data: {
+          online: navigator.onLine,
+          orderCount: orders.length,
+          isLoading,
+          isFetching,
+          sampleStatuses: orders.slice(0, 5).map((o) => ({
+            id: o.id?.slice(0, 8),
+            status: o.order_status,
+            sync: o.sync_status,
+            num: o.order_number,
+          })),
+        },
+        timestamp: Date.now(),
+        runId: "pre-fix",
+      }),
+    }).catch(() => {});
+  }, [orders, isLoading, isFetching]);
+  // #endregion
 
   const filtered = useMemo(
     () =>

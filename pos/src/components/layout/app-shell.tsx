@@ -38,6 +38,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // #region agent log
+      fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "ec6f7f",
+        },
+        body: JSON.stringify({
+          sessionId: "ec6f7f",
+          hypothesisId: "B",
+          location: "app-shell.tsx:authGate",
+          message: "AppShell auth gate decision",
+          data: {
+            hasToken: Boolean(token),
+            expired: token ? isTokenExpired(token) : null,
+            online: typeof navigator !== "undefined" ? navigator.onLine : null,
+            path: pathname,
+            willRedirectLogin: !token || isTokenExpired(token),
+          },
+          timestamp: Date.now(),
+          runId: "pre-fix",
+        }),
+      }).catch(() => {});
+      // #endregion
+
       if (!token || isTokenExpired(token)) {
         localStorage.removeItem(TOKEN_KEY);
         await sessionRepo.clear();
