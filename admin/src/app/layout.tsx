@@ -6,6 +6,7 @@ import "./globals.css";
 const geist = Geist({
   subsets: ["latin"],
   variable: "--font-geist-sans",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -17,8 +18,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geist.variable} h-full`}>
-      <body className="h-full bg-black font-sans text-white antialiased">
+    <html lang="en" className={`${geist.variable} h-full`} suppressHydrationWarning>
+      <body className="h-full bg-black font-sans text-white antialiased" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

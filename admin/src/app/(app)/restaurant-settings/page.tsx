@@ -31,9 +31,6 @@ export default function RestaurantSettingsPage() {
           currency: s.currency || "Rs",
           cashOnDeliveryFee: s.cash_on_delivery_fee ?? 0,
         });
-        // #region agent log
-        fetch("http://127.0.0.1:7888/ingest/8bfa3430-75a3-4f8f-9f4b-0fb77dfcf7ef",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"ec6f7f"},body:JSON.stringify({sessionId:"ec6f7f",hypothesisId:"S2",location:"restaurant-settings/page.tsx:load",message:"settings loaded",data:{restaurant_name:s.restaurant_name,phone:s.phone,opening_time:s.opening_time,currency:s.currency,cash_on_delivery_fee:s.cash_on_delivery_fee},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
       })
       .catch((e) =>
         toast.error(
@@ -61,9 +58,6 @@ export default function RestaurantSettingsPage() {
         currency: form.currency,
         cash_on_delivery_fee: Number(form.cashOnDeliveryFee || 0),
       });
-      // #region agent log
-      fetch("http://127.0.0.1:7888/ingest/8bfa3430-75a3-4f8f-9f4b-0fb77dfcf7ef",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"ec6f7f"},body:JSON.stringify({sessionId:"ec6f7f",hypothesisId:"S2",location:"restaurant-settings/page.tsx:save",message:"restaurant settings saved",data:{restaurant_name:form.restaurantName,phone:form.phone,opening_time:form.openingHours,currency:form.currency,cash_on_delivery_fee:form.cashOnDeliveryFee},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       toast.success("Restaurant settings saved");
     } catch (e) {
       toast.error(

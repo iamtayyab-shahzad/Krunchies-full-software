@@ -547,7 +547,7 @@ export async function runSync(reason: string = "manual"): Promise<void> {
       if (!hadFailure || reason === "manual") {
         try {
           const [orders, inventory] = await Promise.all([
-            apiFetch<Order[]>("/orders"),
+            apiFetch<Order[]>("/orders?limit=100"),
             apiFetch<InventoryItem[]>("/inventory"),
           ]);
           const local = await listLocalOrders();
@@ -621,7 +621,7 @@ export function startSyncEngine() {
   const interval = setInterval(() => {
     if (navigator.onLine) void runSync("interval");
     else void refreshPendingCount();
-  }, 15_000);
+  }, 60_000);
 
   if (navigator.onLine) void runSync("startup");
 

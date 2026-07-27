@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -62,41 +62,9 @@ export default function PendingOrdersPage() {
   const { data: orders = [], isLoading, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["orders", "pending"],
     queryFn: ordersApi.pending,
-    refetchInterval: 5000,
+    refetchInterval: 12_000,
     refetchOnWindowFocus: true,
   });
-
-  // #region agent log
-  useEffect(() => {
-    fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "ec6f7f",
-      },
-      body: JSON.stringify({
-        sessionId: "ec6f7f",
-        hypothesisId: "C",
-        location: "pending/page.tsx:ordersState",
-        message: "Real pending page loaded (not /offline stub)",
-        data: {
-          online: navigator.onLine,
-          orderCount: orders.length,
-          isLoading,
-          isFetching,
-          sampleStatuses: orders.slice(0, 5).map((o) => ({
-            id: o.id?.slice(0, 8),
-            status: o.order_status,
-            sync: o.sync_status,
-            num: o.order_number,
-          })),
-        },
-        timestamp: Date.now(),
-        runId: "pre-fix",
-      }),
-    }).catch(() => {});
-  }, [orders, isLoading, isFetching]);
-  // #endregion
 
   const filtered = useMemo(
     () =>
@@ -171,7 +139,11 @@ export default function PendingOrdersPage() {
     const items = (order.items || []).map((item) => {
       const meta = decodeKitchenInstructions(item.special_instructions);
       return {
-        key: makeLineKey(item.product_id, item.product_size_id),
+        key: makeLineKey(
+          item.product_id,
+          item.product_size_id,
+          meta.notes || undefined,
+        ),
         product_id: item.product_id,
         product_name: item.product?.name || "Item",
         product_image: item.product?.image || "",
@@ -317,8 +289,11 @@ export default function PendingOrdersPage() {
                     </p>
                   ) : null}
                   <ul className="mt-1 space-y-1 rounded-lg border border-zinc-800 bg-black/30 p-3 text-sm text-zinc-300">
-                    {items.map((item) => (
-                      <li key={item.id} className="flex justify-between gap-3">
+                    {items.map((item, idx) => (
+                      <li
+                        key={item.id || `${order.id}-item-${idx}`}
+                        className="flex justify-between gap-3"
+                      >
                         <span>
                           {item.quantity}× {item.product?.name || "Item"}
                           {item.product_size?.size

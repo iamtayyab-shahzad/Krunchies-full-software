@@ -30,6 +30,7 @@ import type { InventoryItem, Recipe } from "@/types";
 export default function InventoryPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"stock" | "recipes" | "history">("stock");
+  const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [recipeOpen, setRecipeOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
@@ -72,6 +73,39 @@ export default function InventoryPage() {
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       );
   }, [inventory]);
+
+  const q = search.trim().toLowerCase();
+
+  const filteredInventory = useMemo(() => {
+    if (!q) return inventory;
+    return inventory.filter(
+      (item) =>
+        item.name.toLowerCase().includes(q) ||
+        item.unit.toLowerCase().includes(q),
+    );
+  }, [inventory, q]);
+
+  const filteredRecipes = useMemo(() => {
+    if (!q) return recipes;
+    return recipes.filter((r) => {
+      const productName = r.product?.name || r.product_id;
+      const invName = r.inventory?.name || r.inventory_id;
+      return (
+        productName.toLowerCase().includes(q) ||
+        invName.toLowerCase().includes(q)
+      );
+    });
+  }, [recipes, q]);
+
+  const filteredHistory = useMemo(() => {
+    if (!q) return history;
+    return history.filter(
+      (t) =>
+        t.item_name.toLowerCase().includes(q) ||
+        (t.transaction_type || "").toLowerCase().includes(q) ||
+        (t.reason || "").toLowerCase().includes(q),
+    );
+  }, [history, q]);
 
   const saveItem = async () => {
     try {
@@ -144,31 +178,41 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex gap-2">
-        {(
-          [
-            ["stock", "Stock List"],
-            ["recipes", "Recipes"],
-            ["history", "History"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={cn(
-              "rounded-lg px-4 py-2 text-sm font-bold",
-              tab === id ? "bg-orange-500 text-black" : "bg-zinc-900 text-zinc-400",
-            )}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["stock", "Stock List"],
+              ["recipes", "Recipes"],
+              ["history", "History"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-bold",
+                tab === id
+                  ? "bg-orange-500 text-black"
+                  : "bg-zinc-900 text-zinc-400",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search inventory..."
+          className="sm:max-w-xs"
+        />
       </div>
 
       {tab === "stock" && (
         <div className="space-y-3">
-          {inventory.map((item) => {
+          {filteredInventory.map((item) => {
             const low = item.stock <= item.minimum_stock;
             return (
               <div
@@ -223,12 +267,17 @@ export default function InventoryPage() {
               </div>
             );
           })}
+          {!filteredInventory.length && (
+            <p className="text-zinc-500">
+              {q ? "No inventory items match your search." : "No inventory items."}
+            </p>
+          )}
         </div>
       )}
 
       {tab === "recipes" && (
         <div className="space-y-3">
-          {recipes.map((r: Recipe) => (
+          {filteredRecipes.map((r: Recipe) => (
             <div
               key={r.id}
               className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-4"
@@ -253,15 +302,17 @@ export default function InventoryPage() {
               </Button>
             </div>
           ))}
-          {!recipes.length && (
-            <p className="text-zinc-500">No recipes configured.</p>
+          {!filteredRecipes.length && (
+            <p className="text-zinc-500">
+              {q ? "No recipes match your search." : "No recipes configured."}
+            </p>
           )}
         </div>
       )}
 
       {tab === "history" && (
         <div className="space-y-2">
-          {history.map((t) => (
+          {filteredHistory.map((t) => (
             <div
               key={t.id}
               className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm"
@@ -274,10 +325,11 @@ export default function InventoryPage() {
               </p>
             </div>
           ))}
-          {!history.length && (
+          {!filteredHistory.length && (
             <p className="text-zinc-500">
-              No transaction history loaded. Complete orders to generate
-              consumption records.
+              {q
+                ? "No history matches your search."
+                : "No transaction history loaded. Complete orders to generate consumption records."}
             </p>
           )}
         </div>

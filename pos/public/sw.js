@@ -208,29 +208,6 @@ async function navigationHandler(request) {
     }
     return response;
   } catch {
-    // #region agent log
-    try {
-      fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "ec6f7f",
-        },
-        body: JSON.stringify({
-          sessionId: "ec6f7f",
-          hypothesisId: "A",
-          location: "sw.js:navigationHandler:catch",
-          message: "SW navigation offline — resolving shell fallback",
-          data: { url: request.url },
-          timestamp: Date.now(),
-          runId: "post-fix",
-        }),
-      }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
-    // #endregion
-
     const cache = await caches.open(SHELL_CACHE);
     let cached = await matchShell(cache, request);
 

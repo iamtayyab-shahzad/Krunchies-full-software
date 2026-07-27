@@ -1,11 +1,15 @@
 package main
 
 import (
+	"os"
+
 	"backend/internal/config"
 	"backend/internal/database"
 	"backend/internal/logger"
 	"backend/internal/routes"
 	"backend/internal/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -13,6 +17,10 @@ func main() {
 	if err != nil {
 		logger.Error("configuration_error", map[string]any{"error": err.Error()})
 		panic(err)
+	}
+
+	if os.Getenv("APP_ENV") == "production" || os.Getenv("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	logger.Info("database_target", map[string]any{

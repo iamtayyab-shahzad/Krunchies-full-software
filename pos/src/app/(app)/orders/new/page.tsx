@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Minus, Plus, Trash2, Printer } from "lucide-react";
@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useBill } from "@/context/bill-context";
+import { DealFlavorDialog } from "@/components/deal-flavor-dialog";
+import { requiresDealFlavorChoice } from "@/lib/deal-flavors";
 import {
   calcCodFee,
   calcGrandTotal,
@@ -47,6 +49,7 @@ export default function NewOrderPage() {
   const bill = useBill();
   const [categoryId, setCategoryId] = useState("all");
   const [busy, setBusy] = useState(false);
+  const [dealProduct, setDealProduct] = useState<Product | null>(null);
   const isWalkin = bill.orderType === "walkin";
   const paymentOptions = paymentsForOrderType(bill.orderType);
 
@@ -93,8 +96,16 @@ export default function NewOrderPage() {
   );
   const grandTotal = calcGrandTotal(bill.subtotal, deliveryCharge, codFee);
 
+  const productsWithCategories = useMemo(() => {
+    const byId = Object.fromEntries(categories.map((c) => [c.id, c]));
+    return products.map((p) => ({
+      ...p,
+      category: p.category || byId[p.category_id],
+    }));
+  }, [products, categories]);
+
   const filtered = useMemo(() => {
-    return products
+    return productsWithCategories
       .filter((p) => p.available)
       .filter((p) => (categoryId === "all" ? true : p.category_id === categoryId))
       .filter((p) => {
@@ -106,7 +117,7 @@ export default function NewOrderPage() {
         );
       })
       .sort((a, b) => a.display_order - b.display_order);
-  }, [products, categoryId, bill.search]);
+  }, [productsWithCategories, categoryId, bill.search]);
 
   const onProductClick = (product: Product) => {
     const sizes = product.sizes || [];
@@ -114,10 +125,23 @@ export default function NewOrderPage() {
       toast.error("No sizes configured for this product");
       return;
     }
+    if (requiresDealFlavorChoice(product)) {
+      setDealProduct(product);
+      return;
+    }
     bill.addProduct(product, sizes[0]);
     if (sizes.length > 1) {
       toast.message(`${product.name} added (${sizes[0].size})`);
     }
+  };
+
+  const onDealConfirm = (
+    product: Product,
+    size: ProductSize,
+    flavorNote: string,
+  ) => {
+    bill.addProduct(product, size, { special_instructions: flavorNote });
+    toast.success(`${product.name} added with pizza flavors`);
   };
 
   const buildPayload = () => {
@@ -153,11 +177,23 @@ export default function NewOrderPage() {
     items: (order.items || []).map((item, idx) => {
       const billLine = bill.items[idx];
       const match =
-        bill.items.find(
-          (b) =>
-            b.product_id === item.product_id &&
-            b.size_id === item.product_size_id,
-        ) || billLine;
+        billLine &&
+        billLine.product_id === item.product_id &&
+        billLine.size_id === item.product_size_id
+          ? billLine
+          : bill.items.find(
+              (b) =>
+                b.product_id === item.product_id &&
+                b.size_id === item.product_size_id &&
+                (b.special_instructions || "") ===
+                  (item.special_instructions || b.special_instructions || ""),
+            ) ||
+            bill.items.find(
+              (b) =>
+                b.product_id === item.product_id &&
+                b.size_id === item.product_size_id,
+            ) ||
+            billLine;
       return {
         ...item,
         product: item.product || {
@@ -370,7 +406,7 @@ export default function NewOrderPage() {
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {filtered.map((product) => (
-              <ProductTile
+              <MemoProductTile
                 key={product.id}
                 product={product}
                 currency={currency}
@@ -674,6 +710,17 @@ export default function NewOrderPage() {
           </Button>
         </div>
       </aside>
+
+      <DealFlavorDialog
+        open={Boolean(dealProduct)}
+        product={dealProduct}
+        products={productsWithCategories}
+        categories={categories}
+        onOpenChange={(open) => {
+          if (!open) setDealProduct(null);
+        }}
+        onConfirm={onDealConfirm}
+      />
     </div>
   );
 }
@@ -707,7 +754,8 @@ function ProductTile({
             fill
             className="object-cover"
             sizes="200px"
-            unoptimized
+            loading="lazy"
+            quality={70}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-zinc-600">
@@ -752,3 +800,5 @@ function ProductTile({
     </button>
   );
 }
+
+const MemoProductTile = memo(ProductTile);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -37,6 +38,10 @@ const FALLBACK_PRODUCT_IMAGE =
 function isDirectImageUrl(url: string) {
   if (!url) return false;
   if (url.startsWith("data:image/")) return true;
+  // Local public assets from menu import, e.g. /products/pizzas/foo.webp
+  if (url.startsWith("/")) {
+    return /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(url.split("?")[0] || "");
+  }
   if (url.includes("images.unsplash.com/photo-")) return true;
   try {
     const u = new URL(url);
@@ -162,7 +167,7 @@ export default function ProductsPage() {
     }
     if (!isDirectImageUrl(form.image)) {
       toast.error(
-        "Paste a direct image link (e.g. images.unsplash.com/photo-...), not a search page URL",
+        "Use a local path like /products/pizzas/name.webp, or a direct image URL (jpg/png/webp)",
       );
       return;
     }
@@ -284,14 +289,16 @@ export default function ProductsPage() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-zinc-900">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Image
                         src={safeProductImage(product.image)}
                         alt={product.name}
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
-                        }}
+                        fill
+                        sizes="48px"
+                        className="object-cover"
+                        quality={60}
+                        unoptimized={safeProductImage(product.image).startsWith(
+                          "data:",
+                        )}
                       />
                     </div>
                     <div>

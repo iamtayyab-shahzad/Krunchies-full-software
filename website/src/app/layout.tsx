@@ -8,11 +8,15 @@ const display = Bebas_Neue({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-display",
+  display: "swap",
+  preload: true,
 });
 
 const body = Outfit({
   subsets: ["latin"],
   variable: "--font-body",
+  display: "swap",
+  preload: true,
 });
 
 export const metadata: Metadata = {
@@ -55,8 +59,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} h-full`}>
-      <body className="flex min-h-full flex-col bg-background font-sans text-foreground antialiased">
+    <html lang="en" className={`${display.variable} ${body.variable} h-full`} suppressHydrationWarning>
+      <body className="flex min-h-full flex-col bg-background font-sans text-foreground antialiased" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -9,6 +9,8 @@ import { TOKEN_KEY, isTokenExpired, isOfflineSessionValid } from "@/lib/utils";
 import { isOnline } from "@/lib/network";
 import { sessionRepo, settingsApi, warmOfflineCache } from "@/services/api";
 
+let offlineCacheWarmed = false;
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -19,6 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     queryKey: ["settings"],
     queryFn: settingsApi.get,
     retry: false,
+    staleTime: 60_000,
   });
 
   useEffect(() => {
@@ -41,34 +44,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const allowOffline =
         !isOnline() && isOfflineSessionValid(session) && Boolean(token);
 
-      // #region agent log
-      fetch("http://127.0.0.1:7291/ingest/db8772f4-e46c-4a12-90e5-d51373bf23e5", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "ec6f7f",
-        },
-        body: JSON.stringify({
-          sessionId: "ec6f7f",
-          hypothesisId: "B",
-          location: "app-shell.tsx:authGate",
-          message: "AppShell auth gate decision",
-          data: {
-            hasToken: Boolean(token),
-            expired: token ? isTokenExpired(token) : null,
-            offlineSessionValid: isOfflineSessionValid(session),
-            allowOffline,
-            online: typeof navigator !== "undefined" ? navigator.onLine : null,
-            path: pathname,
-            willRedirectLogin:
-              !token || (isTokenExpired(token) && !allowOffline),
-          },
-          timestamp: Date.now(),
-          runId: "post-fix",
-        }),
-      }).catch(() => {});
-      // #endregion
-
       if (!token || (isTokenExpired(token) && !allowOffline)) {
         localStorage.removeItem(TOKEN_KEY);
         if (isOnline()) await sessionRepo.clear();
@@ -76,7 +51,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (isOnline()) {
+      // Warm IndexedDB once per session — not on every route change.
+      if (isOnline() && !offlineCacheWarmed) {
+        offlineCacheWarmed = true;
         void warmOfflineCache();
       }
     })();

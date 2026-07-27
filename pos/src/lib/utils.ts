@@ -78,8 +78,15 @@ export function calcGrandTotal(
   return subtotal + deliveryCharge + codFee;
 }
 
-export function makeLineKey(productId: string, sizeId: string) {
-  return `${productId}__${sizeId}`;
+export function makeLineKey(
+  productId: string,
+  sizeId: string,
+  instructions?: string,
+) {
+  const note = (instructions || "").trim();
+  return note
+    ? `${productId}__${sizeId}__${note}`
+    : `${productId}__${sizeId}`;
 }
 
 export const PAYMENT_METHODS: {

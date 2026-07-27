@@ -32,18 +32,21 @@ describe("parseDealPizzaSlots", () => {
     const slots = parseDealPizzaSlots("2 Medium Pizza, 1 Fries, 1 Drink");
     expect(slots).toHaveLength(2);
     expect(slots.every((s) => s.size === "M")).toBe(true);
+    expect(slots.every((s) => s.tier === "regular")).toBe(true);
   });
 
   it("parses large pizzas", () => {
     const slots = parseDealPizzaSlots("1 Large Pizza with drinks");
     expect(slots).toHaveLength(1);
     expect(slots[0].size).toBe("L");
+    expect(slots[0].tier).toBe("regular");
   });
 
-  it("parses XL pizzas", () => {
+  it("parses XL Special pizzas as special tier", () => {
     const slots = parseDealPizzaSlots("1 XL Pizza Special");
     expect(slots).toHaveLength(1);
     expect(slots[0].size).toBe("XL");
+    expect(slots[0].tier).toBe("special");
   });
 
   it("handles multiple sizes across a description", () => {
@@ -79,8 +82,10 @@ describe("flavorsForSlot", () => {
     makeProduct("a", "Pizza (Regular Flavour)", ["S", "M", "L"]),
     makeProduct("b", "Pizza (Regular Flavour)", ["M"]),
     makeProduct("c", "Pizza (Regular Flavour)", ["XL"]),
-    makeProduct("d", "Pizza (Special Flavour)", ["M"]),
-    makeProduct("e", "Deals", ["M"]),
+    makeProduct("d", "Special Pizza", ["M", "XL"]),
+    makeProduct("e", "Krunchies Special Pizza", ["XL"]),
+    makeProduct("f", "Special Burger", ["XL"]),
+    makeProduct("g", "Deals", ["M"]),
   ];
 
   it("only returns Regular flavours matching the slot size", () => {
@@ -88,8 +93,19 @@ describe("flavorsForSlot", () => {
       id: "pizza-1",
       label: "Regular pizza flavor 1 (M)",
       size: "M",
+      tier: "regular",
     });
     expect(medium.map((p) => p.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("returns Special pizza flavours for special tier", () => {
+    const special = flavorsForSlot(products, {
+      id: "pizza-1",
+      label: "Special pizza flavor 1 (XL)",
+      size: "XL",
+      tier: "special",
+    });
+    expect(special.map((p) => p.id).sort()).toEqual(["d", "e"]);
   });
 
   it("excludes non-regular categories even when the size matches", () => {
@@ -97,15 +113,16 @@ describe("flavorsForSlot", () => {
       id: "pizza-1",
       label: "flavor",
       size: "M",
+      tier: "regular",
     });
     expect(result.some((p) => p.id === "d")).toBe(false);
-    expect(result.some((p) => p.id === "e")).toBe(false);
+    expect(result.some((p) => p.id === "g")).toBe(false);
   });
 
   it("returns nothing when no regular flavour has the size", () => {
     const result = flavorsForSlot(
       [makeProduct("x", "Pizza (Regular Flavour)", ["L"])],
-      { id: "pizza-1", label: "flavor", size: "XL" },
+      { id: "pizza-1", label: "flavor", size: "XL", tier: "regular" },
     );
     expect(result).toHaveLength(0);
   });

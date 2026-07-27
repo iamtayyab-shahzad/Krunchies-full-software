@@ -94,7 +94,7 @@ export default function ProductDetailsPage() {
         <h1 className="mt-2 font-display text-5xl text-white">{product.name}</h1>
         <p className="mt-4 text-zinc-400">{product.description}</p>
 
-        <div className={dealFlavors.hasSlots ? "mt-8" : ""}>
+        <div className={dealFlavors.hasSlots ? "relative z-20 mt-8" : ""}>
           <DealFlavorSelector product={product} onChange={handleFlavorChange} />
         </div>
 

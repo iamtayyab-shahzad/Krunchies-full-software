@@ -7,6 +7,7 @@ import "./globals.css";
 const geist = Geist({
   subsets: ["latin"],
   variable: "--font-geist-sans",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -46,7 +47,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geist.variable} h-full`}>
+    <html lang="en" className={`${geist.variable} h-full`} suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -55,7 +56,7 @@ export default function RootLayout({
           content="black-translucent"
         />
       </head>
-      <body className="h-full bg-black font-sans text-white antialiased">
+      <body className="h-full bg-black font-sans text-white antialiased" suppressHydrationWarning>
         <Providers>
           {children}
           <RegisterSW />

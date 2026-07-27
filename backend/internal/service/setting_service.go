@@ -1,9 +1,8 @@
 package service
 
 import (
-	"encoding/json"
 	"net/http"
-	"os"
+	"sync"
 	"time"
 
 	"backend/internal/domain"
@@ -15,13 +14,36 @@ import (
 
 type SettingService struct {
 	db *gorm.DB
+
+	mu        sync.RWMutex
+	cached    *domain.Setting
+	cachedAt  time.Time
+	cacheTTL  time.Duration
 }
 
 func NewSettingService(db *gorm.DB) *SettingService {
-	return &SettingService{db: db}
+	return &SettingService{
+		db:       db,
+		cacheTTL: 60 * time.Second,
+	}
+}
+
+func (s *SettingService) invalidateCache() {
+	s.mu.Lock()
+	s.cached = nil
+	s.cachedAt = time.Time{}
+	s.mu.Unlock()
 }
 
 func (s *SettingService) Get() (*domain.Setting, error) {
+	s.mu.RLock()
+	if s.cached != nil && time.Since(s.cachedAt) < s.cacheTTL {
+		cp := *s.cached
+		s.mu.RUnlock()
+		return &cp, nil
+	}
+	s.mu.RUnlock()
+
 	var setting domain.Setting
 	err := s.db.First(&setting).Error
 	if err == gorm.ErrRecordNotFound {
@@ -37,12 +59,23 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 		if createErr := s.db.Create(&setting).Error; createErr != nil {
 			return nil, createErr
 		}
-		return &setting, nil
+		s.mu.Lock()
+		s.cached = &setting
+		s.cachedAt = time.Now()
+		s.mu.Unlock()
+		cp := setting
+		return &cp, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &setting, nil
+
+	s.mu.Lock()
+	s.cached = &setting
+	s.cachedAt = time.Now()
+	s.mu.Unlock()
+	cp := setting
+	return &cp, nil
 }
 
 // UpdateFromDTO applies partial settings via struct fields so GORM maps
@@ -108,25 +141,8 @@ func (s *SettingService) UpdateFromDTO(input dto.UpdateSettingsRequest) (*domain
 	}
 
 	if err := s.db.Model(current).Select(cols).Updates(patch).Error; err != nil {
-		// #region agent log
-		func() {
-			f, e := os.OpenFile(`C:\Users\admin\Desktop\summer_work\krunchies-full-setup\debug-ec6f7f.log`, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if e != nil {
-				return
-			}
-			defer f.Close()
-			b, _ := json.Marshal(map[string]any{
-				"sessionId":    "ec6f7f",
-				"hypothesisId": "S500",
-				"location":     "setting_service.go:UpdateFromDTO",
-				"message":      "settings update failed",
-				"data":         map[string]any{"err": err.Error(), "cols": cols},
-				"timestamp":    time.Now().UnixMilli(),
-			})
-			_, _ = f.Write(append(b, '\n'))
-		}()
-		// #endregion
 		return nil, err
 	}
+	s.invalidateCache()
 	return s.Get()
 }

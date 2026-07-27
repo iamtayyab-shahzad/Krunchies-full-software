@@ -1,19 +1,25 @@
 "use client";
 
+import Image from "next/image";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { restaurant } from "@/data/krunchies";
 
+const HERO_IMAGE =
+  "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&q=80";
+
 export function HeroSection() {
   return (
     <section className="relative min-h-[100svh] overflow-hidden">
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{
-          backgroundImage:
-            "url(https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&q=80)",
-        }}
+      <Image
+        src={HERO_IMAGE}
+        alt=""
+        fill
+        priority
+        quality={75}
+        sizes="100vw"
+        className="object-cover"
       />
       <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/40" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(249,115,22,0.25),transparent_50%)]" />

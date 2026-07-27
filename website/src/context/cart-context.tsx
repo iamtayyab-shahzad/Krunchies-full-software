@@ -12,10 +12,13 @@ import {
 import { CART_STORAGE_KEY } from "@/lib/constants";
 import type { CartItem, Product, ProductSize } from "@/types";
 
-interface CartContextValue {
+interface CartStateValue {
   items: CartItem[];
   itemCount: number;
   subtotal: number;
+}
+
+interface CartActionsValue {
   addItem: (
     product: Product,
     size: ProductSize,
@@ -28,7 +31,9 @@ interface CartContextValue {
   clearCart: () => void;
 }
 
-const CartContext = createContext<CartContextValue | null>(null);
+
+const CartStateContext = createContext<CartStateValue | null>(null);
+const CartActionsContext = createContext<CartActionsValue | null>(null);
 
 /** Stable short hash so distinct instructions become distinct cart lines. */
 function hashInstructions(value: string) {
@@ -136,11 +141,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const updateInstructions = useCallback((id: string, instructions: string) => {
     setItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, special_instructions: instructions }
-          : item,
-      ),
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const notes = instructions.trim() || undefined;
+        return {
+          ...item,
+          id: makeCartItemId(item.product_id, item.size_id, notes),
+          special_instructions: notes,
+        };
+      }),
     );
   }, []);
 
@@ -150,36 +159,47 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => setItems([]), []);
 
-  const value = useMemo<CartContextValue>(() => {
+  const state = useMemo<CartStateValue>(() => {
     const subtotal = items.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0,
     );
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-    return {
-      items,
-      itemCount,
-      subtotal,
+    return { items, itemCount, subtotal };
+  }, [items]);
+
+  const actions = useMemo<CartActionsValue>(
+    () => ({
       addItem,
       updateQuantity,
       updateInstructions,
       removeItem,
       clearCart,
-    };
-  }, [
-    items,
-    addItem,
-    updateQuantity,
-    updateInstructions,
-    removeItem,
-    clearCart,
-  ]);
+    }),
+    [addItem, updateQuantity, updateInstructions, removeItem, clearCart],
+  );
 
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+  return (
+    <CartStateContext.Provider value={state}>
+      <CartActionsContext.Provider value={actions}>
+        {children}
+      </CartActionsContext.Provider>
+    </CartStateContext.Provider>
+  );
+}
+
+/** Stable actions — safe for product cards that must not re-render on cart edits. */
+export function useCartActions() {
+  const ctx = useContext(CartActionsContext);
+  if (!ctx) throw new Error("useCartActions must be used within CartProvider");
+  return ctx;
 }
 
 export function useCart() {
-  const ctx = useContext(CartContext);
-  if (!ctx) throw new Error("useCart must be used within CartProvider");
-  return ctx;
+  const state = useContext(CartStateContext);
+  const actions = useContext(CartActionsContext);
+  if (!state || !actions) {
+    throw new Error("useCart must be used within CartProvider");
+  }
+  return { ...state, ...actions };
 }

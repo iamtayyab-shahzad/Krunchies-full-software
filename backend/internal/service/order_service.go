@@ -118,9 +118,22 @@ func (s *OrderService) CreateOrder(
 
 	subtotal := 0
 	order.Items = make([]domain.OrderItem, 0, len(input.Items))
+
+	sizeIDs := make([]uuid.UUID, 0, len(input.Items))
+	productIDs := make([]uuid.UUID, 0, len(input.Items))
 	for _, item := range input.Items {
-		var size domain.ProductSize
-		if err := tx.First(&size, "id = ?", item.ProductSizeID).Error; err != nil {
+		sizeIDs = append(sizeIDs, item.ProductSizeID)
+		productIDs = append(productIDs, item.ProductID)
+	}
+	sizesByID, productsByID, err := loadCatalogMaps(tx, sizeIDs, productIDs)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	for _, item := range input.Items {
+		size, ok := sizesByID[item.ProductSizeID]
+		if !ok {
 			tx.Rollback()
 			return nil, utils.NewAppError(http.StatusBadRequest, "invalid product size")
 		}
@@ -128,9 +141,8 @@ func (s *OrderService) CreateOrder(
 			tx.Rollback()
 			return nil, utils.NewAppError(http.StatusBadRequest, "product size does not belong to product")
 		}
-
-		var product domain.Product
-		if err := tx.First(&product, "id = ?", item.ProductID).Error; err != nil {
+		product, ok := productsByID[item.ProductID]
+		if !ok {
 			tx.Rollback()
 			return nil, utils.NewAppError(http.StatusBadRequest, "invalid product")
 		}
@@ -142,10 +154,10 @@ func (s *OrderService) CreateOrder(
 		lineTotal := size.Price * item.Quantity
 		subtotal += lineTotal
 		order.Items = append(order.Items, domain.OrderItem{
-			ProductID:     item.ProductID,
-			ProductSizeID: item.ProductSizeID,
-			Quantity:      item.Quantity,
-			Price:         size.Price,
+			ProductID:           item.ProductID,
+			ProductSizeID:       item.ProductSizeID,
+			Quantity:            item.Quantity,
+			Price:               size.Price,
 			SpecialInstructions: strings.TrimSpace(item.SpecialInstructions),
 		})
 	}
@@ -275,9 +287,20 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 		}
 		subtotal := 0
 		newItems := make([]domain.OrderItem, 0, len(*input.Items))
+		sizeIDs := make([]uuid.UUID, 0, len(*input.Items))
+		productIDs := make([]uuid.UUID, 0, len(*input.Items))
 		for _, item := range *input.Items {
-			var size domain.ProductSize
-			if err := tx.First(&size, "id = ?", item.ProductSizeID).Error; err != nil {
+			sizeIDs = append(sizeIDs, item.ProductSizeID)
+			productIDs = append(productIDs, item.ProductID)
+		}
+		sizesByID, productsByID, err := loadCatalogMaps(tx, sizeIDs, productIDs)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		for _, item := range *input.Items {
+			size, ok := sizesByID[item.ProductSizeID]
+			if !ok {
 				tx.Rollback()
 				return utils.NewAppError(http.StatusBadRequest, "invalid product size")
 			}
@@ -285,8 +308,8 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 				tx.Rollback()
 				return utils.NewAppError(http.StatusBadRequest, "product size does not belong to product")
 			}
-			var product domain.Product
-			if err := tx.First(&product, "id = ?", item.ProductID).Error; err != nil {
+			product, ok := productsByID[item.ProductID]
+			if !ok {
 				tx.Rollback()
 				return utils.NewAppError(http.StatusBadRequest, "invalid product")
 			}
@@ -396,12 +419,8 @@ func (s *OrderService) CompleteOrder(id uuid.UUID) error {
 		return utils.NewAppError(http.StatusConflict, "order already processed")
 	}
 
-	// Reload within same tx after transition
-	order, err = s.orderRepo.GetByIDTx(tx, id)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
+	// Avoid a second full Preload — status is known after a successful transition.
+	order.OrderStatus = "COMPLETED"
 
 	if err := s.consumeInventory(tx, order); err != nil {
 		tx.Rollback()
@@ -480,11 +499,17 @@ func (s *OrderService) consumeInventory(tx *gorm.DB, order *domain.Order) error 
 		reason = fmt.Sprintf("Order %s completed", order.ID.String())
 	}
 
+	productIDs := make([]uuid.UUID, 0, len(order.Items))
 	for _, item := range order.Items {
-		recipes, err := s.inventoryRepo.RecipeLinesFor(tx, item.ProductID, item.ProductSizeID)
-		if err != nil {
-			return err
-		}
+		productIDs = append(productIDs, item.ProductID)
+	}
+	recipesByProduct, err := s.inventoryRepo.RecipeLinesForProducts(tx, productIDs)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range order.Items {
+		recipes := pickRecipeLines(recipesByProduct[item.ProductID], item.ProductSizeID)
 		for _, recipe := range recipes {
 			consumeQty := recipe.QuantityRequired * int64(item.Quantity)
 			if consumeQty <= 0 {
@@ -503,6 +528,52 @@ func (s *OrderService) consumeInventory(tx *gorm.DB, order *domain.Order) error 
 		}
 	}
 	return nil
+}
+
+func loadCatalogMaps(
+	tx *gorm.DB,
+	sizeIDs, productIDs []uuid.UUID,
+) (map[uuid.UUID]domain.ProductSize, map[uuid.UUID]domain.Product, error) {
+	sizesByID := make(map[uuid.UUID]domain.ProductSize, len(sizeIDs))
+	productsByID := make(map[uuid.UUID]domain.Product, len(productIDs))
+	if len(sizeIDs) > 0 {
+		var sizes []domain.ProductSize
+		if err := tx.Where("id IN ?", sizeIDs).Find(&sizes).Error; err != nil {
+			return nil, nil, err
+		}
+		for _, size := range sizes {
+			sizesByID[size.ID] = size
+		}
+	}
+	if len(productIDs) > 0 {
+		var products []domain.Product
+		if err := tx.Where("id IN ?", productIDs).Find(&products).Error; err != nil {
+			return nil, nil, err
+		}
+		for _, product := range products {
+			productsByID[product.ID] = product
+		}
+	}
+	return sizesByID, productsByID, nil
+}
+
+func pickRecipeLines(all []domain.Recipe, sizeID uuid.UUID) []domain.Recipe {
+	if len(all) == 0 {
+		return nil
+	}
+	sized := make([]domain.Recipe, 0, len(all))
+	generic := make([]domain.Recipe, 0, len(all))
+	for _, r := range all {
+		if r.ProductSizeID != nil && *r.ProductSizeID == sizeID {
+			sized = append(sized, r)
+		} else if r.ProductSizeID == nil {
+			generic = append(generic, r)
+		}
+	}
+	if len(sized) > 0 {
+		return sized
+	}
+	return generic
 }
 
 func validatePaymentForOrderType(orderType, method string) error {

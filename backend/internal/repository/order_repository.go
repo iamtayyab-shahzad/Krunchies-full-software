@@ -15,19 +15,33 @@ func NewOrderRepository(db *gorm.DB) *OrderRepository {
 	return &OrderRepository{db: db}
 }
 
+// listPreloads attaches relations needed by POS/Admin UIs without pulling
+// unused product blobs (description, full category trees, etc.).
+func listPreloads(q *gorm.DB) *gorm.DB {
+	return q.
+		Preload("Items").
+		Preload("Items.Product", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "name", "image", "category_id", "available")
+		}).
+		Preload("Items.ProductSize", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "product_id", "size", "price")
+		}).
+		Preload("Customer", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "name", "phone")
+		}).
+		Preload("Payment").
+		Preload("Location", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "name", "delivery_charge")
+		})
+}
+
 func (r *OrderRepository) Create(tx *gorm.DB, order *domain.Order) error {
 	return tx.Create(order).Error
 }
 
 func (r *OrderRepository) GetByClientOrderID(clientOrderID uuid.UUID) (*domain.Order, error) {
 	var order domain.Order
-	if err := r.db.
-		Preload("Items").
-		Preload("Items.Product").
-		Preload("Items.ProductSize").
-		Preload("Customer").
-		Preload("Location").
-		Preload("Payment").
+	if err := listPreloads(r.db).
 		Where("client_order_id = ?", clientOrderID).
 		First(&order).Error; err != nil {
 		return nil, err
@@ -41,13 +55,7 @@ func (r *OrderRepository) GetByID(id uuid.UUID) (*domain.Order, error) {
 
 func (r *OrderRepository) GetByIDTx(tx *gorm.DB, id uuid.UUID) (*domain.Order, error) {
 	var order domain.Order
-	if err := tx.
-		Preload("Items").
-		Preload("Items.Product").
-		Preload("Items.ProductSize").
-		Preload("Customer").
-		Preload("Location").
-		Preload("Payment").
+	if err := listPreloads(tx).
 		First(&order, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
@@ -65,13 +73,7 @@ func (r *OrderRepository) ListPaged(limit, offset int) ([]domain.Order, error) {
 	}
 
 	var orders []domain.Order
-	if err := r.db.
-		Preload("Items").
-		Preload("Items.Product").
-		Preload("Items.ProductSize").
-		Preload("Customer").
-		Preload("Payment").
-		Preload("Location").
+	if err := listPreloads(r.db).
 		Order("created_at desc").
 		Limit(limit).
 		Offset(offset).
@@ -86,16 +88,15 @@ func (r *OrderRepository) List() ([]domain.Order, error) {
 }
 
 func (r *OrderRepository) ListByStatus(status string) ([]domain.Order, error) {
+	limit := 200
+	if status == "PENDING" {
+		limit = 300
+	}
 	var orders []domain.Order
-	if err := r.db.
-		Preload("Items").
-		Preload("Items.Product").
-		Preload("Items.ProductSize").
-		Preload("Customer").
-		Preload("Payment").
-		Preload("Location").
+	if err := listPreloads(r.db).
 		Where("order_status = ?", status).
 		Order("created_at desc").
+		Limit(limit).
 		Find(&orders).Error; err != nil {
 		return nil, err
 	}
@@ -104,14 +105,10 @@ func (r *OrderRepository) ListByStatus(status string) ([]domain.Order, error) {
 
 func (r *OrderRepository) ListByType(orderType string) ([]domain.Order, error) {
 	var orders []domain.Order
-	if err := r.db.
-		Preload("Items").
-		Preload("Items.Product").
-		Preload("Items.ProductSize").
-		Preload("Customer").
-		Preload("Payment").
+	if err := listPreloads(r.db).
 		Where("order_type = ?", orderType).
 		Order("created_at desc").
+		Limit(200).
 		Find(&orders).Error; err != nil {
 		return nil, err
 	}

@@ -1,12 +1,9 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"backend/internal/dto"
 	"backend/internal/service"
@@ -16,26 +13,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
-
-// #region agent log
-func debugOrderLog(location, message string, data map[string]any) {
-	f, err := os.OpenFile(`C:\Users\admin\Desktop\summer_work\krunchies-full-setup\debug-ec6f7f.log`, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	entry := map[string]any{
-		"sessionId": "ec6f7f",
-		"location":  location,
-		"message":   message,
-		"data":      data,
-		"timestamp": time.Now().UnixMilli(),
-	}
-	b, _ := json.Marshal(entry)
-	_, _ = f.Write(append(b, '\n'))
-}
-
-// #endregion
 
 type OrderHandler struct {
 	service *service.OrderService
@@ -48,30 +25,9 @@ func NewOrderHandler(service *service.OrderService) *OrderHandler {
 func (h *OrderHandler) createWithType(c *gin.Context, orderType string) {
 	var input dto.CreateOrderRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		// #region agent log
-		debugOrderLog("order_handler.go:createWithType", "bind failed", map[string]any{
-			"hypothesisId": "A/B/C",
-			"orderType":    orderType,
-			"bindError":    err.Error(),
-			"mappedMsg":    orderValidationMessage(err),
-		})
-		// #endregion
 		utils.Error(c, http.StatusBadRequest, orderValidationMessage(err))
 		return
 	}
-	// #region agent log
-	debugOrderLog("order_handler.go:createWithType", "bind ok", map[string]any{
-		"hypothesisId":   "none",
-		"orderType":      orderType,
-		"paymentMethod":  input.PaymentMethod,
-		"locationID":     input.LocationID.String(),
-		"itemCount":      len(input.Items),
-		"isGuest":        input.IsGuest,
-		"nameLen":        len(input.CustomerName),
-		"phoneLen":       len(input.Phone),
-		"addressLen":     len(input.Address),
-	})
-	// #endregion
 	if input.IsGuest && orderType == "website" {
 		orderType = "guest"
 	}

@@ -1,11 +1,33 @@
 import type { Metadata } from "next";
-import { CallToAction } from "@/components/home/call-to-action";
-import { CustomerReviews } from "@/components/home/customer-reviews";
-import { FeaturedProducts } from "@/components/home/featured-products";
+import dynamic from "next/dynamic";
 import { HeroSection } from "@/components/home/hero-section";
 import { OfferPopup } from "@/components/home/offer-popup";
-import { PopularCategories } from "@/components/home/popular-categories";
-import { RestaurantStory } from "@/components/home/restaurant-story";
+
+const FeaturedProducts = dynamic(() =>
+  import("@/components/home/featured-products").then((m) => ({
+    default: m.FeaturedProducts,
+  })),
+);
+const PopularCategories = dynamic(() =>
+  import("@/components/home/popular-categories").then((m) => ({
+    default: m.PopularCategories,
+  })),
+);
+const RestaurantStory = dynamic(() =>
+  import("@/components/home/restaurant-story").then((m) => ({
+    default: m.RestaurantStory,
+  })),
+);
+const CustomerReviews = dynamic(() =>
+  import("@/components/home/customer-reviews").then((m) => ({
+    default: m.CustomerReviews,
+  })),
+);
+const CallToAction = dynamic(() =>
+  import("@/components/home/call-to-action").then((m) => ({
+    default: m.CallToAction,
+  })),
+);
 
 export const metadata: Metadata = {
   title: "Home",

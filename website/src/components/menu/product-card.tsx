@@ -2,23 +2,31 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import dynamic from "next/dynamic";
+import { memo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ProductModal } from "@/components/menu/product-modal";
-import { useCart } from "@/context/cart-context";
+import { useCartActions } from "@/context/cart-context";
 import { isDealProduct, parseDealPizzaSlots } from "@/lib/deal-flavors";
 import { formatPrice } from "@/lib/utils";
 import type { Product } from "@/types";
+
+const ProductModal = dynamic(
+  () =>
+    import("@/components/menu/product-modal").then((m) => ({
+      default: m.ProductModal,
+    })),
+  { ssr: false },
+);
 
 interface ProductCardProps {
   product: Product;
   currency?: string;
 }
 
-export function ProductCard({ product, currency = "Rs" }: ProductCardProps) {
-  const { addItem } = useCart();
+function ProductCardInner({ product, currency = "Rs" }: ProductCardProps) {
+  const { addItem } = useCartActions();
   const [open, setOpen] = useState(false);
   const startingPrice = Math.min(...product.sizes.map((s) => s.price));
 
@@ -26,11 +34,17 @@ export function ProductCard({ product, currency = "Rs" }: ProductCardProps) {
     isDealProduct(product) &&
     parseDealPizzaSlots(product.description || "").length > 0;
 
+  // Defer open so the same click that opens the modal is not treated as an
+  // outside pointer event that immediately dismisses the Radix Dialog.
+  const openModal = () => {
+    requestAnimationFrame(() => setOpen(true));
+  };
+
   const quickAdd = () => {
     // Deals that include pizzas need per-size flavour selection, so send the
     // customer to the modal instead of blindly adding a flavourless deal.
     if (requiresFlavorChoice) {
-      setOpen(true);
+      openModal();
       return;
     }
     const size = product.sizes[0];
@@ -44,7 +58,7 @@ export function ProductCard({ product, currency = "Rs" }: ProductCardProps) {
       <article className="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 transition-colors hover:border-orange-500/40">
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={openModal}
           className="relative block aspect-[4/3] w-full overflow-hidden"
         >
           <Image
@@ -53,6 +67,8 @@ export function ProductCard({ product, currency = "Rs" }: ProductCardProps) {
             fill
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width: 768px) 100vw, 33vw"
+            loading="lazy"
+            quality={75}
           />
           {product.featured && (
             <Badge className="absolute left-3 top-3">Featured</Badge>
@@ -80,7 +96,11 @@ export function ProductCard({ product, currency = "Rs" }: ProductCardProps) {
           </div>
         </div>
       </article>
-      <ProductModal product={product} open={open} onOpenChange={setOpen} />
+      {open ? (
+        <ProductModal product={product} open={open} onOpenChange={setOpen} />
+      ) : null}
     </>
   );
 }
+
+export const ProductCard = memo(ProductCardInner);

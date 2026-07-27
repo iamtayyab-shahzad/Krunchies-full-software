@@ -53,7 +53,11 @@ interface BillContextValue extends BillState {
   setPaymentMethod: (v: PaymentMethod) => void;
   setOrderNotes: (v: string) => void;
   setTableNumber: (v: string) => void;
-  addProduct: (product: Product, size: ProductSize) => void;
+  addProduct: (
+    product: Product,
+    size: ProductSize,
+    opts?: { special_instructions?: string },
+  ) => void;
   changeSize: (key: string, size: ProductSize) => void;
   increase: (key: string) => void;
   decrease: (key: string) => void;
@@ -158,7 +162,7 @@ export function BillProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Autosave cart draft (debounced)
+  // Autosave cart draft (debounced). Exclude `search` — typing must not hit IndexedDB.
   useEffect(() => {
     if (!hydrated.current || skipPersist.current) return;
     if (state.editingOrderId) return; // don't overwrite active cart while editing pending
@@ -174,40 +178,63 @@ export function BillProvider({ children }: { children: ReactNode }) {
       void saveDraft(draft);
     }, 400);
     return () => clearTimeout(timer);
-  }, [state]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit search
+  }, [
+    state.draftId,
+    state.editingOrderId,
+    state.orderType,
+    state.customerName,
+    state.phone,
+    state.address,
+    state.locationId,
+    state.deliveryCharge,
+    state.paymentMethod,
+    state.orderNotes,
+    state.tableNumber,
+    state.items,
+  ]);
 
-  const addProduct = useCallback((product: Product, size: ProductSize) => {
-    const key = makeLineKey(product.id, size.id);
-    setState((prev) => {
-      const existing = prev.items.find((i) => i.key === key);
-      if (existing) {
+  const addProduct = useCallback(
+    (
+      product: Product,
+      size: ProductSize,
+      opts?: { special_instructions?: string },
+    ) => {
+      const instructions = opts?.special_instructions?.trim() || undefined;
+      const key = makeLineKey(product.id, size.id, instructions);
+      setState((prev) => {
+        const existing = prev.items.find((i) => i.key === key);
+        if (existing) {
+          return {
+            ...prev,
+            draftId: prev.draftId || ACTIVE_DRAFT_ID,
+            items: prev.items.map((i) =>
+              i.key === key ? { ...i, quantity: i.quantity + 1 } : i,
+            ),
+          };
+        }
         return {
           ...prev,
           draftId: prev.draftId || ACTIVE_DRAFT_ID,
-          items: prev.items.map((i) =>
-            i.key === key ? { ...i, quantity: i.quantity + 1 } : i,
-          ),
+          items: [
+            ...prev.items,
+            {
+              key,
+              product_id: product.id,
+              product_name: product.name,
+              product_image: product.image,
+              size_id: size.id,
+              size: size.size,
+              price: size.price,
+              quantity: 1,
+              special_instructions: instructions,
+            },
+          ],
         };
-      }
-      return {
-        ...prev,
-        draftId: prev.draftId || ACTIVE_DRAFT_ID,
-        items: [
-          ...prev.items,
-          {
-            key,
-            product_id: product.id,
-            product_name: product.name,
-            product_image: product.image,
-            size_id: size.id,
-            size: size.size,
-            price: size.price,
-            quantity: 1,
-          },
-        ],
-      };
-    });
-  }, []);
+      });
+    },
+    [],
+  );
 
   const value = useMemo<BillContextValue>(() => {
     const subtotal = state.items.reduce(
@@ -261,7 +288,11 @@ export function BillProvider({ children }: { children: ReactNode }) {
         setState((p) => {
           const line = p.items.find((i) => i.key === key);
           if (!line) return p;
-          const newKey = makeLineKey(line.product_id, size.id);
+          const newKey = makeLineKey(
+            line.product_id,
+            size.id,
+            line.special_instructions,
+          );
           if (newKey === key) {
             return {
               ...p,
@@ -329,14 +360,29 @@ export function BillProvider({ children }: { children: ReactNode }) {
       setInstructions: (key, text) =>
         setState((p) => ({
           ...p,
-          items: p.items.map((i) =>
-            i.key === key ? { ...i, special_instructions: text } : i,
-          ),
+          items: p.items.map((i) => {
+            if (i.key !== key) return i;
+            const notes = text.trim() || undefined;
+            return {
+              ...i,
+              key: makeLineKey(i.product_id, i.size_id, notes),
+              special_instructions: notes,
+            };
+          }),
         })),
       setLineMeta: (key, meta) =>
         setState((p) => ({
           ...p,
-          items: p.items.map((i) => (i.key === key ? { ...i, ...meta } : i)),
+          items: p.items.map((i) => {
+            if (i.key !== key) return i;
+            const next = { ...i, ...meta };
+            if ("special_instructions" in meta) {
+              const notes = next.special_instructions?.trim() || undefined;
+              next.special_instructions = notes;
+              next.key = makeLineKey(next.product_id, next.size_id, notes);
+            }
+            return next;
+          }),
         })),
       loadDraft: (partial) =>
         setState((p) => ({

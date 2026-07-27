@@ -16,6 +16,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 	router.Use(
 		middleware.RequestID(),
 		middleware.CORS(),
+		middleware.Gzip(),
 		middleware.RequestLogger(),
 		middleware.ErrorRecovery(),
 	)

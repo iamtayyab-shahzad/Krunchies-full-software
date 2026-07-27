@@ -91,7 +91,7 @@ export const ordersRepo = {
   async list(): Promise<Order[]> {
     return onlineFirst(
       async () => {
-        const rows = await apiFetch<Order[]>("/orders");
+        const rows = await apiFetch<Order[]>("/orders?limit=100");
         const existing = await listLocalOrders();
         const serverIds = new Set(rows.map((r) => r.id));
         // Preserve local orders the server doesn't know about yet (offline
@@ -120,26 +120,26 @@ export const ordersRepo = {
         const rows = await apiFetch<Order[]>("/orders/pending");
         const existing = await listLocalOrders();
         const localById = new Map(existing.map((o) => [o.id, o]));
-        const byId = new Map(existing.map((o) => [o.id, o]));
+        // Only keep server pending + local unsynced pending — do not seed with
+        // every cached order or completed rows can reappear as PENDING.
+        const byId = new Map<string, Order>();
         for (const row of rows) {
           const local = localById.get(row.id);
-          // If we locally completed/cancelled an order that hasn't synced yet,
-          // keep our local status instead of the server's stale PENDING copy so
-          // the order doesn't reappear in the pending list.
           if (
             local &&
             local.sync_status === "pending_sync" &&
             local.order_status !== "PENDING"
           ) {
-            byId.set(row.id, local);
-          } else {
-            byId.set(row.id, row);
+            // Locally completed/cancelled but not synced yet — skip.
+            continue;
           }
+          byId.set(row.id, row);
         }
         for (const o of existing) {
           if (
             o.order_status === "PENDING" &&
-            o.order_number.startsWith("LOCAL-")
+            (o.order_number.startsWith("LOCAL-") ||
+              o.sync_status === "pending_sync")
           ) {
             byId.set(o.id, o);
           }
@@ -220,7 +220,7 @@ export const customersRepo = {
     return onlineFirst(
       async () => {
         // Derive from orders (no dedicated customers API on POS).
-        const orders = await apiFetch<Order[]>("/orders");
+        const orders = await apiFetch<Order[]>("/orders?limit=100");
         await replaceOrders(orders);
         return listLocalCustomers();
       },

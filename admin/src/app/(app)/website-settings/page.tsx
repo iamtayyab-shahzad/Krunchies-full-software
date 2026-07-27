@@ -77,9 +77,6 @@ export default function WebsiteSettingsPage() {
         facebook: form.facebook,
         instagram: form.instagram,
       });
-      // #region agent log
-      fetch("http://127.0.0.1:7888/ingest/8bfa3430-75a3-4f8f-9f4b-0fb77dfcf7ef",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"ec6f7f"},body:JSON.stringify({sessionId:"ec6f7f",hypothesisId:"S1",location:"website-settings/page.tsx:save",message:"settings saved",data:{restaurant_name:form.restaurantName,phone:form.phone,address:form.address,opening_time:form.openingTime,facebook:form.facebook},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       toast.success(
         "Website settings saved (brand/contact/social). Content blocks below are not stored yet.",
       );

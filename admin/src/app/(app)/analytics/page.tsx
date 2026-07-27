@@ -80,9 +80,6 @@ export default function AnalyticsPage() {
           paymentBreakdown: Array.isArray(payment) ? payment : [],
           lowStock: Array.isArray(lowStock) ? lowStock : [],
         });
-        // #region agent log
-        fetch("http://127.0.0.1:7888/ingest/8bfa3430-75a3-4f8f-9f4b-0fb77dfcf7ef",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"ec6f7f"},body:JSON.stringify({sessionId:"ec6f7f",hypothesisId:"A1",location:"analytics/page.tsx:load",message:"analytics loaded",data:{today:today?.total,weekly:weekly?.total,monthly:monthly?.total,cancelled:cancelledCount?.count,bestLen:Array.isArray(bestSelling)?bestSelling.length:null,failed,statuses:settled.map(s=>s.status)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (failed === settled.length) {
           toast.error("Failed to load analytics — check login / backend");
         } else if (failed > 0) {

@@ -137,6 +137,25 @@ func (r *InventoryRepository) RecipeLinesFor(
 	return generic, nil
 }
 
+// RecipeLinesForProducts loads all recipe rows for many products in one query.
+func (r *InventoryRepository) RecipeLinesForProducts(
+	tx *gorm.DB,
+	productIDs []uuid.UUID,
+) (map[uuid.UUID][]domain.Recipe, error) {
+	out := make(map[uuid.UUID][]domain.Recipe, len(productIDs))
+	if len(productIDs) == 0 {
+		return out, nil
+	}
+	var rows []domain.Recipe
+	if err := tx.Where("product_id IN ?", productIDs).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ProductID] = append(out[row.ProductID], row)
+	}
+	return out, nil
+}
+
 // GetRecipeByProductID returns every BOM line for a product regardless of size.
 func (r *InventoryRepository) GetRecipeByProductID(tx *gorm.DB, productID uuid.UUID) ([]domain.Recipe, error) {
 	var recipes []domain.Recipe

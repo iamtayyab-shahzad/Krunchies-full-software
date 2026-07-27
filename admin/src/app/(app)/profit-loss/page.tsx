@@ -43,6 +43,18 @@ const emptyReport: ProfitLossReport = {
   expense_breakdown: [],
 };
 
+function normalizeReport(data: Partial<ProfitLossReport> | null | undefined): ProfitLossReport {
+  return {
+    ...emptyReport,
+    ...data,
+    best_selling: data?.best_selling ?? [],
+    least_selling: data?.least_selling ?? [],
+    most_profitable: data?.most_profitable ?? [],
+    least_profitable: data?.least_profitable ?? [],
+    expense_breakdown: data?.expense_breakdown ?? [],
+  };
+}
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -70,7 +82,7 @@ export default function ProfitLossPage() {
             ? { start: customStart, end: customEnd }
             : { range };
         const data = await reportsApi.profitLoss(params);
-        if (!cancelled) setReport(data);
+        if (!cancelled) setReport(normalizeReport(data));
       } catch (e) {
         if (!cancelled) {
           toast.error(
@@ -88,17 +100,21 @@ export default function ProfitLossPage() {
     };
   }, [range, customStart, customEnd]);
 
+  const expenseBreakdown = report.expense_breakdown ?? [];
+  const bestSelling = report.best_selling ?? [];
+  const mostProfitable = report.most_profitable ?? [];
+
   const maxExpense = Math.max(
     1,
-    ...report.expense_breakdown.map((e) => Number(e.total || 0)),
+    ...expenseBreakdown.map((e) => Number(e.total || 0)),
   );
   const maxSold = Math.max(
     1,
-    ...report.best_selling.map((p) => Number(p.quantity || 0)),
+    ...bestSelling.map((p) => Number(p.quantity || 0)),
   );
   const maxProfit = Math.max(
     1,
-    ...report.most_profitable.map((p) => Number(p.profit || 0)),
+    ...mostProfitable.map((p) => Number(p.profit || 0)),
   );
 
   return (
@@ -222,11 +238,11 @@ export default function ProfitLossPage() {
           <div className="mt-6 grid gap-6 xl:grid-cols-3">
             <Card>
               <h2 className="mb-4 text-lg font-bold">Expense Breakdown</h2>
-              {report.expense_breakdown.length === 0 ? (
+              {expenseBreakdown.length === 0 ? (
                 <p className="text-zinc-400">No expenses in this period.</p>
               ) : (
                 <div className="space-y-4">
-                  {report.expense_breakdown.map((item) => (
+                  {expenseBreakdown.map((item) => (
                     <div key={item.category}>
                       <div className="mb-1 flex justify-between text-sm">
                         <span className="font-semibold">{item.category}</span>
@@ -250,11 +266,11 @@ export default function ProfitLossPage() {
 
             <Card>
               <h2 className="mb-4 text-lg font-bold">Best Selling</h2>
-              {report.best_selling.length === 0 ? (
+              {bestSelling.length === 0 ? (
                 <p className="text-zinc-400">No sales in this period.</p>
               ) : (
                 <div className="space-y-4">
-                  {report.best_selling.map((item) => (
+                  {bestSelling.map((item) => (
                     <div key={item.product_id || item.product_name}>
                       <div className="mb-1 flex justify-between text-sm">
                         <span className="font-semibold">
@@ -280,11 +296,11 @@ export default function ProfitLossPage() {
 
             <Card>
               <h2 className="mb-4 text-lg font-bold">Most Profitable</h2>
-              {report.most_profitable.length === 0 ? (
+              {mostProfitable.length === 0 ? (
                 <p className="text-zinc-400">No profitability data yet.</p>
               ) : (
                 <div className="space-y-4">
-                  {report.most_profitable.map((item) => (
+                  {mostProfitable.map((item) => (
                     <div key={item.product_id || item.product_name}>
                       <div className="mb-1 flex justify-between text-sm">
                         <span className="font-semibold">

@@ -18,6 +18,7 @@ import { Card, StatCard } from "@/components/ui/card";
 import type { InventoryItem } from "@/lib/mock-data";
 import { formatPrice, formatStock } from "@/lib/utils";
 import {
+  analyticsApi,
   inventoryApi,
   ordersApi,
   type BackendOrder,
@@ -41,7 +42,9 @@ function stockLabel(item: InventoryItem) {
 }
 
 export default function DashboardPage() {
-  const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [recent, setRecent] = useState<BackendOrder[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [sales, setSales] = useState({ today: 0, week: 0, month: 0 });
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [alerts, setAlerts] = useState<{
     low: number;
@@ -51,49 +54,47 @@ export default function DashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      ordersApi.list(),
+      analyticsApi.todaySales(),
+      analyticsApi.weeklySales(),
+      analyticsApi.monthlySales(),
+      ordersApi.list({ limit: 10 }),
+      ordersApi.pending(),
       inventoryApi.list(),
       inventoryApi.alerts().catch(() => null),
     ])
-      .then(([orderRows, inventoryRows, alertRows]) => {
-        setOrders(orderRows);
-        setInventory(inventoryRows);
-        if (alertRows) {
-          setAlerts({
-            low: alertRows.low_stock?.length || 0,
-            out: alertRows.out_of_stock?.length || 0,
-            negative: alertRows.negative_stock?.length || 0,
+      .then(
+        ([
+          todaySales,
+          weeklySales,
+          monthlySales,
+          orderRows,
+          pendingRows,
+          inventoryRows,
+          alertRows,
+        ]) => {
+          setSales({
+            today: todaySales.total || 0,
+            week: weeklySales.total || 0,
+            month: monthlySales.total || 0,
           });
-        }
-      })
+          setRecent(orderRows);
+          setPendingCount(pendingRows.length);
+          setInventory(inventoryRows);
+          if (alertRows) {
+            setAlerts({
+              low: alertRows.low_stock?.length || 0,
+              out: alertRows.out_of_stock?.length || 0,
+              negative: alertRows.negative_stock?.length || 0,
+            });
+          }
+        },
+      )
       .catch((error) =>
         toast.error(
           error instanceof Error ? error.message : "Failed to load dashboard",
         ),
       );
   }, []);
-
-  const stats = useMemo(() => {
-    const now = new Date();
-    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startWeek = new Date(startToday);
-    startWeek.setDate(startWeek.getDate() - 6);
-    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const completed = orders.filter((o) => o.order_status === "COMPLETED");
-    const sumSince = (from: Date) =>
-      completed
-        .filter((o) => new Date(o.created_at) >= from)
-        .reduce((sum, o) => sum + o.grand_total, 0);
-    return {
-      today: sumSince(startToday),
-      week: sumSince(startWeek),
-      month: sumSince(startMonth),
-      pending: orders.filter((o) => o.order_status === "PENDING").length,
-      completedToday: completed.filter(
-        (o) => new Date(o.created_at) >= startToday,
-      ).length,
-    };
-  }, [orders]);
 
   const stockBuckets: StockBucket = useMemo(() => {
     const negative = inventory.filter((i) => i.currentStock < 0);
@@ -111,7 +112,6 @@ export default function DashboardPage() {
   ];
   const alertCount =
     alerts.low + alerts.out + alerts.negative || alertItems.length;
-  const recent = orders.slice(0, 5);
 
   return (
     <div>
@@ -144,24 +144,24 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Today's Sales"
-          value={formatPrice(stats.today)}
+          value={formatPrice(sales.today)}
           hint="Completed orders"
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
           label="Weekly Sales"
-          value={formatPrice(stats.week)}
+          value={formatPrice(sales.week)}
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
           label="Monthly Sales"
-          value={formatPrice(stats.month)}
+          value={formatPrice(sales.month)}
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
           label="Quick Stats"
-          value={`${stats.pending} pending`}
-          hint={`${stats.completedToday} completed · ${alertCount} stock alerts`}
+          value={`${pendingCount} pending`}
+          hint={`${alertCount} stock alerts`}
           icon={<ShoppingBag className="h-5 w-5" />}
         />
       </div>

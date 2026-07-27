@@ -1,6 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { motion } from "framer-motion";
+
+const STORY_IMAGE =
+  "https://images.unsplash.com/photo-1590947132387-155cc02f3212?w=1200&q=80";
 
 export function RestaurantStory() {
   return (
@@ -12,12 +16,14 @@ export function RestaurantStory() {
         viewport={{ once: true }}
         transition={{ duration: 0.6 }}
       >
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage:
-              "url(https://images.unsplash.com/photo-1590947132387-155cc02f3212?w=1200&q=80)",
-          }}
+        <Image
+          src={STORY_IMAGE}
+          alt="Krunchies kitchen"
+          fill
+          loading="lazy"
+          quality={70}
+          sizes="(max-width: 1024px) 100vw, 50vw"
+          className="object-cover"
         />
         <div className="absolute inset-0 bg-orange-500/10" />
       </motion.div>

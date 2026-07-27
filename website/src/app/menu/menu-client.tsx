@@ -29,27 +29,45 @@ export default function MenuPage() {
     [categories],
   );
 
+  // Fetch the full catalog once; filter/search client-side to avoid
+  // re-hitting the API on every keystroke or category click.
   useEffect(() => {
-    getCategories().then(setCategories);
+    let active = true;
+    setLoading(true);
+    Promise.all([getCategories(), getProducts()])
+      .then(([cats, items]) => {
+        if (!active) return;
+        setCategories(cats);
+        setProducts(items);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    getProducts({
-      categoryId: categoryId === "all" ? undefined : categoryId,
-      search: search || undefined,
-    })
-      .then(setProducts)
-      .finally(() => setLoading(false));
-  }, [categoryId, search]);
-
   const filtered = useMemo(() => {
-    if (sizeFilter === "all") return products;
-    if (sizeFilter === "pizza") {
-      return products.filter((p) => pizzaCategoryIds.has(p.category_id));
+    let result = products;
+    if (categoryId !== "all") {
+      result = result.filter((p) => p.category_id === categoryId);
     }
-    return products.filter((p) => !pizzaCategoryIds.has(p.category_id));
-  }, [products, sizeFilter, pizzaCategoryIds]);
+    const q = search.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q),
+      );
+    }
+    if (sizeFilter === "pizza") {
+      result = result.filter((p) => pizzaCategoryIds.has(p.category_id));
+    } else if (sizeFilter === "other") {
+      result = result.filter((p) => !pizzaCategoryIds.has(p.category_id));
+    }
+    return result;
+  }, [products, categoryId, search, sizeFilter, pizzaCategoryIds]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -128,7 +146,7 @@ export default function MenuPage() {
             </div>
           </div>
 
-          {loading ? (
+          {loading && products.length === 0 ? (
             <p className="text-zinc-500">Loading menu...</p>
           ) : filtered.length === 0 ? (
             <p className="text-zinc-500">No products found.</p>

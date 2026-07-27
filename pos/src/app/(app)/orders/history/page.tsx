@@ -18,7 +18,7 @@ export default function OrderHistoryPage() {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: ordersApi.list,
-    refetchInterval: 10000,
+    refetchInterval: 30_000,
   });
   const { data: settings } = useQuery({
     queryKey: ["settings"],

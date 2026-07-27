@@ -2,13 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import {
   flavorsForSlot,
   isDealProduct,
@@ -29,11 +23,10 @@ export type DealFlavorState = {
 
 /**
  * Renders one flavour picker per pizza included in a deal, filtered to Regular
- * Pizza flavours whose size matches the slot. Reports selection state upward so
- * the parent can gate "Add to Cart" and attach the flavour note.
+ * Pizza flavours whose size matches the slot.
  *
- * Shared by the product modal and the product detail page so both enforce the
- * same size-aware flavour rules.
+ * Uses tap-to-select buttons (not a dropdown) so the product image / dialog
+ * overflow can never cover the first pizza choice.
  */
 export function DealFlavorSelector({
   product,
@@ -93,40 +86,46 @@ export function DealFlavorSelector({
   if (!dealSlots.length) return null;
 
   return (
-    <div className="space-y-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+    <div className="relative z-20 space-y-4 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
       <Label className="block text-orange-300">
-        Choose Regular Pizza flavors (size matches deal)
+        Choose pizza flavors (size matches deal)
       </Label>
       {dealSlots.map((slot) => {
         const options = flavorsForSlot(menuProducts, slot);
+        const selectedId = picks[slot.id];
         return (
-          <div key={slot.id} className="space-y-1.5">
+          <div key={slot.id} className="space-y-2">
             <Label className="text-xs text-zinc-400">{slot.label}</Label>
-            <Select
-              value={picks[slot.id] || ""}
-              onValueChange={(id) =>
-                setPicks((prev) => ({ ...prev, [slot.id]: id }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    loading
-                      ? "Loading flavors..."
-                      : options.length
-                        ? `Select ${slot.size} flavor`
-                        : `No ${slot.size} flavors available`
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {loading ? (
+              <p className="text-sm text-zinc-500">Loading flavors...</p>
+            ) : options.length === 0 ? (
+              <p className="text-sm text-zinc-500">
+                No {slot.size} Regular Pizza flavors available
+              </p>
+            ) : (
+              <div className="grid max-h-40 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
+                {options.map((p) => {
+                  const selected = selectedId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() =>
+                        setPicks((prev) => ({ ...prev, [slot.id]: p.id }))
+                      }
+                      className={cn(
+                        "rounded-md border px-3 py-2 text-left text-sm transition-colors",
+                        selected
+                          ? "border-orange-500 bg-orange-500/20 text-orange-200"
+                          : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500",
+                      )}
+                    >
+                      {p.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}

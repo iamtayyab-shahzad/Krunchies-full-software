@@ -75,7 +75,7 @@ export function Sidebar() {
       }
     };
     loadPending();
-    const id = setInterval(loadPending, 10_000);
+    const id = setInterval(loadPending, 20_000);
     return () => {
       cancelled = true;
       clearInterval(id);

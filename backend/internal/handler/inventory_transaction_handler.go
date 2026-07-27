@@ -34,11 +34,14 @@ func (h *InventoryTransactionHandler) List(c *gin.Context) {
 		inventoryID = &id
 	}
 	movementType := strings.TrimSpace(c.Query("type"))
-	limit := 0
+	limit := 100
 	if rawLimit := strings.TrimSpace(c.Query("limit")); rawLimit != "" {
 		if n, err := strconv.Atoi(rawLimit); err == nil && n > 0 {
 			limit = n
 		}
+	}
+	if limit > 500 {
+		limit = 500
 	}
 
 	data, err := h.service.ListTransactions(inventoryID, movementType, limit)

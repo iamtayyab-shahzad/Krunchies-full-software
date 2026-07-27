@@ -44,13 +44,71 @@ async function backendFetch<T>(
   return json.data;
 }
 
+const SETTINGS_TTL_MS = 120_000;
+let settingsCache: { at: number; promise: Promise<Settings> } | null = null;
+
 export async function getSettings() {
-  return backendFetch<Settings>("/settings/public");
+  const now = Date.now();
+  if (settingsCache && now - settingsCache.at < SETTINGS_TTL_MS) {
+    return settingsCache.promise;
+  }
+  const promise = backendFetch<Settings>("/settings/public").catch((err) => {
+    settingsCache = null;
+    throw err;
+  });
+  settingsCache = { at: now, promise };
+  return promise;
+}
+
+const CATALOG_TTL_MS = 60_000;
+type CatalogPayload = {
+  categories: Category[];
+  products: Product[];
+};
+let catalogCache: { at: number; promise: Promise<CatalogPayload> } | null =
+  null;
+
+async function loadCatalog(): Promise<CatalogPayload> {
+  const now = Date.now();
+  if (catalogCache && now - catalogCache.at < CATALOG_TTL_MS) {
+    return catalogCache.promise;
+  }
+  const promise = (async () => {
+    const [categories, remoteProducts, remoteSizes] = await Promise.all([
+      backendFetch<Category[]>("/categories"),
+      backendFetch<Product[]>("/products"),
+      backendFetch<ProductSize[]>("/product-sizes"),
+    ]);
+
+    const sizesByProduct = new Map<string, ProductSize[]>();
+    for (const s of remoteSizes) {
+      const arr = sizesByProduct.get(s.product_id) || [];
+      arr.push(s);
+      sizesByProduct.set(s.product_id, arr);
+    }
+
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+    const products = remoteProducts
+      .filter((p) => p.available)
+      .map((p) => ({
+        ...p,
+        sizes: sizesByProduct.get(p.id) || [],
+        category: categoryById.get(p.category_id),
+      }))
+      .sort((a, b) => a.display_order - b.display_order);
+
+    return { categories, products };
+  })().catch((err) => {
+    catalogCache = null;
+    throw err;
+  });
+  catalogCache = { at: now, promise };
+  return promise;
 }
 
 export async function getCategories() {
-  const cats = await backendFetch<Category[]>("/categories");
-  return cats
+  const { categories } = await loadCatalog();
+  return categories
     .filter((c) => c.visible)
     .sort((a, b) => a.display_order - b.display_order);
 }
@@ -61,14 +119,8 @@ export async function getProducts(params?: {
   featured?: boolean;
   popular?: boolean;
 }): Promise<Product[]> {
-  // Fetch from backend and join product sizes.
-  const [categories, remoteProducts, remoteSizes] = await Promise.all([
-    backendFetch<Category[]>("/categories"),
-    backendFetch<Product[]>("/products"),
-    backendFetch<ProductSize[]>("/product-sizes"),
-  ]);
-
-  let result = remoteProducts.filter((p) => p.available);
+  const { products } = await loadCatalog();
+  let result = products;
 
   if (params?.categoryId) {
     result = result.filter((p) => p.category_id === params.categoryId);
@@ -89,36 +141,12 @@ export async function getProducts(params?: {
     );
   }
 
-  const sizesByProduct = new Map<string, ProductSize[]>();
-  for (const s of remoteSizes) {
-    const arr = sizesByProduct.get(s.product_id) || [];
-    arr.push(s);
-    sizesByProduct.set(s.product_id, arr);
-  }
-
-  return result
-    .map((p) => ({
-      ...p,
-      sizes: sizesByProduct.get(p.id) || [],
-      category: categories.find((c) => c.id === p.category_id),
-    }))
-    .sort((a, b) => a.display_order - b.display_order);
+  return result;
 }
 
 export async function getProductById(id: string): Promise<Product | null> {
-  const [categories, product, sizes] = await Promise.all([
-    backendFetch<Category[]>("/categories"),
-    backendFetch<Product>(`/products/${id}`).catch(() => null),
-    backendFetch<ProductSize[]>(`/product-sizes`).then((all) =>
-      all.filter((s) => s.product_id === id),
-    ),
-  ]);
-  if (!product) return null;
-  return {
-    ...product,
-    sizes,
-    category: categories.find((c) => c.id === product.category_id),
-  };
+  const { products } = await loadCatalog();
+  return products.find((p) => p.id === id) ?? null;
 }
 
 export async function getOffers() {

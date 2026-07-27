@@ -1,0 +1,4 @@
+{"data":{"hypothesisId":"none","path":"GET /api/v1/orders/pending","userType":"staff"},"location":"auth.go:JWTAuth","message":"token accepted","sessionId":"ec6f7f","timestamp":1785178819714}
+{"data":{"hypothesisId":"none","path":"GET /api/v1/orders/pending","userType":"staff"},"location":"auth.go:JWTAuth","message":"token accepted","sessionId":"ec6f7f","timestamp":1785178827483}
+{"data":{"hypothesisId":"none","path":"GET /api/v1/inventory","userType":"staff"},"location":"auth.go:JWTAuth","message":"token accepted","sessionId":"ec6f7f","timestamp":1785178828379}
+{"data":{"hypothesisId":"none","path":"GET /api/v1/orders","userType":"staff"},"location":"auth.go:JWTAuth","message":"token accepted","sessionId":"ec6f7f","timestamp":1785178828379}

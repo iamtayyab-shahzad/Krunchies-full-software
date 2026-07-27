@@ -64,25 +64,25 @@ type ExpenseBucket struct {
 func (s *ReportService) ProfitLossBetween(start, end time.Time) (*ProfitLoss, error) {
 	pl := &ProfitLoss{Start: start, End: end}
 
-	var revenue int
+	type orderAgg struct {
+		Revenue         int
+		CompletedOrders int64
+		CancelledOrders int64
+	}
+	var agg orderAgg
 	if err := s.db.Model(&domain.Order{}).
-		Select("COALESCE(SUM(grand_total), 0)").
-		Where("order_status = ? AND created_at >= ? AND created_at < ?", "COMPLETED", start, end).
-		Scan(&revenue).Error; err != nil {
+		Select(`
+			COALESCE(SUM(CASE WHEN order_status = 'COMPLETED' THEN grand_total ELSE 0 END), 0) as revenue,
+			COUNT(*) FILTER (WHERE order_status = 'COMPLETED') as completed_orders,
+			COUNT(*) FILTER (WHERE order_status = 'CANCELLED') as cancelled_orders
+		`).
+		Where("created_at >= ? AND created_at < ?", start, end).
+		Scan(&agg).Error; err != nil {
 		return nil, err
 	}
-	pl.Revenue = revenue
-
-	if err := s.db.Model(&domain.Order{}).
-		Where("order_status = ? AND created_at >= ? AND created_at < ?", "COMPLETED", start, end).
-		Count(&pl.CompletedOrders).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.Model(&domain.Order{}).
-		Where("order_status = ? AND created_at >= ? AND created_at < ?", "CANCELLED", start, end).
-		Count(&pl.CancelledOrders).Error; err != nil {
-		return nil, err
-	}
+	pl.Revenue = agg.Revenue
+	pl.CompletedOrders = agg.CompletedOrders
+	pl.CancelledOrders = agg.CancelledOrders
 
 	cogs, err := s.inventory.ConsumptionCostBetween(start, end)
 	if err != nil {
@@ -127,6 +127,21 @@ func (s *ReportService) ProfitLossBetween(start, end time.Time) (*ProfitLoss, er
 	pl.ExpenseBreakdown, err = s.expenseBreakdown(start, end)
 	if err != nil {
 		return nil, err
+	}
+	if pl.ExpenseBreakdown == nil {
+		pl.ExpenseBreakdown = []ExpenseBucket{}
+	}
+	if pl.BestSelling == nil {
+		pl.BestSelling = []ProductPerf{}
+	}
+	if pl.LeastSelling == nil {
+		pl.LeastSelling = []ProductPerf{}
+	}
+	if pl.MostProfitable == nil {
+		pl.MostProfitable = []ProductPerf{}
+	}
+	if pl.LeastProfitable == nil {
+		pl.LeastProfitable = []ProductPerf{}
 	}
 	return pl, nil
 }
@@ -197,7 +212,7 @@ func (s *ReportService) productPerformance(start, end time.Time) ([]ProductPerf,
 }
 
 func (s *ReportService) expenseBreakdown(start, end time.Time) ([]ExpenseBucket, error) {
-	var rows []ExpenseBucket
+	rows := make([]ExpenseBucket, 0)
 	err := s.db.Model(&domain.Expense{}).
 		Select("category, COALESCE(SUM(amount), 0) as total").
 		Where("expense_date >= ? AND expense_date < ?", start, end).

@@ -34,9 +34,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const onSync = () => {
       void client.invalidateQueries({ queryKey: ["orders"] });
       void client.invalidateQueries({ queryKey: ["inventory"] });
-      void client.invalidateQueries({ queryKey: ["products"] });
-      void client.invalidateQueries({ queryKey: ["categories"] });
-      void client.invalidateQueries({ queryKey: ["settings"] });
     };
     // Fired immediately after any local (offline) order mutation so the
     // Pending/History lists refresh from IndexedDB without waiting for a sync.

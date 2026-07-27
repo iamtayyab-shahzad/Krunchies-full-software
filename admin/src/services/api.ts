@@ -1052,7 +1052,14 @@ export const reportsApi = {
 };
 
 export const ordersApi = {
-  list: () => apiFetch<BackendOrder[]>("/orders"),
+  list: (params?: { limit?: number; offset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.limit != null) search.set("limit", String(params.limit));
+    if (params?.offset != null) search.set("offset", String(params.offset));
+    const qs = search.toString();
+    return apiFetch<BackendOrder[]>(`/orders${qs ? `?${qs}` : "?limit=200"}`);
+  },
+  pending: () => apiFetch<BackendOrder[]>("/orders/pending"),
   update: (
     id: string,
     updates: { customer_name?: string; phone?: string },

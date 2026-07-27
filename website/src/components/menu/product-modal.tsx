@@ -18,6 +18,7 @@ import {
   DealFlavorSelector,
   type DealFlavorState,
 } from "@/components/menu/deal-flavor-selector";
+import { isDealProduct, parseDealPizzaSlots } from "@/lib/deal-flavors";
 import { cn, formatPrice } from "@/lib/utils";
 import type { Product, ProductSize } from "@/types";
 
@@ -25,6 +26,17 @@ interface ProductModalProps {
   product: Product;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function initialDealFlavorState(product: Product): DealFlavorState {
+  const hasSlots =
+    isDealProduct(product) &&
+    parseDealPizzaSlots(product.description || "").length > 0;
+  return {
+    note: "",
+    complete: !hasSlots,
+    hasSlots,
+  };
 }
 
 export function ProductModal({
@@ -38,11 +50,9 @@ export function ProductModal({
   );
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState("");
-  const [dealFlavors, setDealFlavors] = useState<DealFlavorState>({
-    note: "",
-    complete: true,
-    hasSlots: false,
-  });
+  const [dealFlavors, setDealFlavors] = useState<DealFlavorState>(() =>
+    initialDealFlavorState(product),
+  );
 
   const handleFlavorChange = useCallback(
     (state: DealFlavorState) => setDealFlavors(state),
@@ -54,6 +64,7 @@ export function ProductModal({
     setSelectedSize(product.sizes[0]);
     setQuantity(1);
     setInstructions("");
+    setDealFlavors(initialDealFlavorState(product));
   }, [open, product]);
 
   const handleAdd = () => {
@@ -80,10 +91,32 @@ export function ProductModal({
     setInstructions("");
   };
 
+  const showFlavorsFirst = dealFlavors.hasSlots;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-        <div className="relative aspect-video overflow-hidden rounded-lg">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-xl"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
+        {/* Flavor pickers first for deals so the hero image never covers them. */}
+        {showFlavorsFirst && (
+          <div className="relative z-20 space-y-3">
+            <DialogHeader>
+              <DialogTitle className="font-display text-2xl">
+                {product.name}
+              </DialogTitle>
+              <DialogDescription>{product.description}</DialogDescription>
+            </DialogHeader>
+            <DealFlavorSelector
+              product={product}
+              onChange={handleFlavorChange}
+            />
+          </div>
+        )}
+
+        <div className="relative z-0 aspect-video max-h-48 shrink-0 overflow-hidden rounded-lg sm:max-h-56">
           <Image
             src={product.image}
             alt={product.name}
@@ -92,16 +125,17 @@ export function ProductModal({
             sizes="(max-width: 640px) 100vw, 576px"
           />
         </div>
-        <DialogHeader>
-          <DialogTitle className="font-display text-2xl">
-            {product.name}
-          </DialogTitle>
-          <DialogDescription>{product.description}</DialogDescription>
-        </DialogHeader>
 
-        <div className="space-y-4">
-          <DealFlavorSelector product={product} onChange={handleFlavorChange} />
+        {!showFlavorsFirst && (
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl">
+              {product.name}
+            </DialogTitle>
+            <DialogDescription>{product.description}</DialogDescription>
+          </DialogHeader>
+        )}
 
+        <div className="relative z-10 space-y-4">
           <div>
             <Label className="mb-2 block">Size</Label>
             <div className="flex flex-wrap gap-2">
@@ -122,6 +156,13 @@ export function ProductModal({
               ))}
             </div>
           </div>
+
+          {!showFlavorsFirst && (
+            <DealFlavorSelector
+              product={product}
+              onChange={handleFlavorChange}
+            />
+          )}
 
           <div>
             <Label className="mb-2 block">Quantity</Label>

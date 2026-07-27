@@ -24,9 +24,9 @@ export default function DashboardPage() {
     queryKey: ["analytics", "weekly"],
     queryFn: analyticsApi.weeklySales,
   });
-  const { data: orders = [] } = useQuery({
-    queryKey: ["orders"],
-    queryFn: ordersApi.list,
+  const { data: pendingOrders = [] } = useQuery({
+    queryKey: ["orders", "pending"],
+    queryFn: ordersApi.pending,
   });
   const { data: inventory = [] } = useQuery({
     queryKey: ["inventory"],
@@ -34,7 +34,7 @@ export default function DashboardPage() {
   });
 
   const currency = settings?.currency || "Rs";
-  const pending = orders.filter((o) => o.order_status === "PENDING").length;
+  const pending = pendingOrders.length;
   const lowStock = inventory.filter((i) => i.stock <= i.minimum_stock).length;
 
   return (

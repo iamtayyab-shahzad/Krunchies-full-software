@@ -1,18 +1,24 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
+const CTA_IMAGE =
+  "https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=1600&q=80";
+
 export function CallToAction() {
   return (
     <section className="relative overflow-hidden py-24">
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{
-          backgroundImage:
-            "url(https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=1600&q=80)",
-        }}
+      <Image
+        src={CTA_IMAGE}
+        alt=""
+        fill
+        loading="lazy"
+        quality={70}
+        sizes="100vw"
+        className="object-cover"
       />
       <div className="absolute inset-0 bg-black/80" />
       <div className="absolute inset-0 bg-gradient-to-r from-orange-600/30 to-transparent" />

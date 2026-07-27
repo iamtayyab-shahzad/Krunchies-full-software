@@ -54,6 +54,26 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 
+	// Performance indexes for hot list/analytics paths.
+	for _, stmt := range []string{
+		`CREATE INDEX IF NOT EXISTS idx_orders_status_created ON orders (order_status, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_type_created ON orders (order_type, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders (created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_inv_tx_type_created ON inventory_transactions (transaction_type, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_inv_tx_inventory_created ON inventory_transactions (inventory_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items (product_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_product_sizes_product_id ON product_sizes (product_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_recipes_product_size ON recipes (product_id, product_size_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_products_category_id ON products (category_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments (order_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (expense_date DESC)`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+
 	return backfillInventory(db)
 }
 

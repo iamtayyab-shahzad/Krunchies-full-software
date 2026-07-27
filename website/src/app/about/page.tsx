@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -8,16 +9,21 @@ export const metadata: Metadata = {
     "Learn the story behind Krunchies Pizza — premium dough, bold flavors, and fire-baked craft.",
 };
 
+const ABOUT_HERO =
+  "https://images.unsplash.com/photo-1590947132387-155cc02f3212?w=1600&q=80";
+
 export default function AboutPage() {
   return (
     <div>
       <section className="relative min-h-[50vh] overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage:
-              "url(https://images.unsplash.com/photo-1590947132387-155cc02f3212?w=1600&q=80)",
-          }}
+        <Image
+          src={ABOUT_HERO}
+          alt=""
+          fill
+          priority
+          quality={70}
+          sizes="100vw"
+          className="object-cover"
         />
         <div className="absolute inset-0 bg-black/75" />
         <div className="relative mx-auto flex min-h-[50vh] max-w-7xl items-end px-4 pb-16 sm:px-6 lg:px-8">
