@@ -14,19 +14,19 @@ export const PAYMENT_METHODS = [
   {
     id: "easypaisa" as const,
     label: "EasyPaisa",
-    description: "Scan QR and pay with EasyPaisa",
+    description: "QR or transfer using Raast / JazzCash details",
     showQr: true,
   },
   {
     id: "jazzcash" as const,
     label: "JazzCash",
-    description: "Scan QR and pay with JazzCash",
+    description: "QR, Till ID, or JazzCash number",
     showQr: true,
   },
   {
     id: "bank" as const,
     label: "Other Bank Payments",
-    description: "Scan QR and pay from any bank app",
+    description: "Pay via IBAN / Raast from any bank",
     showQr: true,
   },
   {
@@ -37,9 +37,16 @@ export const PAYMENT_METHODS = [
   },
 ] as const;
 
-/** Shared QR for EasyPaisa / JazzCash / bank transfer (replace file when client provides theirs). */
+/** Shared QR + manual pay details (replace when client provides theirs). */
 export const PAYMENT_QR_SRC = "/payments/payment-qr.png";
-export const PAYMENT_TILL_ID = "984012410";
+export const PAYMENT_DETAILS = {
+  tillId: "984012410",
+  raastId: "01099132681",
+  iban: "PK79JCMA2807921099132681",
+  jazzcashNumber: "03267274986",
+  accountName: "Tayyab Shahzad",
+  jazzcashUssd: "*786*10#",
+} as const;
 
 export const CART_STORAGE_KEY = "krunchies_cart";
 export const AUTH_STORAGE_KEY = "krunchies_auth";

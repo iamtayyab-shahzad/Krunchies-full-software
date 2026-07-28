@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -21,14 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { PaymentQrPanel } from "@/components/checkout/payment-qr-panel";
 import { useAuth } from "@/context/auth-context";
 import { useCart } from "@/context/cart-context";
-import {
-  LAST_ORDER_KEY,
-  PAYMENT_METHODS,
-  PAYMENT_QR_SRC,
-  PAYMENT_TILL_ID,
-} from "@/lib/constants";
+import { LAST_ORDER_KEY, PAYMENT_METHODS } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import { createOrder, getLocations, getSettings } from "@/services/api";
 import type { Location, PaymentMethod, Settings } from "@/types";
@@ -299,36 +294,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             {(paymentMethod === "easypaisa" ||
               paymentMethod === "jazzcash" ||
               paymentMethod === "bank") && (
-              <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
-                <p className="text-sm font-semibold text-orange-300">
-                  Scan &amp; pay
-                </p>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Open your{" "}
-                  {paymentMethod === "bank"
-                    ? "bank"
-                    : paymentMethod === "jazzcash"
-                      ? "JazzCash"
-                      : "EasyPaisa"}{" "}
-                  app, scan this QR, pay the order total, then place your order.
-                </p>
-                <div className="relative mx-auto mt-4 aspect-[3/4] w-full max-w-[280px] overflow-hidden rounded-lg bg-yellow-400">
-                  <Image
-                    src={PAYMENT_QR_SRC}
-                    alt="Payment QR code"
-                    fill
-                    className="object-contain"
-                    sizes="280px"
-                    priority
-                  />
-                </div>
-                <p className="mt-3 text-center text-sm text-zinc-300">
-                  Till ID:{" "}
-                  <span className="font-mono font-semibold tracking-wider text-white">
-                    {PAYMENT_TILL_ID}
-                  </span>
-                </p>
-              </div>
+              <PaymentQrPanel method={paymentMethod} />
             )}
           </section>
         </div>
