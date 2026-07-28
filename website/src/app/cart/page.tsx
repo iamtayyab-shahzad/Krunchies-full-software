@@ -35,10 +35,10 @@ export default function CartPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-      <h1 className="font-display text-5xl text-white">Your Cart</h1>
-      <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_340px]">
-        <div className="space-y-6">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <h1 className="font-display text-4xl text-white sm:text-5xl">Your Cart</h1>
+      <div className="mt-8 grid gap-8 pb-28 lg:mt-10 lg:grid-cols-[1fr_340px] lg:gap-10 lg:pb-0">
+        <div className="space-y-4 sm:space-y-6">
           {items.map((item) => (
             <div
               key={item.id}
@@ -66,7 +66,7 @@ export default function CartPage() {
                   <button
                     type="button"
                     onClick={() => removeItem(item.id)}
-                    className="text-zinc-500 hover:text-red-400"
+                    className="flex h-10 w-10 items-center justify-center text-zinc-500 hover:text-red-400"
                     aria-label="Remove item"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -76,7 +76,7 @@ export default function CartPage() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-10 w-10"
                     onClick={() =>
                       updateQuantity(item.id, item.quantity - 1)
                     }
@@ -89,7 +89,7 @@ export default function CartPage() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-10 w-10"
                     onClick={() =>
                       updateQuantity(item.id, item.quantity + 1)
                     }
@@ -138,7 +138,7 @@ export default function CartPage() {
               </span>
             </div>
           </div>
-          <div className="mt-6 space-y-3">
+          <div className="mt-6 hidden space-y-3 lg:block">
             <Button asChild className="w-full" size="lg">
               <Link href="/checkout">Checkout</Link>
             </Button>
@@ -150,6 +150,17 @@ export default function CartPage() {
             </Button>
           </div>
         </aside>
+
+        <div className="fixed inset-x-0 bottom-0 z-40 space-y-2 border-t border-zinc-800 bg-black/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm lg:hidden">
+          <Button asChild className="min-h-12 w-full" size="lg">
+            <Link href="/checkout">
+              Checkout · {formatPrice(subtotal, currency)}+
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-11 w-full">
+            <Link href="/checkout/guest">Guest Checkout</Link>
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { AuthProvider } from "@/context/auth-context";
 import { CartProvider, useCart } from "@/context/cart-context";
 import { Header } from "@/components/layout/header";
@@ -9,12 +10,20 @@ import { WhatsAppButton } from "@/components/layout/whatsapp-button";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 
+const NO_MAIN_PAD = ["/cart", "/checkout", "/order-success"];
+
 function Shell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { itemCount } = useCart();
+  const pageHandlesPad = NO_MAIN_PAD.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+  const padForCartBar = itemCount > 0 && !pageHandlesPad;
+
   return (
     <>
       <Header />
-      <main className={cn("flex-1", itemCount > 0 && "pb-24 md:pb-0")}>
+      <main className={cn("flex-1", padForCartBar && "pb-24 md:pb-0")}>
         {children}
       </main>
       <Footer />

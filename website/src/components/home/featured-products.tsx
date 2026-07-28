@@ -16,19 +16,19 @@ export function FeaturedProducts() {
   }, []);
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+    <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        transition={{ duration: 0.5 }}
-        className="mb-10 flex items-end justify-between gap-4"
+        transition={{ duration: 0.45 }}
+        className="mb-6 flex items-end justify-between gap-4 sm:mb-10"
       >
         <div>
           <p className="text-sm font-semibold uppercase tracking-widest text-orange-500">
             Signature Picks
           </p>
-          <h2 className="mt-2 font-display text-4xl text-white sm:text-5xl">
+          <h2 className="mt-2 font-display text-3xl text-white sm:text-5xl">
             Featured Products
           </h2>
         </div>
@@ -36,7 +36,7 @@ export function FeaturedProducts() {
           <Link href="/menu">View Full Menu</Link>
         </Button>
       </motion.div>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
         {products.slice(0, 6).map((product, i) => (
           <motion.div
             key={product.id}

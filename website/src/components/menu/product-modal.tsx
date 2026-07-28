@@ -96,7 +96,7 @@ export function ProductModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-xl"
+        className="max-h-[92dvh] gap-3 overflow-y-auto sm:max-h-[90vh] sm:max-w-xl sm:gap-4"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
@@ -104,10 +104,12 @@ export function ProductModal({
         {showFlavorsFirst && (
           <div className="relative z-20 space-y-3">
             <DialogHeader>
-              <DialogTitle className="font-display text-2xl">
+              <DialogTitle className="font-display text-xl sm:text-2xl">
                 {product.name}
               </DialogTitle>
-              <DialogDescription>{product.description}</DialogDescription>
+              <DialogDescription className="line-clamp-3 sm:line-clamp-none">
+                {product.description}
+              </DialogDescription>
             </DialogHeader>
             <DealFlavorSelector
               product={product}
@@ -116,7 +118,7 @@ export function ProductModal({
           </div>
         )}
 
-        <div className="relative z-0 aspect-video max-h-48 shrink-0 overflow-hidden rounded-lg sm:max-h-56">
+        <div className="relative z-0 aspect-[16/9] max-h-36 shrink-0 overflow-hidden rounded-lg sm:aspect-video sm:max-h-56">
           <Image
             src={product.image}
             alt={product.name}
@@ -128,14 +130,16 @@ export function ProductModal({
 
         {!showFlavorsFirst && (
           <DialogHeader>
-            <DialogTitle className="font-display text-2xl">
+            <DialogTitle className="font-display text-xl sm:text-2xl">
               {product.name}
             </DialogTitle>
-            <DialogDescription>{product.description}</DialogDescription>
+            <DialogDescription className="line-clamp-3 sm:line-clamp-none">
+              {product.description}
+            </DialogDescription>
           </DialogHeader>
         )}
 
-        <div className="relative z-10 space-y-4">
+        <div className="relative z-10 space-y-4 pb-2">
           <div>
             <Label className="mb-2 block">Size</Label>
             <div className="flex flex-wrap gap-2">
@@ -145,7 +149,7 @@ export function ProductModal({
                   type="button"
                   onClick={() => setSelectedSize(size)}
                   className={cn(
-                    "rounded-md border px-3 py-2 text-sm transition-colors",
+                    "min-h-11 rounded-md border px-3 py-2 text-sm transition-colors",
                     selectedSize?.id === size.id
                       ? "border-orange-500 bg-orange-500/15 text-orange-300"
                       : "border-zinc-700 text-zinc-300 hover:border-zinc-500",
@@ -171,6 +175,7 @@ export function ProductModal({
                 type="button"
                 variant="secondary"
                 size="icon"
+                className="h-11 w-11"
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               >
                 −
@@ -180,6 +185,7 @@ export function ProductModal({
                 type="button"
                 variant="secondary"
                 size="icon"
+                className="h-11 w-11"
                 onClick={() => setQuantity((q) => q + 1)}
               >
                 +
@@ -198,8 +204,10 @@ export function ProductModal({
               onChange={(e) => setInstructions(e.target.value)}
             />
           </div>
+        </div>
 
-          <Button className="w-full" size="lg" onClick={handleAdd}>
+        <div className="sticky bottom-0 z-30 -mx-5 border-t border-zinc-800 bg-zinc-950 px-5 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-3 sm:-mx-6 sm:px-6">
+          <Button className="min-h-12 w-full" size="lg" onClick={handleAdd}>
             Add to Cart ·{" "}
             {formatPrice((selectedSize?.price ?? 0) * quantity)}
           </Button>

@@ -11,7 +11,7 @@ const HERO_IMAGE =
 
 export function HeroSection() {
   return (
-    <section className="relative min-h-[100svh] overflow-hidden">
+    <section className="relative min-h-[85svh] overflow-hidden sm:min-h-[100svh]">
       <Image
         src={HERO_IMAGE}
         alt=""
@@ -24,44 +24,44 @@ export function HeroSection() {
       <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/40" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(249,115,22,0.25),transparent_50%)]" />
 
-      <div className="relative mx-auto flex min-h-[100svh] max-w-7xl flex-col justify-center px-4 py-24 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex min-h-[85svh] max-w-7xl flex-col justify-center px-4 py-16 sm:min-h-[100svh] sm:px-6 sm:py-24 lg:px-8">
         <motion.p
-          className="font-display text-5xl text-white sm:text-7xl md:text-8xl"
+          className="font-display text-4xl text-white sm:text-7xl md:text-8xl"
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
+          transition={{ duration: 0.55 }}
         >
           <span className="text-orange-500">Krunchies</span>
           <br />
           Pizza
         </motion.p>
         <motion.h1
-          className="mt-6 max-w-xl text-xl font-medium uppercase tracking-[0.18em] text-zinc-200 sm:text-2xl"
+          className="mt-4 max-w-xl text-base font-medium uppercase tracking-[0.14em] text-zinc-200 sm:mt-6 sm:text-2xl sm:tracking-[0.18em]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.15 }}
+          transition={{ duration: 0.55, delay: 0.1 }}
         >
           {restaurant.tagline}
         </motion.h1>
         <motion.p
-          className="mt-4 max-w-md text-base text-zinc-400"
+          className="mt-3 max-w-md text-sm text-zinc-400 sm:mt-4 sm:text-base"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.28 }}
+          transition={{ duration: 0.55, delay: 0.18 }}
         >
           {restaurant.deliveryNote}. Open daily {restaurant.openingTime}–
           {restaurant.closingTime}.
         </motion.p>
         <motion.div
-          className="mt-10 flex flex-wrap gap-4"
+          className="mt-8 flex flex-wrap gap-3 sm:mt-10 sm:gap-4"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.4 }}
+          transition={{ duration: 0.55, delay: 0.26 }}
         >
-          <Button asChild size="lg">
+          <Button asChild size="lg" className="min-h-12 min-w-[8.5rem]">
             <Link href="/menu">Order Now</Link>
           </Button>
-          <Button asChild variant="outline" size="lg">
+          <Button asChild variant="outline" size="lg" className="min-h-12">
             <Link href="/about">Our Story</Link>
           </Button>
         </motion.div>

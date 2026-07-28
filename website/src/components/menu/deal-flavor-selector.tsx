@@ -114,7 +114,7 @@ export function DealFlavorSelector({
                         setPicks((prev) => ({ ...prev, [slot.id]: p.id }))
                       }
                       className={cn(
-                        "rounded-md border px-3 py-2 text-left text-sm transition-colors",
+                        "min-h-11 rounded-md border px-3 py-2 text-left text-sm transition-colors",
                         selected
                           ? "border-orange-500 bg-orange-500/20 text-orange-200"
                           : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500",

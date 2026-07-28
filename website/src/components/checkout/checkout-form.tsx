@@ -161,12 +161,12 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mb-8">
-        <h1 className="font-display text-5xl text-white">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="font-display text-4xl text-white sm:text-5xl">
           {guestMode ? "Guest Checkout" : "Checkout"}
         </h1>
-        <p className="mt-2 text-zinc-400">
+        <p className="mt-2 text-sm text-zinc-400 sm:text-base">
           {guestMode
             ? "Order without creating an account."
             : isAuthenticated
@@ -175,10 +175,10 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
         </p>
         {!guestMode && !isAuthenticated && (
           <div className="mt-4 flex flex-wrap gap-3">
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="min-h-11">
               <Link href="/login?redirect=/checkout">Customer Login</Link>
             </Button>
-            <Button asChild variant="secondary">
+            <Button asChild variant="secondary" className="min-h-11">
               <Link href="/checkout/guest">Continue as Guest</Link>
             </Button>
           </div>
@@ -186,18 +186,23 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
       </div>
 
       <form
+        id="checkout-form"
         onSubmit={handleSubmit(onSubmit)}
-        className="grid gap-10 lg:grid-cols-[1fr_360px]"
+        className="grid gap-8 pb-28 lg:grid-cols-[1fr_360px] lg:gap-10 lg:pb-0"
       >
-        <div className="space-y-8">
-          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950 p-6">
+        <div className="space-y-6 sm:space-y-8">
+          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 sm:p-6">
             <h2 className="text-lg font-semibold text-white">
               Customer Information
             </h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="customer_name">Full Name</Label>
-                <Input id="customer_name" {...register("customer_name")} />
+                <Input
+                  id="customer_name"
+                  className="min-h-11"
+                  {...register("customer_name")}
+                />
                 {errors.customer_name && (
                   <p className="text-xs text-red-400">
                     {errors.customer_name.message}
@@ -206,7 +211,12 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
-                <Input id="phone" {...register("phone")} />
+                <Input
+                  id="phone"
+                  className="min-h-11"
+                  inputMode="tel"
+                  {...register("phone")}
+                />
                 {errors.phone && (
                   <p className="text-xs text-red-400">{errors.phone.message}</p>
                 )}
@@ -227,7 +237,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                   setValue("location_id", value, { shouldValidate: true })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="min-h-11">
                   <SelectValue placeholder="Select delivery area" />
                 </SelectTrigger>
                 <SelectContent>
@@ -250,7 +260,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             </div>
           </section>
 
-          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950 p-6">
+          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 sm:p-6">
             <h2 className="text-lg font-semibold text-white">Payment Method</h2>
             <RadioGroup
               value={paymentMethod}
@@ -263,7 +273,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
               {PAYMENT_METHODS.map((method) => (
                 <label
                   key={method.id}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-800 p-4 transition-colors hover:border-zinc-600 has-[[data-state=checked]]:border-orange-500"
+                  className="flex min-h-14 cursor-pointer items-start gap-3 rounded-lg border border-zinc-800 p-4 transition-colors hover:border-zinc-600 has-[[data-state=checked]]:border-orange-500"
                 >
                   <RadioGroupItem value={method.id} className="mt-1" />
                   <div>
@@ -328,13 +338,31 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
           </div>
           <Button
             type="submit"
-            className="mt-6 w-full"
+            className="mt-6 hidden min-h-12 w-full lg:flex"
             size="lg"
             disabled={submitting}
           >
             {submitting ? "Placing Order..." : "Place Order"}
           </Button>
         </aside>
+
+        {/* Mobile sticky place-order — desktop uses sidebar button */}
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-black/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm lg:hidden">
+          <div className="mb-2 flex items-center justify-between text-sm text-zinc-300">
+            <span>Total</span>
+            <span className="font-semibold text-orange-400">
+              {formatPrice(grandTotal, currency)}
+            </span>
+          </div>
+          <Button
+            type="submit"
+            className="min-h-12 w-full"
+            size="lg"
+            disabled={submitting}
+          >
+            {submitting ? "Placing Order..." : "Place Order"}
+          </Button>
+        </div>
       </form>
     </div>
   );
