@@ -587,7 +587,7 @@ func validatePaymentForOrderType(orderType, method string) error {
 		}
 	case "phone", "website", "guest":
 		switch method {
-		case "easypaisa", "jazzcash", "card", "cod":
+		case "easypaisa", "jazzcash", "card", "bank", "cod":
 			return nil
 		default:
 			return utils.NewAppError(http.StatusBadRequest, "delivery orders cannot use in-store cash payment")

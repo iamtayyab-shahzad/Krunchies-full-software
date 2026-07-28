@@ -59,7 +59,7 @@ export interface Settings {
   email: string;
 }
 
-export type PaymentMethod = "easypaisa" | "jazzcash" | "card" | "cod";
+export type PaymentMethod = "easypaisa" | "jazzcash" | "bank" | "cod";
 
 export interface CartItem {
   id: string;

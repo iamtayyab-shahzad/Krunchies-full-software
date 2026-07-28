@@ -30,7 +30,7 @@ type CreateOrderRequest struct {
 	Phone         string                   `json:"phone" binding:"required,min=7,max=20"`
 	Address       string                   `json:"address" binding:"max=500"`
 	LocationID    uuid.UUID                `json:"location_id" binding:"required"`
-	PaymentMethod string                   `json:"payment_method" binding:"required,oneof=cash easypaisa jazzcash card cod"`
+	PaymentMethod string                   `json:"payment_method" binding:"required,oneof=cash easypaisa jazzcash card bank cod"`
 	OrderNotes    string                   `json:"order_notes" binding:"max=2000"`
 	ClientOrderID *uuid.UUID               `json:"client_order_id"`
 	IsGuest       bool                     `json:"is_guest"`
@@ -42,7 +42,7 @@ type UpdateOrderRequest struct {
 	Phone         *string                   `json:"phone" binding:"omitempty,min=7,max=20"`
 	Address       *string                   `json:"address" binding:"omitempty,max=500"`
 	LocationID    *uuid.UUID                `json:"location_id"`
-	PaymentMethod *string                   `json:"payment_method" binding:"omitempty,oneof=cash easypaisa jazzcash card cod"`
+	PaymentMethod *string                   `json:"payment_method" binding:"omitempty,oneof=cash easypaisa jazzcash card bank cod"`
 	OrderNotes    *string                   `json:"order_notes" binding:"omitempty,max=2000"`
 	OrderStatus   *string                   `json:"order_status" binding:"omitempty,oneof=PENDING COMPLETED CANCELLED"`
 	Items         *[]CreateOrderItemRequest `json:"items" binding:"omitempty,min=1,dive"`
@@ -50,14 +50,14 @@ type UpdateOrderRequest struct {
 
 type CreatePaymentRequest struct {
 	OrderID   uuid.UUID `json:"order_id" binding:"required"`
-	Method    string    `json:"method" binding:"required,oneof=cash easypaisa jazzcash card cod"`
+	Method    string    `json:"method" binding:"required,oneof=cash easypaisa jazzcash card bank cod"`
 	Amount    int       `json:"amount" binding:"required,min=0"`
 	Status    string    `json:"status" binding:"required,oneof=pending paid failed refunded"`
 	Reference string    `json:"reference" binding:"max=120"`
 }
 
 type UpdatePaymentRequest struct {
-	Method    *string `json:"method" binding:"omitempty,oneof=cash easypaisa jazzcash card cod"`
+	Method    *string `json:"method" binding:"omitempty,oneof=cash easypaisa jazzcash card bank cod"`
 	Amount    *int    `json:"amount" binding:"omitempty,min=0"`
 	Status    *string `json:"status" binding:"omitempty,oneof=pending paid failed refunded"`
 	Reference *string `json:"reference" binding:"omitempty,max=120"`

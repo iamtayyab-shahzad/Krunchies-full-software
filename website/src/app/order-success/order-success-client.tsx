@@ -51,7 +51,17 @@ export default function OrderSuccessClient() {
           </div>
           <div className="mt-2 flex justify-between text-zinc-400">
             <span>Payment</span>
-            <span className="capitalize text-white">{order.payment_method}</span>
+            <span className="text-white">
+              {order.payment_method === "bank"
+                ? "Other Bank Payments"
+                : order.payment_method === "easypaisa"
+                  ? "EasyPaisa"
+                  : order.payment_method === "jazzcash"
+                    ? "JazzCash"
+                    : order.payment_method === "cod"
+                      ? "Cash on Delivery"
+                      : order.payment_method}
+            </span>
           </div>
           <div className="mt-2 flex justify-between text-zinc-400">
             <span>Total</span>
