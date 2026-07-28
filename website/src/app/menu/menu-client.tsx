@@ -29,8 +29,6 @@ export default function MenuPage() {
     [categories],
   );
 
-  // Fetch the full catalog once; filter/search client-side to avoid
-  // re-hitting the API on every keystroke or category click.
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -69,59 +67,71 @@ export default function MenuPage() {
     return result;
   }, [products, categoryId, search, sizeFilter, pizzaCategoryIds]);
 
+  const categoryButtons = (
+    <>
+      <button
+        type="button"
+        onClick={() => setCategoryId("all")}
+        className={cn(
+          "shrink-0 rounded-full px-4 py-2.5 text-sm font-medium transition-colors lg:block lg:w-full lg:rounded-md lg:px-3 lg:py-2 lg:text-left",
+          categoryId === "all"
+            ? "bg-orange-500 text-black lg:bg-orange-500/15 lg:text-orange-400"
+            : "bg-zinc-900 text-zinc-300 lg:bg-transparent lg:text-zinc-400 lg:hover:bg-zinc-900 lg:hover:text-white",
+        )}
+      >
+        All Items
+      </button>
+      {categories.map((cat) => (
+        <button
+          key={cat.id}
+          type="button"
+          onClick={() => setCategoryId(cat.id)}
+          className={cn(
+            "shrink-0 rounded-full px-4 py-2.5 text-sm font-medium transition-colors lg:block lg:w-full lg:rounded-md lg:px-3 lg:py-2 lg:text-left",
+            categoryId === cat.id
+              ? "bg-orange-500 text-black lg:bg-orange-500/15 lg:text-orange-400"
+              : "bg-zinc-900 text-zinc-300 lg:bg-transparent lg:text-zinc-400 lg:hover:bg-zinc-900 lg:hover:text-white",
+          )}
+        >
+          {cat.name}
+        </button>
+      ))}
+    </>
+  );
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-8">
-        <h1 className="font-display text-5xl text-white">Menu</h1>
-        <p className="mt-2 text-zinc-400">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+      <div className="mb-5 sm:mb-8">
+        <h1 className="font-display text-4xl text-white sm:text-5xl">Menu</h1>
+        <p className="mt-2 hidden text-zinc-400 sm:block">
           Official Krunchies Pizza menu — shakes, pasta, rolls, burgers, pizzas,
           and family deals.
         </p>
       </div>
 
+      <div className="sticky top-16 z-30 -mx-4 mb-4 border-b border-zinc-900 bg-black/95 px-4 py-3 backdrop-blur-sm lg:hidden">
+        <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {categoryButtons}
+        </div>
+      </div>
+
       <div className="grid gap-8 lg:grid-cols-[240px_1fr]">
-        <aside className="h-fit space-y-2 lg:sticky lg:top-24">
+        <aside className="hidden h-fit space-y-2 lg:sticky lg:top-24 lg:block">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-orange-500">
             Categories
           </p>
-          <button
-            type="button"
-            onClick={() => setCategoryId("all")}
-            className={cn(
-              "block w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
-              categoryId === "all"
-                ? "bg-orange-500/15 text-orange-400"
-                : "text-zinc-400 hover:bg-zinc-900 hover:text-white",
-            )}
-          >
-            All Items
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setCategoryId(cat.id)}
-              className={cn(
-                "block w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
-                categoryId === cat.id
-                  ? "bg-orange-500/15 text-orange-400"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-white",
-              )}
-            >
-              {cat.name}
-            </button>
-          ))}
+          {categoryButtons}
         </aside>
 
         <div>
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+          <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row">
             <Input
               placeholder="Search menu..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="sm:max-w-xs"
+              className="min-h-11 sm:max-w-xs"
             />
-            <div className="flex gap-2">
+            <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {(
                 [
                   ["all", "All"],
@@ -134,7 +144,7 @@ export default function MenuPage() {
                   type="button"
                   onClick={() => setSizeFilter(value)}
                   className={cn(
-                    "rounded-md border px-3 py-2 text-sm",
+                    "min-h-11 shrink-0 rounded-md border px-3 py-2 text-sm",
                     sizeFilter === value
                       ? "border-orange-500 text-orange-400"
                       : "border-zinc-700 text-zinc-400",
@@ -151,7 +161,7 @@ export default function MenuPage() {
           ) : filtered.length === 0 ? (
             <p className="text-zinc-500">No products found.</p>
           ) : (
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 sm:gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
