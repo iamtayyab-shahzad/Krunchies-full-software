@@ -544,7 +544,15 @@ export async function runSync(reason: string = "manual"): Promise<void> {
       await pruneSyncedActions(50);
       await pruneCacheKeys([]);
 
-      if (!hadFailure || reason === "manual") {
+      // Interval ticks only drain the queue — skip full catalog refresh unless
+      // something actually synced (or user/startup/online forced a pull).
+      const shouldRefreshCatalog =
+        reason === "manual" ||
+        reason === "startup" ||
+        reason === "online" ||
+        due.length > 0;
+
+      if (shouldRefreshCatalog && (!hadFailure || reason === "manual")) {
         try {
           const [orders, inventory] = await Promise.all([
             apiFetch<Order[]>("/orders?limit=100"),

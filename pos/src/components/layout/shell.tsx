@@ -18,13 +18,15 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { ordersApi, sessionRepo } from "@/services/api";
+import { sessionRepo } from "@/services/api";
 import {
   getSyncState,
   runSync,
   subscribeSync,
+  POS_SYNC_COMPLETE_EVENT,
   type SyncEngineState,
 } from "@/lib/sync-engine";
+import { POS_ORDERS_CHANGED_EVENT } from "@/lib/offline-events";
 import { setToken } from "@/lib/api-client";
 
 const LINKS = [
@@ -62,23 +64,24 @@ export function Sidebar() {
     let cancelled = false;
     const loadPending = async () => {
       try {
-        // Prefer local pending count to reduce API thrash; refresh from API less often.
         const { listLocalPendingOrders } = await import("@/lib/offline-db");
         const local = await listLocalPendingOrders();
         if (!cancelled) setPendingCount(local.length);
-        if (navigator.onLine) {
-          const rows = await ordersApi.pending();
-          if (!cancelled) setPendingCount(rows.length);
-        }
       } catch {
         // Keep last known count
       }
     };
-    loadPending();
-    const id = setInterval(loadPending, 20_000);
+    void loadPending();
+    const onChange = () => void loadPending();
+    window.addEventListener(POS_ORDERS_CHANGED_EVENT, onChange);
+    window.addEventListener(POS_SYNC_COMPLETE_EVENT, onChange);
+    // Light fallback poll — IDB + events cover most updates.
+    const id = setInterval(loadPending, 60_000);
     return () => {
       cancelled = true;
       clearInterval(id);
+      window.removeEventListener(POS_ORDERS_CHANGED_EVENT, onChange);
+      window.removeEventListener(POS_SYNC_COMPLETE_EVENT, onChange);
     };
   }, []);
 
@@ -187,7 +190,7 @@ export function TopBar({
 
   useEffect(() => {
     setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 1000);
+    const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);
 

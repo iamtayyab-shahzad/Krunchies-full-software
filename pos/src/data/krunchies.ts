@@ -1,4 +1,4 @@
-import catalog from "../../../shared/krunchies-menu.json";
+import catalog from "./krunchies-menu.json";
 import type { Category, Offer, Product, Settings } from "@/types";
 
 const now = "2026-07-19T00:00:00.000Z";

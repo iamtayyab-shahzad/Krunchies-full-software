@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar, TopBar } from "@/components/layout/shell";
-import { useBill } from "@/context/bill-context";
+import { useMenuSearch } from "@/context/menu-search-context";
 import { TOKEN_KEY, isTokenExpired, isOfflineSessionValid } from "@/lib/utils";
 import { isOnline } from "@/lib/network";
 import { sessionRepo, settingsApi, warmOfflineCache } from "@/services/api";
@@ -14,14 +14,14 @@ let offlineCacheWarmed = false;
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { search, setSearch } = useBill();
+  const { search, setSearch } = useMenuSearch();
   const isNewOrder = pathname.startsWith("/orders/new");
 
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: settingsApi.get,
     retry: false,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [router, pathname]);
+  }, [router]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-black text-white">

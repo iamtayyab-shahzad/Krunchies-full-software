@@ -2,25 +2,41 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Keep Turbopack root on the POS app so `public/products` ships to Vercel.
   turbopack: {
-    // Include repo root so `shared/krunchies-menu.json` resolves.
-    root: path.join(__dirname, ".."),
+    root: path.join(__dirname),
   },
+  poweredByHeader: false,
+  compress: true,
   images: {
-    formats: ["image/avif", "image/webp"],
-    deviceSizes: [640, 750, 828, 1080, 1200],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    // Local WebPs are already optimized; skip /_next/image on Vercel (faster tiles).
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "res.cloudinary.com" },
     ],
   },
   experimental: {
-    optimizePackageImports: ["lucide-react"],
+    optimizePackageImports: [
+      "lucide-react",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-select",
+      "@radix-ui/react-switch",
+      "sonner",
+    ],
   },
   headers: async () => [
     {
       source: "/products/:path*",
+      headers: [
+        {
+          key: "Cache-Control",
+          value: "public, max-age=31536000, immutable",
+        },
+      ],
+    },
+    {
+      source: "/icons/:path*",
       headers: [
         {
           key: "Cache-Control",

@@ -50,14 +50,19 @@ export default function InventoryPage() {
   const { data: inventory = [] } = useQuery({
     queryKey: ["inventory"],
     queryFn: inventoryApi.list,
+    staleTime: 60_000,
   });
   const { data: recipes = [] } = useQuery({
     queryKey: ["recipes"],
     queryFn: recipesApi.list,
+    enabled: tab === "recipes",
+    staleTime: 60_000,
   });
   const { data: products = [] } = useQuery({
     queryKey: ["products"],
     queryFn: productsApi.list,
+    enabled: tab === "recipes" || recipeOpen,
+    staleTime: 5 * 60_000,
   });
 
   const history = useMemo(() => {

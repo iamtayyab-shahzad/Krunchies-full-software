@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Minus, Plus, Trash2, Printer } from "lucide-react";
@@ -17,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useBill } from "@/context/bill-context";
-import { DealFlavorDialog } from "@/components/deal-flavor-dialog";
+import { useMenuSearch } from "@/context/menu-search-context";
 import { requiresDealFlavorChoice } from "@/lib/deal-flavors";
 import {
   calcCodFee,
@@ -44,9 +45,16 @@ import {
 } from "@/services/api";
 import type { Order, Product, ProductSize } from "@/types";
 
+const DealFlavorDialog = dynamic(
+  () =>
+    import("@/components/deal-flavor-dialog").then((m) => m.DealFlavorDialog),
+  { ssr: false },
+);
+
 export default function NewOrderPage() {
   const qc = useQueryClient();
   const bill = useBill();
+  const { search } = useMenuSearch();
   const [categoryId, setCategoryId] = useState("all");
   const [busy, setBusy] = useState(false);
   const [dealProduct, setDealProduct] = useState<Product | null>(null);
@@ -69,18 +77,22 @@ export default function NewOrderPage() {
   } = useQuery({
     queryKey: ["products"],
     queryFn: productsApi.list,
+    staleTime: 5 * 60_000,
   });
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: categoriesApi.list,
+    staleTime: 5 * 60_000,
   });
   const { data: locations = [] } = useQuery({
     queryKey: ["locations"],
     queryFn: locationsApi.list,
+    staleTime: 5 * 60_000,
   });
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: settingsApi.get,
+    staleTime: 5 * 60_000,
   });
 
   const deliveryLocations = useMemo(
@@ -109,31 +121,34 @@ export default function NewOrderPage() {
       .filter((p) => p.available)
       .filter((p) => (categoryId === "all" ? true : p.category_id === categoryId))
       .filter((p) => {
-        if (!bill.search) return true;
-        const q = bill.search.toLowerCase();
+        if (!search) return true;
+        const q = search.toLowerCase();
         return (
           p.name.toLowerCase().includes(q) ||
           p.description?.toLowerCase().includes(q)
         );
       })
       .sort((a, b) => a.display_order - b.display_order);
-  }, [productsWithCategories, categoryId, bill.search]);
+  }, [productsWithCategories, categoryId, search]);
 
-  const onProductClick = (product: Product) => {
-    const sizes = product.sizes || [];
-    if (!sizes.length) {
-      toast.error("No sizes configured for this product");
-      return;
-    }
-    if (requiresDealFlavorChoice(product)) {
-      setDealProduct(product);
-      return;
-    }
-    bill.addProduct(product, sizes[0]);
-    if (sizes.length > 1) {
-      toast.message(`${product.name} added (${sizes[0].size})`);
-    }
-  };
+  const onProductClick = useCallback(
+    (product: Product) => {
+      const sizes = product.sizes || [];
+      if (!sizes.length) {
+        toast.error("No sizes configured for this product");
+        return;
+      }
+      if (requiresDealFlavorChoice(product)) {
+        setDealProduct(product);
+        return;
+      }
+      bill.addProduct(product, sizes[0]);
+      if (sizes.length > 1) {
+        toast.message(`${product.name} added (${sizes[0].size})`);
+      }
+    },
+    [bill.addProduct], // addProduct is stable from BillProvider
+  );
 
   const onDealConfirm = (
     product: Product,
@@ -752,10 +767,10 @@ function ProductTile({
             src={product.image}
             alt={product.name}
             fill
+            unoptimized
             className="object-cover"
             sizes="200px"
             loading="lazy"
-            quality={70}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-zinc-600">

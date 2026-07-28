@@ -40,11 +40,9 @@ interface BillState {
   orderNotes: string;
   tableNumber: string;
   items: BillLine[];
-  search: string;
 }
 
 interface BillContextValue extends BillState {
-  setSearch: (v: string) => void;
   setOrderType: (v: OrderType) => void;
   setCustomerName: (v: string) => void;
   setPhone: (v: string) => void;
@@ -86,7 +84,6 @@ const defaults: BillState = {
   orderNotes: "",
   tableNumber: "",
   items: [],
-  search: "",
 };
 
 const BillContext = createContext<BillContextValue | null>(null);
@@ -144,7 +141,6 @@ export function BillProvider({ children }: { children: ReactNode }) {
             orderNotes: notes,
             tableNumber: tableMatch?.[1] || "",
             items: draft.items,
-            search: "",
           });
           setCartRecovered(true);
         } else {
@@ -162,7 +158,7 @@ export function BillProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Autosave cart draft (debounced). Exclude `search` — typing must not hit IndexedDB.
+  // Autosave cart draft (debounced).
   useEffect(() => {
     if (!hydrated.current || skipPersist.current) return;
     if (state.editingOrderId) return; // don't overwrite active cart while editing pending
@@ -178,7 +174,6 @@ export function BillProvider({ children }: { children: ReactNode }) {
       void saveDraft(draft);
     }, 400);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit search
   }, [
     state.draftId,
     state.editingOrderId,
@@ -245,7 +240,6 @@ export function BillProvider({ children }: { children: ReactNode }) {
       ...state,
       cartRecovered,
       subtotal,
-      setSearch: (search) => setState((p) => ({ ...p, search })),
       setOrderType: (orderType) =>
         setState((p) => {
           if (orderType === "walkin") {
@@ -395,7 +389,6 @@ export function BillProvider({ children }: { children: ReactNode }) {
         setState((p) => ({
           ...defaults,
           draftId: ACTIVE_DRAFT_ID,
-          search: p.search,
           orderType: p.orderType,
         }));
       },

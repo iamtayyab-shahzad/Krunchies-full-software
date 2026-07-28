@@ -57,12 +57,16 @@ export default function PendingOrdersPage() {
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: settingsApi.get,
+    staleTime: 5 * 60_000,
   });
 
   const { data: orders = [], isLoading, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["orders", "pending"],
     queryFn: ordersApi.pending,
-    refetchInterval: 12_000,
+    refetchInterval: () => {
+      if (typeof document !== "undefined" && document.hidden) return false;
+      return 25_000;
+    },
     refetchOnWindowFocus: true,
   });
 

@@ -1,15 +1,25 @@
 /* Krunchies POS Service Worker — App Shell + static assets */
-const CACHE_VERSION = "krunchies-pos-v4";
+const CACHE_VERSION = "krunchies-pos-v5";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
-const RUNTIME_MAX_ENTRIES = 100;
+const PRODUCT_CACHE = `${CACHE_VERSION}-products`;
+const RUNTIME_MAX_ENTRIES = 120;
+const PRODUCT_MAX_ENTRIES = 200;
 
-/** Core POS routes that must open while offline (no login wall / offline stub). */
+/** Critical routes only — rest warmed idle via WARM_SHELL. */
 const PRECACHE_URLS = [
   "/",
   "/login",
   "/orders/new",
   "/orders/pending",
+  "/offline",
+  "/manifest.webmanifest",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+];
+
+/** Extra routes warmed after install (idle), not blocking first paint. */
+const WARM_URLS = [
   "/orders/history",
   "/dashboard",
   "/products",
@@ -17,10 +27,6 @@ const PRECACHE_URLS = [
   "/inventory",
   "/analytics",
   "/settings",
-  "/offline",
-  "/manifest.webmanifest",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
 ];
 
 const APP_SHELL_FALLBACKS = [
@@ -77,8 +83,9 @@ self.addEventListener("message", (event) => {
 
 async function warmShellRoutes() {
   const cache = await caches.open(SHELL_CACHE);
+  const urls = [...PRECACHE_URLS, ...WARM_URLS];
   await Promise.all(
-    PRECACHE_URLS.map(async (url) => {
+    urls.map(async (url) => {
       try {
         const response = await fetch(url, { credentials: "same-origin" });
         if (response.ok) await cache.put(url, response.clone());
@@ -107,9 +114,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Product images — cache-first (immutable WebPs)
+  if (url.pathname.startsWith("/products/")) {
+    event.respondWith(cacheFirst(request, PRODUCT_CACHE, PRODUCT_MAX_ENTRIES));
+    return;
+  }
+
   // Next.js hashed static assets — cache-first with eviction
   if (url.pathname.startsWith("/_next/static/")) {
-    event.respondWith(cacheFirst(request, RUNTIME_CACHE));
+    event.respondWith(cacheFirst(request, RUNTIME_CACHE, RUNTIME_MAX_ENTRIES));
     return;
   }
 
@@ -120,9 +133,7 @@ self.addEventListener("fetch", (event) => {
     request.headers.get("Next-Router-State-Tree") != null ||
     request.headers.get("Next-Router-Prefetch") != null;
   if (isRsc) {
-    event.respondWith(
-      fetch(request).catch(() => Response.error()),
-    );
+    event.respondWith(fetch(request).catch(() => Response.error()));
     return;
   }
 
@@ -136,7 +147,8 @@ self.addEventListener("fetch", (event) => {
   if (
     url.pathname.startsWith("/icons/") ||
     url.pathname.endsWith(".webmanifest") ||
-    PRECACHE_URLS.includes(url.pathname)
+    PRECACHE_URLS.includes(url.pathname) ||
+    WARM_URLS.includes(url.pathname)
   ) {
     event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
   }
@@ -152,7 +164,7 @@ async function trimCache(cacheName, maxEntries) {
   }
 }
 
-async function cacheFirst(request, cacheName) {
+async function cacheFirst(request, cacheName, maxEntries) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) return cached;
@@ -160,7 +172,7 @@ async function cacheFirst(request, cacheName) {
     const response = await fetch(request);
     if (response.ok) {
       cache.put(request, response.clone());
-      await trimCache(cacheName, RUNTIME_MAX_ENTRIES);
+      await trimCache(cacheName, maxEntries);
     }
     return response;
   } catch {

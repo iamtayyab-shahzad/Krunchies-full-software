@@ -24,20 +24,9 @@ export function RegisterSW() {
       .register("/sw.js")
       .then((reg) => {
         registration = reg;
-        // Warm app-shell routes into Cache Storage while online so offline
-        // navigations hit real POS pages instead of the /offline stub.
+        // Warm via SW message only — SW fetches routes idle (no double fetch).
         if (navigator.onLine) {
           reg.active?.postMessage({ type: "WARM_SHELL" });
-          void Promise.allSettled(
-            [
-              "/",
-              "/login",
-              "/orders/new",
-              "/orders/pending",
-              "/orders/history",
-              "/dashboard",
-            ].map((url) => fetch(url, { credentials: "same-origin" })),
-          );
         }
         reg.addEventListener("updatefound", () => {
           const worker = reg.installing;

@@ -18,11 +18,13 @@ export default function OrderHistoryPage() {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: ordersApi.list,
-    refetchInterval: 30_000,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
   });
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: settingsApi.get,
+    staleTime: 5 * 60_000,
   });
 
   const filtered = useMemo(() => {

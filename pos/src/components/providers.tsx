@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { BillProvider } from "@/context/bill-context";
+import { MenuSearchProvider } from "@/context/menu-search-context";
 import {
   POS_SYNC_COMPLETE_EVENT,
   startSyncEngine,
@@ -16,7 +17,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30_000,
+            staleTime: 60_000,
             retry: 1,
             refetchOnWindowFocus: false,
             // Queries are backed by IndexedDB and work offline. The default
@@ -51,21 +52,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <BillProvider>
-        {children}
-        <Toaster
-          theme="dark"
-          position="top-center"
-          toastOptions={{
-            style: {
-              background: "#18181b",
-              border: "1px solid #3f3f46",
-              color: "#fff",
-              fontSize: "16px",
-            },
-          }}
-        />
-      </BillProvider>
+      <MenuSearchProvider>
+        <BillProvider>
+          {children}
+          <Toaster
+            theme="dark"
+            position="top-center"
+            toastOptions={{
+              style: {
+                background: "#18181b",
+                border: "1px solid #3f3f46",
+                color: "#fff",
+                fontSize: "16px",
+              },
+            }}
+          />
+        </BillProvider>
+      </MenuSearchProvider>
     </QueryClientProvider>
   );
 }

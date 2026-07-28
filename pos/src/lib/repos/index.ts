@@ -288,19 +288,10 @@ export async function warmOfflineCache() {
     settingsRepo.get(),
     locationsRepo.list(),
   ]);
-  // Also hit app-shell routes so the service worker caches HTML for offline open.
+  // Also ask the service worker to warm HTML shells (SW does the fetches).
+  // Avoid duplicate page fetches here — pwa-register / SW handle that.
   if (typeof window !== "undefined" && "serviceWorker" in navigator) {
     const reg = await navigator.serviceWorker.getRegistration();
     reg?.active?.postMessage({ type: "WARM_SHELL" });
-    await Promise.allSettled(
-      [
-        "/",
-        "/login",
-        "/orders/new",
-        "/orders/pending",
-        "/orders/history",
-        "/dashboard",
-      ].map((url) => fetch(url, { credentials: "same-origin" })),
-    );
   }
 }
