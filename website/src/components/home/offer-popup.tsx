@@ -39,24 +39,28 @@ export function OfferPopup() {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="overflow-hidden p-0 sm:max-w-md">
+      <DialogContent className="inset-x-4 bottom-auto top-[50%] max-h-[85dvh] w-auto max-w-md translate-y-[-50%] overflow-hidden rounded-xl p-0">
         <div className="relative aspect-[16/10]">
           <Image
             src={offer.image}
             alt={offer.title}
             fill
             className="object-cover"
-            sizes="448px"
+            sizes="(max-width: 640px) 90vw, 448px"
           />
         </div>
-        <div className="space-y-4 p-6 pt-2">
+        <div className="space-y-4 p-5 pt-2 sm:p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl text-orange-400">
               {offer.title}
             </DialogTitle>
             <DialogDescription>{offer.description}</DialogDescription>
           </DialogHeader>
-          <Button asChild className="w-full" onClick={() => handleClose(false)}>
+          <Button
+            asChild
+            className="min-h-12 w-full"
+            onClick={() => handleClose(false)}
+          >
             <Link href="/menu">Claim Offer</Link>
           </Button>
         </div>

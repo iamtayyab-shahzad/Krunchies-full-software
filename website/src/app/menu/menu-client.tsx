@@ -109,7 +109,7 @@ export default function MenuPage() {
         </p>
       </div>
 
-      <div className="sticky top-16 z-30 -mx-4 mb-4 border-b border-zinc-900 bg-black/95 px-4 py-3 backdrop-blur-sm lg:hidden">
+      <div className="sticky top-14 z-30 -mx-4 mb-4 border-b border-zinc-900 bg-black/95 px-4 py-3 backdrop-blur-sm sm:top-16 lg:hidden">
         <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {categoryButtons}
         </div>
@@ -157,7 +157,14 @@ export default function MenuPage() {
           </div>
 
           {loading && products.length === 0 ? (
-            <p className="text-zinc-500">Loading menu...</p>
+            <div className="grid gap-3 sm:gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-28 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/70 sm:h-72"
+                />
+              ))}
+            </div>
           ) : filtered.length === 0 ? (
             <p className="text-zinc-500">No products found.</p>
           ) : (

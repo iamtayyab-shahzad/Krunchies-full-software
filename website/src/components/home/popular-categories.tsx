@@ -2,61 +2,67 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { getCategories } from "@/services/api";
 import type { Category } from "@/types";
 
 export function PopularCategories() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getCategories().then(setCategories);
+    let active = true;
+    getCategories()
+      .then((rows) => {
+        if (active) setCategories(rows);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
-    <section className="border-y border-white/5 bg-zinc-950/80 py-20">
+    <section className="border-y border-white/5 bg-zinc-950/80 py-12 sm:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="mb-10"
-        >
+        <div className="mb-6 sm:mb-10">
           <p className="text-sm font-semibold uppercase tracking-widest text-orange-500">
             Browse
           </p>
-          <h2 className="mt-2 font-display text-4xl text-white sm:text-5xl">
+          <h2 className="mt-2 font-display text-3xl text-white sm:text-5xl">
             Popular Categories
           </h2>
-        </motion.div>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-          {categories.map((cat, i) => (
-            <motion.div
-              key={cat.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.06 }}
-            >
-              <Link
-                href={`/menu?category=${cat.id}`}
-                className="group relative block aspect-square overflow-hidden rounded-xl"
-              >
-                <Image
-                  src={cat.image}
-                  alt={cat.name}
-                  fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-110"
-                  sizes="(max-width: 768px) 50vw, 20vw"
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-5">
+          {loading && categories.length === 0
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="aspect-square animate-pulse rounded-xl bg-zinc-900"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-                <p className="absolute bottom-4 left-4 font-display text-xl text-white">
-                  {cat.name}
-                </p>
-              </Link>
-            </motion.div>
-          ))}
+              ))
+            : categories.map((cat) => (
+                <Link
+                  key={cat.id}
+                  href={`/menu?category=${cat.id}`}
+                  className="group relative block aspect-square overflow-hidden rounded-xl"
+                >
+                  <Image
+                    src={cat.image}
+                    alt={cat.name}
+                    fill
+                    className="object-cover sm:transition-transform sm:duration-500 sm:group-hover:scale-110"
+                    sizes="(max-width: 768px) 50vw, 20vw"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                  <p className="absolute bottom-3 left-3 font-display text-lg text-white sm:bottom-4 sm:left-4 sm:text-xl">
+                    {cat.name}
+                  </p>
+                </Link>
+              ))}
         </div>
       </div>
     </section>
