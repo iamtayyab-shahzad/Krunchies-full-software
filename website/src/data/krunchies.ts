@@ -1,4 +1,4 @@
-import catalog from "../../../shared/krunchies-menu.json";
+import catalog from "./krunchies-menu.json";
 import type {
   Category,
   Location,

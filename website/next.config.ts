@@ -2,9 +2,10 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Must match turbopack.root. Keep both as the website app so Vercel
+  // ships `website/public/products` (parent root caused image 404s).
   turbopack: {
-    // Include repo root so `shared/krunchies-menu.json` resolves.
-    root: path.join(__dirname, ".."),
+    root: path.join(__dirname),
   },
   images: {
     formats: ["image/avif", "image/webp"],
