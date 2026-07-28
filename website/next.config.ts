@@ -2,15 +2,22 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  // Must match turbopack.root. Keep both as the website app so Vercel
-  // ships `website/public/products` (parent root caused image 404s).
+  // App root must be `website/` so `public/products` is included in the Vercel
+  // deployment. Pointing turbopack at the monorepo parent caused image 404s.
   turbopack: {
     root: path.join(__dirname),
   },
   images: {
+    // Bypass /_next/image optimizer — Next 16 + missing/local source files was
+    // returning HTTP 400 for every /products/*.webp. Serve public assets directly.
+    unoptimized: true,
+    localPatterns: [
+      { pathname: "/products/**" },
+      { pathname: "/**" },
+    ],
     formats: ["image/avif", "image/webp"],
     deviceSizes: [640, 750, 828, 1080, 1200],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    imageSizes: [32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [
       {
         protocol: "https",
