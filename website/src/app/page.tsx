@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { HeroSection } from "@/components/home/hero-section";
 import { OfferPopup } from "@/components/home/offer-popup";
+import { pageSeo } from "@/lib/seo";
 
 const FeaturedProducts = dynamic(() =>
   import("@/components/home/featured-products").then((m) => ({
@@ -29,11 +30,13 @@ const CallToAction = dynamic(() =>
   })),
 );
 
-export const metadata: Metadata = {
-  title: "Home",
+export const metadata: Metadata = pageSeo({
+  title: "Krunchies Pizza | Fresh Pizza, Burgers & Fast Food",
   description:
-    "Order premium handcrafted pizzas from Krunchies. Fast delivery, bold flavors, fire-baked perfection.",
-};
+    "Order fresh pizza, burgers, deals and shakes from Krunchies Pizza. Fast delivery and takeaway — crunchy, cheesy, irresistible.",
+  path: "/",
+  absoluteTitle: true,
+});
 
 export default function HomePage() {
   return (

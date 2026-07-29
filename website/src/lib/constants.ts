@@ -1,7 +1,9 @@
 export const SITE_NAME = "Krunchies Pizza";
-export const SITE_URL = "https://krunchies.pizza";
+export const SITE_URL = "https://krunchies.pk";
 export const SITE_DESCRIPTION =
-  "Premium handcrafted pizzas, bold flavors, and fast delivery. Order from Krunchies Pizza today.";
+  "Order fresh pizza, burgers, deals & shakes from Krunchies Pizza. Fast delivery and takeaway across Pakistan.";
+
+export const SITE_OG_IMAGE = "/logo.png";
 
 export const NAV_LINKS = [
   { href: "/", label: "Home" },

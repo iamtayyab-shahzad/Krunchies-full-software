@@ -1,9 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { pageSeo } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Page Not Found",
+  ...pageSeo({
+    title: "Page Not Found",
+    description: "The page you requested could not be found on Krunchies Pizza.",
+    path: "/",
+  }),
+  robots: {
+    index: false,
+    follow: true,
+  },
 };
 
 export default function NotFound() {

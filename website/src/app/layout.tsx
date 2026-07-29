@@ -1,7 +1,19 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Bebas_Neue, Outfit } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/constants";
+import { JsonLd } from "@/components/seo/json-ld";
+import {
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_OG_IMAGE,
+  SITE_URL,
+} from "@/lib/constants";
+import {
+  DEFAULT_HOME_DESCRIPTION,
+  DEFAULT_HOME_TITLE,
+  canonicalUrl,
+} from "@/lib/seo";
 import "./globals.css";
 
 const display = Bebas_Neue({
@@ -22,11 +34,17 @@ const body = Outfit({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} | Premium Pizza Delivery`,
+    default: DEFAULT_HOME_TITLE,
     template: `%s | ${SITE_NAME}`,
   },
-  description: SITE_DESCRIPTION,
+  description: DEFAULT_HOME_DESCRIPTION,
   applicationName: SITE_NAME,
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  alternates: {
+    canonical: canonicalUrl("/"),
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -37,32 +55,48 @@ export const metadata: Metadata = {
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
     shortcut: "/favicon.ico",
   },
+  manifest: "/manifest.webmanifest",
   openGraph: {
     type: "website",
     locale: "en_PK",
     url: SITE_URL,
     siteName: SITE_NAME,
-    title: `${SITE_NAME} | Premium Pizza Delivery`,
+    title: DEFAULT_HOME_TITLE,
     description: SITE_DESCRIPTION,
     images: [
       {
-        url: "/logo.png",
-        width: 1024,
-        height: 1024,
-        alt: "Krunchies Pizza",
+        url: SITE_OG_IMAGE,
+        width: 512,
+        height: 512,
+        alt: SITE_NAME,
       },
     ],
   },
   twitter: {
     card: "summary",
-    title: SITE_NAME,
+    title: DEFAULT_HOME_TITLE,
     description: SITE_DESCRIPTION,
-    images: ["/logo.png"],
+    images: [SITE_OG_IMAGE],
   },
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
   },
+  category: "food",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#050505" },
+    { media: "(prefers-color-scheme: light)", color: "#f97316" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -71,9 +105,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} h-full`} suppressHydrationWarning>
-      <body className="flex min-h-full flex-col bg-background font-sans text-foreground antialiased" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${display.variable} ${body.variable} h-full`}
+      suppressHydrationWarning
+    >
+      <body
+        className="flex min-h-full flex-col bg-background font-sans text-foreground antialiased"
+        suppressHydrationWarning
+      >
+        <JsonLd />
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );

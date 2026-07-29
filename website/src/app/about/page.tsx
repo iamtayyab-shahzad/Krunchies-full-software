@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { pageSeo } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "About",
+export const metadata: Metadata = pageSeo({
+  title: "About Krunchies Pizza",
   description:
     "Learn the story behind Krunchies Pizza — premium dough, bold flavors, and fire-baked craft.",
-};
+  path: "/about",
+  absoluteTitle: true,
+});
 
 const ABOUT_HERO =
   "https://images.unsplash.com/photo-1590947132387-155cc02f3212?w=1600&q=80";

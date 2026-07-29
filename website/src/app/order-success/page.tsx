@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import OrderSuccessClient from "./order-success-client";
+import { pageSeo } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Order Success",
+export const metadata: Metadata = pageSeo({
+  title: "Order Confirmed",
   description: "Your Krunchies Pizza order has been placed successfully.",
-};
+  path: "/order-success",
+});
 
 export default function OrderSuccessPage() {
   return (
