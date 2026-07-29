@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ProductCard } from "@/components/menu/product-card";
 import { Button } from "@/components/ui/button";
-import { getProducts } from "@/services/api";
+import { clearCatalogCache, getProducts } from "@/services/api";
 import type { Product } from "@/types";
 
 function FeaturedSkeleton() {
@@ -23,12 +23,17 @@ function FeaturedSkeleton() {
 export function FeaturedProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     getProducts({ featured: true })
       .then((rows) => {
         if (active) setProducts(rows);
+      })
+      .catch(() => {
+        if (active) setProducts([]);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -36,7 +41,7 @@ export function FeaturedProducts() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
@@ -55,6 +60,21 @@ export function FeaturedProducts() {
       </div>
       {loading && products.length === 0 ? (
         <FeaturedSkeleton />
+      ) : products.length === 0 ? (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-center">
+          <p className="text-sm text-zinc-400">Featured items unavailable.</p>
+          <Button
+            className="mt-3"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              clearCatalogCache();
+              setReloadKey((k) => k + 1);
+            }}
+          >
+            Retry
+          </Button>
+        </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
           {products.slice(0, 6).map((product) => (

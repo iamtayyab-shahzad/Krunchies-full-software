@@ -158,10 +158,13 @@ export function BillProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Autosave cart draft (debounced).
+  // Autosave cart draft (debounced). Longer while offline to cut IndexedDB thrash.
   useEffect(() => {
     if (!hydrated.current || skipPersist.current) return;
     if (state.editingOrderId) return; // don't overwrite active cart while editing pending
+    const offline =
+      typeof navigator !== "undefined" && !navigator.onLine;
+    const delay = offline ? 1_200 : 400;
     const timer = setTimeout(() => {
       const draft = toPendingDraft({
         ...state,
@@ -172,7 +175,7 @@ export function BillProvider({ children }: { children: ReactNode }) {
         return;
       }
       void saveDraft(draft);
-    }, 400);
+    }, delay);
     return () => clearTimeout(timer);
   }, [
     state.draftId,

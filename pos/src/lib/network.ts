@@ -1,10 +1,72 @@
 /** Network helpers for offline-first POS. */
 
-import { ApiError } from "@/lib/api-client";
+/** After a network failure, skip remote calls for this long (use IndexedDB). */
+const UNREACHABLE_COOLDOWN_MS = 45_000;
 
-export function isOnline() {
+let forcedOfflineUntil = 0;
+let consecutiveFailures = 0;
+
+export function isBrowserOnline() {
   if (typeof navigator === "undefined") return true;
   return navigator.onLine;
+}
+
+/**
+ * Effective connectivity for POS.
+ * False when the browser reports offline OR we recently confirmed the API
+ * is unreachable (avoids long hangs while Wi‑Fi says "online").
+ */
+export function isOnline() {
+  if (!isBrowserOnline()) return false;
+  return Date.now() >= forcedOfflineUntil;
+}
+
+export const POS_CONNECTIVITY_EVENT = "pos-connectivity";
+
+function emitConnectivity(online: boolean) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(POS_CONNECTIVITY_EVENT, { detail: { online } }),
+  );
+}
+
+/** Call after a successful API response. */
+export function markReachable() {
+  const wasForced = forcedOfflineUntil > Date.now();
+  consecutiveFailures = 0;
+  forcedOfflineUntil = 0;
+  if (wasForced) emitConnectivity(true);
+}
+
+/**
+ * Call after timeout / network failure.
+ * Escalates cooldown so flaky links stop thrashing the main thread.
+ */
+export function markUnreachable() {
+  consecutiveFailures += 1;
+  const multiplier = Math.min(consecutiveFailures, 4);
+  forcedOfflineUntil = Date.now() + UNREACHABLE_COOLDOWN_MS * multiplier;
+  emitConnectivity(false);
+}
+
+/** Force local-only mode immediately (e.g. offline event). */
+export function forceOfflineNow() {
+  forcedOfflineUntil = Date.now() + UNREACHABLE_COOLDOWN_MS;
+  emitConnectivity(false);
+}
+
+export function clearForcedOffline() {
+  forcedOfflineUntil = 0;
+  consecutiveFailures = 0;
+  emitConnectivity(true);
+}
+
+/** Shorter timeouts while we are already in a failure streak. */
+export function apiTimeoutMs() {
+  if (!isBrowserOnline()) return 2_000;
+  if (consecutiveFailures >= 2) return 3_000;
+  if (consecutiveFailures === 1) return 5_000;
+  return 8_000;
 }
 
 export function isNetworkError(err: unknown) {
@@ -13,27 +75,45 @@ export function isNetworkError(err: unknown) {
     return true;
   }
   if (err instanceof Error) {
-    return /network|failed to fetch|unavailable/i.test(err.message);
+    return /network|failed to fetch|unavailable|timed out|timeout/i.test(
+      err.message,
+    );
   }
   return false;
+}
+
+function errorStatus(err: unknown): number | null {
+  if (err && typeof err === "object" && "status" in err) {
+    const status = (err as { status?: number }).status;
+    return typeof status === "number" ? status : null;
+  }
+  return null;
 }
 
 /** Errors that should queue writes instead of failing the cashier. */
 export function isQueueableError(err: unknown) {
   if (isNetworkError(err) || !isOnline()) return true;
-  if (err instanceof ApiError) {
-    return [0, 408, 429, 502, 503, 504].includes(err.status);
-  }
-  if (err && typeof err === "object" && "status" in err) {
-    const status = (err as { status?: number }).status;
-    return typeof status === "number" && [0, 408, 429, 502, 503, 504].includes(status);
-  }
-  return false;
+  const status = errorStatus(err);
+  return status != null && [0, 408, 429, 502, 503, 504].includes(status);
 }
 
 /** Client validation / permanent failures — do not keep retrying forever. */
 export function isPermanentSyncError(err: unknown) {
-  if (!(err instanceof ApiError)) return false;
-  if ([401, 429].includes(err.status)) return false;
-  return err.status >= 400 && err.status < 500;
+  const status = errorStatus(err);
+  if (status == null) return false;
+  if ([401, 429].includes(status)) return false;
+  return status >= 400 && status < 500;
+}
+
+/** Wire browser online/offline once (safe to call multiple times). */
+let listenersBound = false;
+export function bindConnectivityListeners() {
+  if (listenersBound || typeof window === "undefined") return;
+  listenersBound = true;
+  window.addEventListener("offline", () => {
+    forceOfflineNow();
+  });
+  window.addEventListener("online", () => {
+    clearForcedOffline();
+  });
 }

@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductCard } from "@/components/menu/product-card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getCategories, getProducts } from "@/services/api";
+import {
+  clearCatalogCache,
+  getCategories,
+  getProducts,
+} from "@/services/api";
 import type { Category, Product } from "@/types";
 
 export default function MenuPage() {
@@ -18,6 +23,8 @@ export default function MenuPage() {
   const [search, setSearch] = useState("");
   const [sizeFilter, setSizeFilter] = useState<"all" | "pizza" | "other">("all");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const pizzaCategoryIds = useMemo(
     () =>
@@ -32,11 +39,21 @@ export default function MenuPage() {
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setError(null);
     Promise.all([getCategories(), getProducts()])
       .then(([cats, items]) => {
         if (!active) return;
         setCategories(cats);
         setProducts(items);
+        if (!items.length) {
+          setError("Menu is temporarily unavailable.");
+        }
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(
+          err instanceof Error ? err.message : "Failed to load menu.",
+        );
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -44,6 +61,11 @@ export default function MenuPage() {
     return () => {
       active = false;
     };
+  }, [reloadKey]);
+
+  const retry = useCallback(() => {
+    clearCatalogCache();
+    setReloadKey((k) => k + 1);
   }, []);
 
   const filtered = useMemo(() => {
@@ -166,7 +188,12 @@ export default function MenuPage() {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <p className="text-zinc-500">No products found.</p>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-8 text-center">
+              <p className="text-zinc-400">{error || "No products found."}</p>
+              <Button className="mt-4" onClick={retry} variant="outline">
+                Retry
+              </Button>
+            </div>
           ) : (
             <div className="grid gap-3 sm:gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((product) => (

@@ -20,10 +20,14 @@ import {
 } from "@/lib/offline-db";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import {
+  bindConnectivityListeners,
+  clearForcedOffline,
+  forceOfflineNow,
   isNetworkError,
   isOnline,
   isPermanentSyncError,
   isQueueableError,
+  POS_CONNECTIVITY_EVENT,
 } from "@/lib/network";
 import type {
   CreateOrderInput,
@@ -137,8 +141,11 @@ export async function refreshPendingCount() {
 }
 
 function scheduleRetry(delay = backoffMs) {
+  // Don't schedule network retries while effectively offline — saves CPU.
+  if (!isOnline()) return;
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = setTimeout(() => {
+    if (!isOnline()) return;
     void runSync("retry");
   }, delay);
 }
@@ -612,30 +619,48 @@ export function subscribeSync(listener: Listener) {
 export function startSyncEngine() {
   if (started || typeof window === "undefined") return;
   started = true;
+  bindConnectivityListeners();
   void loadMeta().then(() => refreshPendingCount());
 
   const onOnline = () => {
+    clearForcedOffline();
     setState({ online: true });
     resetBackoff();
     void runSync("online");
   };
   const onOffline = () => {
+    forceOfflineNow();
     setState({ online: false });
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
   };
   window.addEventListener("online", onOnline);
   window.addEventListener("offline", onOffline);
-  setState({ online: navigator.onLine });
+  const onConnectivity = (e: Event) => {
+    const online = Boolean((e as CustomEvent<{ online?: boolean }>).detail?.online);
+    setState({ online });
+  };
+  window.addEventListener(POS_CONNECTIVITY_EVENT, onConnectivity);
+  setState({ online: isOnline() });
 
   const interval = setInterval(() => {
-    if (navigator.onLine) void runSync("interval");
-    else void refreshPendingCount();
-  }, 60_000);
+    // Never thrash while the tab is in the background or we're offline.
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (!isOnline()) {
+      void refreshPendingCount();
+      return;
+    }
+    void runSync("interval");
+  }, 90_000);
 
-  if (navigator.onLine) void runSync("startup");
+  if (isOnline()) void runSync("startup");
 
   return () => {
     window.removeEventListener("online", onOnline);
     window.removeEventListener("offline", onOffline);
+    window.removeEventListener(POS_CONNECTIVITY_EVENT, onConnectivity);
     clearInterval(interval);
     if (retryTimer) clearTimeout(retryTimer);
     started = false;

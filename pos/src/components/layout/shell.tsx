@@ -19,6 +19,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { sessionRepo } from "@/services/api";
+import { isOnline, POS_CONNECTIVITY_EVENT } from "@/lib/network";
 import {
   getSyncState,
   runSync,
@@ -76,7 +77,10 @@ export function Sidebar() {
     window.addEventListener(POS_ORDERS_CHANGED_EVENT, onChange);
     window.addEventListener(POS_SYNC_COMPLETE_EVENT, onChange);
     // Light fallback poll — IDB + events cover most updates.
-    const id = setInterval(loadPending, 60_000);
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void loadPending();
+    }, 90_000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -205,13 +209,15 @@ export function TopBar({
   }, []);
 
   useEffect(() => {
-    const sync = () => setOnline(navigator.onLine);
+    const sync = () => setOnline(isOnline());
     sync();
     window.addEventListener("online", sync);
     window.addEventListener("offline", sync);
+    window.addEventListener(POS_CONNECTIVITY_EVENT, sync);
     return () => {
       window.removeEventListener("online", sync);
       window.removeEventListener("offline", sync);
+      window.removeEventListener(POS_CONNECTIVITY_EVENT, sync);
     };
   }, []);
 

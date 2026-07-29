@@ -506,8 +506,8 @@ export const locationsApi = {
 
 async function resolveLineDetails(
   item: CreateOrderInput["items"][number],
+  products: Product[],
 ): Promise<{ price: number; product?: Product; size?: ProductSize }> {
-  const products = await listLocalProducts();
   const product = products.find((p) => p.id === item.product_id);
   const size = product?.sizes?.find((s) => s.id === item.product_size_id);
   const price =
@@ -524,9 +524,10 @@ async function buildLocalOrder(
 ): Promise<Order> {
   const id = clientOrderId;
   const now = new Date().toISOString();
+  const products = await listLocalProducts();
   const items: OrderItem[] = await Promise.all(
     input.items.map(async (item) => {
-      const { price, product, size } = await resolveLineDetails(item);
+      const { price, product, size } = await resolveLineDetails(item, products);
       return {
         id: crypto.randomUUID(),
         created_at: now,

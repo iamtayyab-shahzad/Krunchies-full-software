@@ -1,5 +1,11 @@
 import type { ApiResponse } from "@/types";
 import { TOKEN_KEY } from "@/lib/utils";
+import {
+  apiTimeoutMs,
+  isOnline,
+  markReachable,
+  markUnreachable,
+} from "@/lib/network";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
@@ -33,13 +39,16 @@ async function clearSessionEverywhere() {
   }
 }
 
-const DEFAULT_TIMEOUT_MS = 12_000;
-
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
   auth = true,
 ): Promise<T> {
+  // Circuit breaker: skip network entirely while API is known dead.
+  if (!isOnline()) {
+    throw new ApiError("Network unavailable", 0);
+  }
+
   const headers = new Headers(options.headers || {});
   if (!headers.has("Content-Type") && options.body) {
     headers.set("Content-Type", "application/json");
@@ -51,7 +60,8 @@ export async function apiFetch<T>(
 
   const url = `${API_URL}${path}`;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timeoutMs = apiTimeoutMs();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let res: Response;
   try {
@@ -61,6 +71,7 @@ export async function apiFetch<T>(
       signal: controller.signal,
     });
   } catch (err) {
+    markUnreachable();
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new ApiError("Request timed out", 0);
     }
@@ -78,12 +89,17 @@ export async function apiFetch<T>(
         window.location.href = "/login";
       }
     }
+    // Server errors that usually mean the host is sick — cool down.
+    if ([408, 429, 502, 503, 504].includes(res.status)) {
+      markUnreachable();
+    }
     throw new ApiError(
       json?.message || `Request failed (${res.status})`,
       res.status,
     );
   }
 
+  markReachable();
   return json.data;
 }
 
