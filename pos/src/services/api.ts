@@ -610,25 +610,18 @@ async function markLocalOrderStatus(
   }
 }
 
-async function isLocalOrderId(id: string) {
-  const order = (await listLocalOrders()).find((o) => o.id === id);
-  return Boolean(order?.order_number?.startsWith("LOCAL-"));
-}
-
 export const ordersApi = {
   list: () => ordersRepo.list(),
   pending: () => ordersRepo.pending(),
   get: (id: string) => ordersRepo.get(id),
+  /**
+   * Local-first: always write IndexedDB + queue immediately.
+   * Sync engine pushes to the server in the background — never wait on network.
+   */
   create: async (
     input: CreateOrderInput,
     orderType: "walkin" | "phone" | "website" = "walkin",
   ) => {
-    const path =
-      orderType === "phone"
-        ? "/orders/phone"
-        : orderType === "walkin"
-          ? "/orders/walkin"
-          : "/orders";
     const clientOrderId = input.client_order_id || crypto.randomUUID();
     const apiInput: CreateOrderInput = {
       ...input,
@@ -642,128 +635,66 @@ export const ordersApi = {
         }),
       ),
     };
-    try {
-      if (!isOnline()) throw new ApiError("Network unavailable", 0);
-      const order = await apiFetch<Order>(path, {
-        method: "POST",
-        body: JSON.stringify(apiInput),
-      });
-      await upsertLocalOrder({ ...order, sync_status: "synced" });
-      notifyOrdersChanged();
-      return order;
-    } catch (e) {
-      if (isQueueableError(e)) {
-        const existing = await findPendingCreateByClientId(clientOrderId);
-        if (existing) {
-          const local = await ordersRepo.get(clientOrderId).catch(() => null);
-          if (local) return local;
-        }
-        const local = await buildLocalOrder(input, orderType, clientOrderId);
-        if (!existing) {
-          await enqueueAndTrack({
-            type: "CREATE_ORDER",
-            payload: { input: apiInput, orderType, localId: local.id },
-          });
-        }
-        await upsertLocalOrder(local);
-        notifyOrdersChanged();
-        return local;
-      }
-      throw e;
+
+    const existing = await findPendingCreateByClientId(clientOrderId);
+    if (existing) {
+      const local = (await listLocalOrders()).find((o) => o.id === clientOrderId);
+      if (local) return local;
     }
+
+    const local = await buildLocalOrder(input, orderType, clientOrderId);
+    if (!existing) {
+      await enqueueAndTrack({
+        type: "CREATE_ORDER",
+        payload: { input: apiInput, orderType, localId: local.id },
+      });
+    }
+    await upsertLocalOrder(local);
+    notifyOrdersChanged();
+    return local;
   },
   update: async (id: string, updates: Record<string, unknown>) => {
     try {
-      if (!isOnline()) throw new ApiError("Network unavailable", 0);
-      await apiFetch<null>(`/orders/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(updates),
-      });
-      try {
-        const { listLocalOrders } = await import("@/lib/offline-db");
-        const existing = (await listLocalOrders()).find((o) => o.id === id);
-        if (existing) {
-          await upsertLocalOrder({
-            ...existing,
-            ...updates,
-            id,
-            updated_at: new Date().toISOString(),
-            sync_status: "synced",
-          } as Order);
-        }
-      } catch {
-        /* ignore */
+      const existing =
+        (await listLocalOrders()).find((o) => o.id === id) ||
+        (await ordersRepo.get(id).catch(() => null));
+      if (existing) {
+        await upsertLocalOrder({
+          ...existing,
+          ...updates,
+          id,
+          updated_at: new Date().toISOString(),
+          sync_status: "pending_sync",
+        } as Order);
       }
-      notifyOrdersChanged();
-      return { offline: false as const };
-    } catch (e) {
-      if (isQueueableError(e)) {
-        try {
-          const existing = await ordersRepo.get(id);
-          await upsertLocalOrder({
-            ...existing,
-            ...updates,
-            id,
-            updated_at: new Date().toISOString(),
-            sync_status: "pending_sync",
-          } as Order);
-        } catch {
-          /* ignore */
-        }
-        await enqueueAndTrack({
-          type: "UPDATE_ORDER",
-          payload: { id, updates },
-        });
-        notifyOrdersChanged();
-        return {
-          offline: true as const,
-          message: offlineOkMessage("Order update"),
-        };
-      }
-      throw e;
+    } catch {
+      /* ignore */
     }
+    await enqueueAndTrack({
+      type: "UPDATE_ORDER",
+      payload: { id, updates },
+    });
+    notifyOrdersChanged();
+    return {
+      offline: true as const,
+      message: offlineOkMessage("Order update"),
+    };
   },
   complete: async (id: string) => {
-    try {
-      if (!isOnline()) throw new ApiError("Network unavailable", 0);
-      const result = await apiFetch<null>(`/orders/${id}/complete`, {
-        method: "PATCH",
-      });
-      await markLocalOrderStatus(id, "COMPLETED");
-      return { offline: false as const, data: result };
-    } catch (e) {
-      const isLocal = await isLocalOrderId(id);
-      if (isQueueableError(e) || isLocal) {
-        await enqueueAndTrack({ type: "COMPLETE_ORDER", payload: { id } });
-        await markLocalOrderStatus(id, "COMPLETED", { pendingSync: true });
-        return {
-          offline: true as const,
-          message: offlineOkMessage("Order completed"),
-        };
-      }
-      throw e;
-    }
+    await enqueueAndTrack({ type: "COMPLETE_ORDER", payload: { id } });
+    await markLocalOrderStatus(id, "COMPLETED", { pendingSync: true });
+    return {
+      offline: true as const,
+      message: offlineOkMessage("Order completed"),
+    };
   },
   cancel: async (id: string) => {
-    try {
-      if (!isOnline()) throw new ApiError("Network unavailable", 0);
-      const result = await apiFetch<null>(`/orders/${id}/cancel`, {
-        method: "PATCH",
-      });
-      await markLocalOrderStatus(id, "CANCELLED");
-      return { offline: false as const, data: result };
-    } catch (e) {
-      const isLocal = await isLocalOrderId(id);
-      if (isQueueableError(e) || isLocal) {
-        await enqueueAndTrack({ type: "CANCEL_ORDER", payload: { id } });
-        await markLocalOrderStatus(id, "CANCELLED", { pendingSync: true });
-        return {
-          offline: true as const,
-          message: offlineOkMessage("Order cancelled"),
-        };
-      }
-      throw e;
-    }
+    await enqueueAndTrack({ type: "CANCEL_ORDER", payload: { id } });
+    await markLocalOrderStatus(id, "CANCELLED", { pendingSync: true });
+    return {
+      offline: true as const,
+      message: offlineOkMessage("Order cancelled"),
+    };
   },
 };
 

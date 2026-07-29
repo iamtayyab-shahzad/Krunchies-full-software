@@ -35,7 +35,6 @@ import {
 } from "@/lib/utils";
 import { printCustomerReceipt, printKitchenReceipt, encodeKitchenInstructions } from "@/lib/receipt";
 import { deleteDraft } from "@/lib/offline-db";
-import { isOnline } from "@/lib/network";
 import {
   categoriesApi,
   locationsApi,
@@ -316,134 +315,143 @@ export default function NewOrderPage() {
     return true;
   };
 
-  const placeOrder = async (status: "COMPLETED" | "PENDING") => {
-    if (!validate()) return;
+  const placeOrder = (status: "COMPLETED" | "PENDING") => {
+    if (!validate() || busy) return;
 
     setBusy(true);
-    try {
-      const payload = buildPayload();
-      let order: Order;
-      if (bill.editingOrderId) {
-        await ordersApi.update(bill.editingOrderId, {
-          customer_name: payload.customer_name,
-          phone: payload.phone,
-          address: payload.address,
-          location_id: payload.location_id,
-          payment_method: payload.payment_method,
-          order_notes: payload.order_notes,
-          items: payload.items,
-        });
-        if (status === "COMPLETED") {
-          await ordersApi.complete(bill.editingOrderId);
-        }
-        const cached =
-          qc
-            .getQueryData<Order[]>(["orders", "pending"])
-            ?.find((o) => o.id === bill.editingOrderId) ||
-          qc
-            .getQueryData<Order[]>(["orders"])
-            ?.find((o) => o.id === bill.editingOrderId);
-        order = {
-          ...(cached || ({} as Order)),
-          id: bill.editingOrderId,
-          order_number:
-            cached?.order_number ||
-            bill.editingOrderId.slice(0, 8).toUpperCase(),
-          order_type: bill.orderType,
-          order_status: status,
-          customer_name: payload.customer_name,
-          phone: payload.phone,
-          address: payload.address,
-          location_id: payload.location_id,
-          payment_method: payload.payment_method,
-          order_notes: payload.order_notes,
-          subtotal: bill.subtotal,
-          delivery_charge: isWalkin ? 0 : bill.deliveryCharge,
-          cash_on_delivery_fee:
-            cached?.cash_on_delivery_fee ??
-            calcCodFee(
-              bill.paymentMethod,
-              settings?.cash_on_delivery_fee || 0,
-            ),
-          grand_total: calcGrandTotal(
-            bill.subtotal,
-            isWalkin ? 0 : bill.deliveryCharge,
-            calcCodFee(bill.paymentMethod, settings?.cash_on_delivery_fee || 0),
-          ),
-          created_at: cached?.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          items: [],
-        };
-      } else {
-        order = await ordersApi.create(payload, bill.orderType);
-        if (status === "COMPLETED") {
-          await ordersApi.complete(order.id);
-          order = { ...order, order_status: "COMPLETED" };
-        }
-      }
-      if (bill.draftId) void deleteDraft(bill.draftId);
 
-      const printable = enrichOrderForPrint(order);
-      // Prefer create response order_number when available
-      if (order.order_number) {
-        printable.order_number = order.order_number;
-      }
-      localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
-      const offline =
-        !isOnline() ||
-        order.order_number?.startsWith("LOCAL-") ||
-        order.sync_status === "pending_sync";
+    // Snapshot everything needed BEFORE clearing the cart so UI can finish instantly.
+    const payload = buildPayload();
+    const editingOrderId = bill.editingOrderId;
+    const draftId = bill.draftId;
+    const orderType = bill.orderType;
+    const clientId = editingOrderId || crypto.randomUUID();
+    const now = new Date().toISOString();
+    const delivery = isWalkin ? 0 : bill.deliveryCharge;
+    const codFee = calcCodFee(
+      bill.paymentMethod,
+      settings?.cash_on_delivery_fee || 0,
+    );
 
-      if (status === "COMPLETED") {
-        const printed = printCustomerReceipt(printable, settings || null);
-        toast.success(
-          !printed
-            ? "Order completed — allow popups to print customer receipt"
-            : offline
-              ? "Order completed offline — customer receipt printed, queued to sync"
-              : bill.editingOrderId
-                ? "Order updated & completed"
-                : "Order completed & customer receipt printed",
-        );
-      } else {
-        const printed = printKitchenReceipt(printable);
-        toast.success(
-          !printed
-            ? "Saved to Pending — allow popups to print kitchen receipt"
-            : offline
-              ? "Pending saved offline — kitchen receipt printed"
-              : bill.editingOrderId
-                ? "Pending updated — kitchen receipt printed"
-                : "Saved to Pending — kitchen receipt printed",
-        );
-      }
+    const cached = editingOrderId
+      ? qc
+          .getQueryData<Order[]>(["orders", "pending"])
+          ?.find((o) => o.id === editingOrderId) ||
+        qc
+          .getQueryData<Order[]>(["orders"])
+          ?.find((o) => o.id === editingOrderId)
+      : undefined;
 
-      // Optimistic pending list so badge + pending page feel instant
-      if (status === "PENDING") {
-        qc.setQueryData<Order[]>(["orders", "pending"], (old) => {
-          const list = old || [];
-          const without = list.filter((o) => o.id !== printable.id);
-          return [printable, ...without];
-        });
-      } else {
-        qc.setQueryData<Order[]>(["orders", "pending"], (old) =>
-          (old || []).filter((o) => o.id !== printable.id),
-        );
-      }
+    const order: Order = {
+      ...(cached || ({} as Order)),
+      id: clientId,
+      client_order_id: clientId,
+      order_number:
+        cached?.order_number ||
+        `LOCAL-${clientId.slice(0, 8).toUpperCase()}`,
+      order_type: orderType,
+      order_status: status,
+      customer_name: payload.customer_name,
+      phone: payload.phone,
+      address: payload.address,
+      location_id: payload.location_id,
+      payment_method: payload.payment_method,
+      order_notes: payload.order_notes,
+      subtotal: bill.subtotal,
+      delivery_charge: delivery,
+      cash_on_delivery_fee: cached?.cash_on_delivery_fee ?? codFee,
+      grand_total: calcGrandTotal(
+        bill.subtotal,
+        delivery,
+        cached?.cash_on_delivery_fee ?? codFee,
+      ),
+      created_at: cached?.created_at || now,
+      updated_at: now,
+      items: [],
+      sync_status: "pending_sync",
+    };
 
-      bill.clearBill();
-      // Background refresh — don't block the cashier
-      void Promise.all([
-        qc.invalidateQueries({ queryKey: ["orders"] }),
-        qc.invalidateQueries({ queryKey: ["orders", "pending"] }),
-      ]);
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to place order",
+    // Enrich from current bill lines before clearBill() wipes them.
+    const printable = enrichOrderForPrint(order);
+    localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
+
+    if (status === "COMPLETED") {
+      const printed = printCustomerReceipt(printable, settings || null);
+      toast.success(
+        !printed
+          ? "Order completed — allow popups to print customer receipt"
+          : editingOrderId
+            ? "Order updated & completed"
+            : "Order completed & customer receipt printed",
       );
-    } finally {
-      setBusy(false);
+    } else {
+      const printed = printKitchenReceipt(printable);
+      toast.success(
+        !printed
+          ? "Saved to Pending — allow popups to print kitchen receipt"
+          : editingOrderId
+            ? "Pending updated — kitchen receipt printed"
+            : "Saved to Pending — kitchen receipt printed",
+      );
     }
+
+    if (status === "PENDING") {
+      qc.setQueryData<Order[]>(["orders", "pending"], (old) => {
+        const list = old || [];
+        const without = list.filter((o) => o.id !== printable.id);
+        return [printable, ...without];
+      });
+    } else {
+      qc.setQueryData<Order[]>(["orders", "pending"], (old) =>
+        (old || []).filter((o) => o.id !== printable.id),
+      );
+    }
+
+    if (draftId) void deleteDraft(draftId);
+    bill.clearBill();
+    setBusy(false);
+
+    // Persist + sync in the background — never block the next order.
+    void (async () => {
+      try {
+        if (editingOrderId) {
+          await ordersApi.update(editingOrderId, {
+            customer_name: payload.customer_name,
+            phone: payload.phone,
+            address: payload.address,
+            location_id: payload.location_id,
+            payment_method: payload.payment_method,
+            order_notes: payload.order_notes,
+            items: payload.items,
+          });
+          if (status === "COMPLETED") {
+            await ordersApi.complete(editingOrderId);
+          }
+        } else {
+          const created = await ordersApi.create(
+            { ...payload, client_order_id: clientId },
+            orderType,
+          );
+          if (status === "COMPLETED") {
+            await ordersApi.complete(created.id);
+          }
+        }
+        void Promise.all([
+          qc.invalidateQueries({ queryKey: ["orders"] }),
+          qc.invalidateQueries({ queryKey: ["orders", "pending"] }),
+        ]);
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? `Save queued failed: ${err.message}`
+            : "Failed to save order in background",
+        );
+        void Promise.all([
+          qc.invalidateQueries({ queryKey: ["orders"] }),
+          qc.invalidateQueries({ queryKey: ["orders", "pending"] }),
+        ]);
+      }
+    })();
   };
 
   const cancelBill = () => {

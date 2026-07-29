@@ -3,7 +3,7 @@ export const SITE_URL = "https://krunchies.pk";
 export const SITE_DESCRIPTION =
   "Order fresh pizza, burgers, deals & shakes from Krunchies Pizza. Fast delivery and takeaway across Pakistan.";
 
-export const SITE_OG_IMAGE = "/logo.png";
+export const SITE_OG_IMAGE = "/icons/icon-512.png";
 
 export const NAV_LINKS = [
   { href: "/", label: "Home" },

@@ -15,10 +15,11 @@ export const metadata: Metadata = {
   applicationName: "Krunchies Admin",
   icons: {
     icon: [
+      { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/logo.png", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
     ],
-    apple: [{ url: "/logo.png" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
     shortcut: "/favicon.ico",
   },
 };

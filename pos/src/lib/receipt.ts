@@ -197,16 +197,67 @@ export function buildKitchenReceiptHtml(order: Order) {
 <title>KITCHEN ${escapeHtml(order.order_number || order.id)}</title>
 <style>
   @page { size: 80mm auto; margin: 3mm; }
-  body { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: #000; width: 72mm; margin: 0 auto; }
-  h1 { font-size: 18px; text-align: center; margin: 0 0 4px; letter-spacing: 1px; }
-  .banner { text-align: center; font-weight: 900; border: 2px solid #000; padding: 4px; margin-bottom: 8px; }
-  .meta div { margin: 2px 0; }
-  .item { border-top: 1px dashed #000; padding: 8px 0; }
-  .row { display: flex; gap: 6px; font-weight: 800; font-size: 15px; }
-  .qty { min-width: 2.2em; }
-  .size { font-weight: 700; margin-top: 2px; }
-  .mod { margin-top: 2px; font-size: 12px; }
-  .notes { border-top: 2px solid #000; margin-top: 8px; padding-top: 6px; font-weight: 700; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 16px;
+    line-height: 1.35;
+    color: #000;
+    width: 72mm;
+    margin: 0 auto;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 900;
+    text-align: center;
+    margin: 0 0 6px;
+    letter-spacing: 1px;
+  }
+  .banner {
+    text-align: center;
+    font-weight: 900;
+    font-size: 18px;
+    border: 2px solid #000;
+    padding: 6px 4px;
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+  }
+  .meta {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .meta div { margin: 4px 0; }
+  .item {
+    border-top: 2px solid #000;
+    padding: 10px 0;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    font-weight: 900;
+    font-size: 18px;
+  }
+  .qty { min-width: 2.4em; }
+  .size {
+    font-weight: 800;
+    font-size: 16px;
+    margin-top: 4px;
+  }
+  .mod {
+    margin-top: 3px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .notes {
+    border-top: 2px solid #000;
+    margin-top: 10px;
+    padding-top: 8px;
+    font-weight: 800;
+    font-size: 15px;
+  }
 </style>
 </head>
 <body>
@@ -252,9 +303,9 @@ export function buildCustomerReceiptHtml(
       const note = meta.notes || item.special_instructions || "";
       const noteHtml =
         note && !note.includes("Crust:")
-          ? `<div style="font-size:10px">${escapeHtml(note)}</div>`
+          ? `<div class="note">${escapeHtml(note)}</div>`
           : meta.notes
-            ? `<div style="font-size:10px">${escapeHtml(meta.notes)}</div>`
+            ? `<div class="note">${escapeHtml(meta.notes)}</div>`
             : "";
       return `
       <tr>
@@ -280,30 +331,109 @@ export function buildCustomerReceiptHtml(
 <meta charset="utf-8" />
 <title>Receipt ${escapeHtml(order.order_number || order.id)}</title>
 <style>
-  @page { size: 80mm auto; margin: 4mm; }
-  body { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #000; width: 72mm; margin: 0 auto; }
-  h1 { font-size: 16px; text-align: center; margin: 0 0 4px; }
-  .meta { text-align: center; margin-bottom: 8px; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 2px 0; vertical-align: top; }
-  .total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 6px; }
-  .center { text-align: center; }
-  .line { display:flex; justify-content:space-between; }
+  @page { size: 80mm auto; margin: 3mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    line-height: 1.35;
+    color: #000;
+    width: 72mm;
+    margin: 0 auto;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 900;
+    text-align: center;
+    margin: 0 0 6px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .meta {
+    text-align: center;
+    margin-bottom: 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .info {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 3px 0;
+  }
+  hr {
+    border: none;
+    border-top: 2px solid #000;
+    margin: 8px 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  thead td {
+    font-weight: 900;
+    font-size: 14px;
+    border-bottom: 2px solid #000;
+    padding: 4px 0 6px;
+  }
+  tbody td {
+    padding: 6px 0;
+    vertical-align: top;
+    font-weight: 700;
+    border-bottom: 1px dashed #000;
+  }
+  .note {
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .total {
+    border: 2px solid #000;
+    margin-top: 10px;
+    padding: 8px 6px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .line {
+    display: flex;
+    justify-content: space-between;
+    margin: 3px 0;
+  }
+  .grand {
+    font-size: 18px;
+    font-weight: 900;
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 2px solid #000;
+  }
+  .notes {
+    font-size: 14px;
+    font-weight: 700;
+    margin-top: 8px;
+  }
+  .center {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 800;
+    margin-top: 10px;
+  }
 </style>
 </head>
 <body>
   <h1>${escapeHtml(settings?.restaurant_name || "Krunchies Pizza")}</h1>
   <div class="meta">
     ${escapeHtml(settings?.phone || "")}<br/>
-    ${reprint ? "REPRINT<br/>" : ""}
+    ${reprint ? "<strong>REPRINT</strong><br/>" : ""}
     ${escapeHtml(when.toLocaleDateString("en-PK"))}<br/>
     ${escapeHtml(when.toLocaleTimeString("en-PK"))}
   </div>
-  <div>Order: ${escapeHtml(order.order_number || order.id)}</div>
-  <div>Customer: ${escapeHtml(order.customer_name)}</div>
-  ${order.phone ? `<div>Phone: ${escapeHtml(order.phone)}</div>` : ""}
-  ${order.address ? `<div>Address: ${escapeHtml(order.address)}</div>` : ""}
-  <div>Payment: ${escapeHtml((order.payment_method || "").toUpperCase())}</div>
+  <div class="info">Order: ${escapeHtml(order.order_number || order.id)}</div>
+  <div class="info">Customer: ${escapeHtml(order.customer_name)}</div>
+  ${order.phone ? `<div class="info">Phone: ${escapeHtml(order.phone)}</div>` : ""}
+  ${order.address ? `<div class="info">Address: ${escapeHtml(order.address)}</div>` : ""}
+  <div class="info">Payment: ${escapeHtml((order.payment_method || "").toUpperCase())}</div>
   <hr />
   <table>
     <thead>
@@ -317,9 +447,9 @@ export function buildCustomerReceiptHtml(
     ${cod ? `<div class="line"><span>COD Fee</span><span>${formatPrice(cod, currency)}</span></div>` : ""}
     ${discount ? `<div class="line"><span>Discount</span><span>-${formatPrice(discount, currency)}</span></div>` : ""}
     ${tax ? `<div class="line"><span>Tax</span><span>${formatPrice(tax, currency)}</span></div>` : ""}
-    <div class="line" style="font-weight:bold;font-size:14px;margin-top:4px"><span>TOTAL</span><span>${formatPrice(order.grand_total, currency)}</span></div>
+    <div class="line grand"><span>TOTAL</span><span>${formatPrice(order.grand_total, currency)}</span></div>
   </div>
-  ${notes ? `<p>Notes: ${escapeHtml(notes)}</p>` : ""}
+  ${notes ? `<p class="notes">Notes: ${escapeHtml(notes)}</p>` : ""}
   <p class="center">Thank you!</p>
   <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 400); };</script>
 </body>

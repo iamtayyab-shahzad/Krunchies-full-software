@@ -100,29 +100,31 @@ export default function PendingOrdersPage() {
     ]);
   };
 
-  const complete = async (order: Order) => {
-    // Optimistic remove so the UI feels instant offline.
+  const complete = (order: Order) => {
+    // Optimistic: remove + print immediately; persist in background.
     queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
       (old || []).filter((o) => o.id !== order.id),
     );
-    try {
-      await ordersApi.complete(order.id);
-      // Use local order for receipt — avoid network get after offline complete.
-      const printed = printCustomerReceipt(
-        { ...order, order_status: "COMPLETED" },
-        settings || null,
-      );
-      toast.success(
-        printed
-          ? "Order completed — customer receipt printed"
-          : "Order completed — allow popups to print receipt",
-      );
-    } catch (error) {
-      await refresh();
-      toast.error(
-        error instanceof Error ? error.message : "Failed to complete order",
-      );
-    }
+    const printed = printCustomerReceipt(
+      { ...order, order_status: "COMPLETED" },
+      settings || null,
+    );
+    toast.success(
+      printed
+        ? "Order completed — customer receipt printed"
+        : "Order completed — allow popups to print receipt",
+    );
+    void ordersApi
+      .complete(order.id)
+      .then(() => {
+        void refresh();
+      })
+      .catch((error) => {
+        void refresh();
+        toast.error(
+          error instanceof Error ? error.message : "Failed to complete order",
+        );
+      });
   };
 
   const reprintKitchen = (order: Order) => {
@@ -134,19 +136,22 @@ export default function PendingOrdersPage() {
     );
   };
 
-  const cancel = async (order: Order) => {
+  const cancel = (order: Order) => {
     queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
       (old || []).filter((o) => o.id !== order.id),
     );
-    try {
-      await ordersApi.cancel(order.id);
-      toast.success("Order cancelled");
-    } catch (error) {
-      await refresh();
-      toast.error(
-        error instanceof Error ? error.message : "Failed to cancel order",
-      );
-    }
+    toast.success("Order cancelled");
+    void ordersApi
+      .cancel(order.id)
+      .then(() => {
+        void refresh();
+      })
+      .catch((error) => {
+        void refresh();
+        toast.error(
+          error instanceof Error ? error.message : "Failed to cancel order",
+        );
+      });
   };
 
   const edit = (order: Order) => {
