@@ -33,6 +33,8 @@ async function clearSessionEverywhere() {
   }
 }
 
+const DEFAULT_TIMEOUT_MS = 12_000;
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
@@ -48,14 +50,23 @@ export async function apiFetch<T>(
   }
 
   const url = `${API_URL}${path}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
   let res: Response;
   try {
     res = await fetch(url, {
       ...options,
       headers,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError("Request timed out", 0);
+    }
     throw new ApiError("Network unavailable", 0);
+  } finally {
+    clearTimeout(timeout);
   }
 
   const json = (await res.json().catch(() => null)) as ApiResponse<T> | null;

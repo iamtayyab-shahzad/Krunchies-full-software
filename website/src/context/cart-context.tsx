@@ -25,6 +25,7 @@ interface CartActionsValue {
     quantity?: number,
     specialInstructions?: string,
   ) => void;
+  changeSize: (id: string, size: ProductSize) => void;
   updateQuantity: (id: string, quantity: number) => void;
   updateInstructions: (id: string, instructions: string) => void;
   removeItem: (id: string) => void;
@@ -129,6 +130,51 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const changeSize = useCallback((id: string, size: ProductSize) => {
+    setItems((prev) => {
+      const line = prev.find((item) => item.id === id);
+      if (!line) return prev;
+      const newId = makeCartItemId(
+        line.product_id,
+        size.id,
+        line.special_instructions,
+      );
+      if (newId === id) {
+        return prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                size_id: size.id,
+                size: size.size,
+                price: size.price,
+              }
+            : item,
+        );
+      }
+      const existing = prev.find((item) => item.id === newId);
+      if (existing) {
+        return prev
+          .filter((item) => item.id !== id)
+          .map((item) =>
+            item.id === newId
+              ? { ...item, quantity: item.quantity + line.quantity }
+              : item,
+          );
+      }
+      return prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              id: newId,
+              size_id: size.id,
+              size: size.size,
+              price: size.price,
+            }
+          : item,
+      );
+    });
+  }, []);
+
   const updateQuantity = useCallback((id: string, quantity: number) => {
     setItems((prev) =>
       prev
@@ -171,12 +217,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<CartActionsValue>(
     () => ({
       addItem,
+      changeSize,
       updateQuantity,
       updateInstructions,
       removeItem,
       clearCart,
     }),
-    [addItem, updateQuantity, updateInstructions, removeItem, clearCart],
+    [
+      addItem,
+      changeSize,
+      updateQuantity,
+      updateInstructions,
+      removeItem,
+      clearCart,
+    ],
   );
 
   return (

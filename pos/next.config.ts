@@ -27,7 +27,9 @@ const nextConfig: NextConfig = {
   },
   headers: async () => [
     {
-      source: "/products/:path*",
+      // Only cache static menu images — NOT the /products App Router page
+      // (matching /products broke production: immutable HTML → missing chunks).
+      source: "/products/:path*.:ext(webp|jpg|jpeg|png|gif|avif)",
       headers: [
         {
           key: "Cache-Control",

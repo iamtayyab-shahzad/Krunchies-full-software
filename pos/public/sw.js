@@ -1,5 +1,5 @@
 /* Krunchies POS Service Worker — App Shell + static assets */
-const CACHE_VERSION = "krunchies-pos-v5";
+const CACHE_VERSION = "krunchies-pos-v6";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const PRODUCT_CACHE = `${CACHE_VERSION}-products`;

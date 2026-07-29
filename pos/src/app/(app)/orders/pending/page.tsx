@@ -105,11 +105,15 @@ export default function PendingOrdersPage() {
     try {
       await ordersApi.complete(order.id);
       // Use local order for receipt — avoid network get after offline complete.
-      printCustomerReceipt(
+      const printed = printCustomerReceipt(
         { ...order, order_status: "COMPLETED" },
         settings || null,
       );
-      toast.success("Order completed");
+      toast.success(
+        printed
+          ? "Order completed — customer receipt printed"
+          : "Order completed — allow popups to print receipt",
+      );
     } catch (error) {
       await refresh();
       toast.error(
@@ -119,8 +123,12 @@ export default function PendingOrdersPage() {
   };
 
   const reprintKitchen = (order: Order) => {
-    printKitchenReceipt(order);
-    toast.message("Kitchen receipt sent to printer");
+    const printed = printKitchenReceipt(order);
+    toast.message(
+      printed
+        ? "Kitchen receipt sent to printer"
+        : "Allow popups to print kitchen receipt",
+    );
   };
 
   const cancel = async (order: Order) => {
@@ -186,7 +194,7 @@ export default function PendingOrdersPage() {
           <h1 className="text-3xl font-black">Pending Orders</h1>
           <p className="mt-1 text-sm text-zinc-400">
             Website, phone, and walk-in orders waiting to be prepared.
-            Auto-refreshes every 5s.
+            Auto-refreshes while this tab is open.
             {dataUpdatedAt
               ? ` · Updated ${new Date(dataUpdatedAt).toLocaleTimeString()}`
               : ""}

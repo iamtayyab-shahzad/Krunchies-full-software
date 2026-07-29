@@ -187,61 +187,105 @@ export default function NewOrderPage() {
   };
 
   /** Ensure kitchen/customer receipts have product names even offline. */
-  const enrichOrderForPrint = (order: Order): Order => ({
-    ...order,
-    items: (order.items || []).map((item, idx) => {
-      const billLine = bill.items[idx];
-      const match =
-        billLine &&
-        billLine.product_id === item.product_id &&
-        billLine.size_id === item.product_size_id
-          ? billLine
-          : bill.items.find(
-              (b) =>
-                b.product_id === item.product_id &&
-                b.size_id === item.product_size_id &&
-                (b.special_instructions || "") ===
-                  (item.special_instructions || b.special_instructions || ""),
-            ) ||
-            bill.items.find(
-              (b) =>
-                b.product_id === item.product_id &&
-                b.size_id === item.product_size_id,
-            ) ||
-            billLine;
-      return {
-        ...item,
-        product: item.product || {
-          id: item.product_id,
-          created_at: "",
-          updated_at: "",
-          category_id: "",
-          name: match?.product_name || "Item",
-          description: "",
-          image: match?.product_image || "",
-          featured: false,
-          available: true,
-          display_order: 0,
-        },
-        product_size: item.product_size || {
-          id: item.product_size_id,
-          created_at: "",
-          updated_at: "",
-          product_id: item.product_id,
-          size: match?.size || "-",
-          price: item.price,
-        },
-        special_instructions:
-          item.special_instructions ||
-          encodeKitchenInstructions({
-            crust: match?.crust,
-            toppings: match?.toppings,
-            extras: match?.extras,
-            notes: match?.special_instructions,
-          }),
-      };
-    }),
-  });
+  const enrichOrderForPrint = (order: Order): Order => {
+    const fallbackItems: Order["items"] = bill.items.map((b, i) => ({
+      id: `${order.id}-line-${i}`,
+      created_at: order.created_at || new Date().toISOString(),
+      updated_at: order.updated_at || new Date().toISOString(),
+      order_id: order.id,
+      product_id: b.product_id,
+      product_size_id: b.size_id,
+      quantity: b.quantity,
+      price: b.price,
+      special_instructions: encodeKitchenInstructions({
+        crust: b.crust,
+        toppings: b.toppings,
+        extras: b.extras,
+        notes: b.special_instructions,
+      }),
+      product: {
+        id: b.product_id,
+        created_at: "",
+        updated_at: "",
+        category_id: "",
+        name: b.product_name,
+        description: "",
+        image: b.product_image || "",
+        featured: false,
+        available: true,
+        display_order: 0,
+      },
+      product_size: {
+        id: b.size_id,
+        created_at: "",
+        updated_at: "",
+        product_id: b.product_id,
+        size: b.size,
+        price: b.price,
+      },
+    }));
+
+    const source =
+      order.items && order.items.length > 0 ? order.items : fallbackItems;
+
+    return {
+      ...order,
+      items: source.map((item, idx) => {
+        const billLine = bill.items[idx];
+        const match =
+          billLine &&
+          billLine.product_id === item.product_id &&
+          billLine.size_id === item.product_size_id
+            ? billLine
+            : bill.items.find(
+                (b) =>
+                  b.product_id === item.product_id &&
+                  b.size_id === item.product_size_id &&
+                  (b.special_instructions || "") ===
+                    (item.special_instructions ||
+                      b.special_instructions ||
+                      ""),
+              ) ||
+              bill.items.find(
+                (b) =>
+                  b.product_id === item.product_id &&
+                  b.size_id === item.product_size_id,
+              ) ||
+              billLine;
+        return {
+          ...item,
+          product: item.product || {
+            id: item.product_id,
+            created_at: "",
+            updated_at: "",
+            category_id: "",
+            name: match?.product_name || "Item",
+            description: "",
+            image: match?.product_image || "",
+            featured: false,
+            available: true,
+            display_order: 0,
+          },
+          product_size: item.product_size || {
+            id: item.product_size_id,
+            created_at: "",
+            updated_at: "",
+            product_id: item.product_id,
+            size: match?.size || "-",
+            price: item.price,
+          },
+          special_instructions:
+            item.special_instructions ||
+            encodeKitchenInstructions({
+              crust: match?.crust,
+              toppings: match?.toppings,
+              extras: match?.extras,
+              notes: match?.special_instructions,
+            }),
+        };
+      }),
+    };
+  };
 
   const validate = () => {
     if (!bill.items.length) {
@@ -292,44 +336,104 @@ export default function NewOrderPage() {
         if (status === "COMPLETED") {
           await ordersApi.complete(bill.editingOrderId);
         }
-        order = await ordersApi.get(bill.editingOrderId);
+        const cached =
+          qc
+            .getQueryData<Order[]>(["orders", "pending"])
+            ?.find((o) => o.id === bill.editingOrderId) ||
+          qc
+            .getQueryData<Order[]>(["orders"])
+            ?.find((o) => o.id === bill.editingOrderId);
+        order = {
+          ...(cached || ({} as Order)),
+          id: bill.editingOrderId,
+          order_number:
+            cached?.order_number ||
+            bill.editingOrderId.slice(0, 8).toUpperCase(),
+          order_type: bill.orderType,
+          order_status: status,
+          customer_name: payload.customer_name,
+          phone: payload.phone,
+          address: payload.address,
+          location_id: payload.location_id,
+          payment_method: payload.payment_method,
+          order_notes: payload.order_notes,
+          subtotal: bill.subtotal,
+          delivery_charge: isWalkin ? 0 : bill.deliveryCharge,
+          cash_on_delivery_fee:
+            cached?.cash_on_delivery_fee ??
+            calcCodFee(
+              bill.paymentMethod,
+              settings?.cash_on_delivery_fee || 0,
+            ),
+          grand_total: calcGrandTotal(
+            bill.subtotal,
+            isWalkin ? 0 : bill.deliveryCharge,
+            calcCodFee(bill.paymentMethod, settings?.cash_on_delivery_fee || 0),
+          ),
+          created_at: cached?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          items: [],
+        };
       } else {
         order = await ordersApi.create(payload, bill.orderType);
         if (status === "COMPLETED") {
           await ordersApi.complete(order.id);
-          order = await ordersApi.get(order.id);
+          order = { ...order, order_status: "COMPLETED" };
         }
       }
-      if (bill.draftId) await deleteDraft(bill.draftId);
+      if (bill.draftId) void deleteDraft(bill.draftId);
 
       const printable = enrichOrderForPrint(order);
+      // Prefer create response order_number when available
+      if (order.order_number) {
+        printable.order_number = order.order_number;
+      }
       localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
       const offline =
         !isOnline() ||
         order.order_number?.startsWith("LOCAL-") ||
         order.sync_status === "pending_sync";
+
       if (status === "COMPLETED") {
-        printCustomerReceipt(printable, settings || null);
+        const printed = printCustomerReceipt(printable, settings || null);
         toast.success(
-          offline
-            ? "Order completed offline — customer receipt printed, queued to sync"
-            : bill.editingOrderId
-              ? "Order updated & completed"
-              : "Order completed & customer receipt printed",
+          !printed
+            ? "Order completed — allow popups to print customer receipt"
+            : offline
+              ? "Order completed offline — customer receipt printed, queued to sync"
+              : bill.editingOrderId
+                ? "Order updated & completed"
+                : "Order completed & customer receipt printed",
         );
       } else {
-        printKitchenReceipt(printable);
+        const printed = printKitchenReceipt(printable);
         toast.success(
-          offline
-            ? "Pending saved offline — kitchen receipt printed"
-            : bill.editingOrderId
-              ? "Pending updated — kitchen receipt printed"
-              : "Saved to Pending — kitchen receipt printed",
+          !printed
+            ? "Saved to Pending — allow popups to print kitchen receipt"
+            : offline
+              ? "Pending saved offline — kitchen receipt printed"
+              : bill.editingOrderId
+                ? "Pending updated — kitchen receipt printed"
+                : "Saved to Pending — kitchen receipt printed",
+        );
+      }
+
+      // Optimistic pending list so badge + pending page feel instant
+      if (status === "PENDING") {
+        qc.setQueryData<Order[]>(["orders", "pending"], (old) => {
+          const list = old || [];
+          const without = list.filter((o) => o.id !== printable.id);
+          return [printable, ...without];
+        });
+      } else {
+        qc.setQueryData<Order[]>(["orders", "pending"], (old) =>
+          (old || []).filter((o) => o.id !== printable.id),
         );
       }
 
       bill.clearBill();
-      await Promise.all([
+      // Background refresh — don't block the cashier
+      void Promise.all([
         qc.invalidateQueries({ queryKey: ["orders"] }),
         qc.invalidateQueries({ queryKey: ["orders", "pending"] }),
       ]);

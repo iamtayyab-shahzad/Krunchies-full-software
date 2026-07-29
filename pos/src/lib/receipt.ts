@@ -9,13 +9,69 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Print via hidden iframe first — `window.open` is often blocked in installed
+ * PWAs / Chrome apps, which silently skipped kitchen/customer receipts.
+ */
 function openPrintWindow(html: string, title: string) {
-  const w = window.open("", "_blank", "width=320,height=600");
-  if (!w) return false;
-  w.document.write(html);
-  w.document.title = title;
-  w.document.close();
-  return true;
+  if (typeof document === "undefined") return false;
+
+  // Strip auto-print scripts; we trigger print ourselves after load.
+  const cleanHtml = html.replace(
+    /<script>[\s\S]*?<\/script>/gi,
+    "",
+  );
+
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("title", title);
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.cssText =
+      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    const win = iframe.contentWindow;
+    if (!doc || !win) {
+      iframe.remove();
+      throw new Error("iframe unavailable");
+    }
+
+    doc.open();
+    doc.write(cleanHtml);
+    doc.title = title;
+    doc.close();
+
+    const cleanup = () => {
+      try {
+        iframe.remove();
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const doPrint = () => {
+      try {
+        win.focus();
+        win.print();
+      } catch {
+        /* ignore */
+      } finally {
+        setTimeout(cleanup, 1500);
+      }
+    };
+
+    // Give the browser a tick to layout thermal HTML before print dialog.
+    setTimeout(doPrint, 80);
+    return true;
+  } catch {
+    const w = window.open("", "_blank", "width=320,height=600");
+    if (!w) return false;
+    w.document.write(html);
+    w.document.title = title;
+    w.document.close();
+    return true;
+  }
 }
 
 export function kitchenOrderTypeLabel(orderType: string): string {

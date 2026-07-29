@@ -648,6 +648,7 @@ export const ordersApi = {
         body: JSON.stringify(apiInput),
       });
       await upsertLocalOrder({ ...order, sync_status: "synced" });
+      notifyOrdersChanged();
       return order;
     } catch (e) {
       if (isQueueableError(e)) {
@@ -677,6 +678,22 @@ export const ordersApi = {
         method: "PUT",
         body: JSON.stringify(updates),
       });
+      try {
+        const { listLocalOrders } = await import("@/lib/offline-db");
+        const existing = (await listLocalOrders()).find((o) => o.id === id);
+        if (existing) {
+          await upsertLocalOrder({
+            ...existing,
+            ...updates,
+            id,
+            updated_at: new Date().toISOString(),
+            sync_status: "synced",
+          } as Order);
+        }
+      } catch {
+        /* ignore */
+      }
+      notifyOrdersChanged();
       return { offline: false as const };
     } catch (e) {
       if (isQueueableError(e)) {

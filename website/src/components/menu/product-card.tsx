@@ -33,13 +33,15 @@ function ProductCardInner({ product, currency = "Rs" }: ProductCardProps) {
   const requiresFlavorChoice =
     isDealProduct(product) &&
     parseDealPizzaSlots(product.description || "").length > 0;
+  const multiSize = (product.sizes?.length || 0) > 1;
+  const needsChooser = requiresFlavorChoice || multiSize;
 
   const openModal = () => {
     requestAnimationFrame(() => setOpen(true));
   };
 
   const quickAdd = () => {
-    if (requiresFlavorChoice) {
+    if (needsChooser) {
       openModal();
       return;
     }
@@ -101,7 +103,7 @@ function ProductCardInner({ product, currency = "Rs" }: ProductCardProps) {
                   onClick={quickAdd}
                   className="min-h-10 min-w-[4.5rem] px-4"
                 >
-                  {requiresFlavorChoice ? "Choose" : "Add"}
+                  {needsChooser ? "Choose" : "Add"}
                 </Button>
               </div>
             </div>
