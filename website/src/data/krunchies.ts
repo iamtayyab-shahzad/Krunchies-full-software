@@ -33,7 +33,7 @@ export const settings: Settings = {
   restaurant_name: catalog.restaurant.name,
   phone: catalog.restaurant.phone,
   whatsapp: catalog.restaurant.whatsapp,
-  logo: "/logo.svg",
+  logo: "/logo.png",
   opening_time: catalog.restaurant.openingTime,
   closing_time: catalog.restaurant.closingTime,
   cash_on_delivery_fee: 50,

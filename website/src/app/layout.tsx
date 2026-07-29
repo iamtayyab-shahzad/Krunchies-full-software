@@ -26,6 +26,17 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+    shortcut: "/favicon.ico",
+  },
   openGraph: {
     type: "website",
     locale: "en_PK",
@@ -35,17 +46,18 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     images: [
       {
-        url: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1200&q=80",
-        width: 1200,
-        height: 630,
+        url: "/logo.png",
+        width: 1024,
+        height: 1024,
         alt: "Krunchies Pizza",
       },
     ],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: SITE_NAME,
     description: SITE_DESCRIPTION,
+    images: ["/logo.png"],
   },
   robots: {
     index: true,

@@ -88,8 +88,18 @@ export function Sidebar() {
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">
       <div className="border-b border-zinc-800 px-4 py-5">
-        <p className="text-lg font-black text-white">
-          <span className="text-orange-500">Krunchies</span> POS
+        <p className="flex items-center gap-2 text-lg font-black text-white">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/icon-192.png"
+            alt=""
+            width={28}
+            height={28}
+            className="h-7 w-7 rounded-full object-cover"
+          />
+          <span>
+            <span className="text-orange-500">Krunchies</span> POS
+          </span>
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           {sync.online ? (

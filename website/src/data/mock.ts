@@ -11,7 +11,7 @@ export const settings: Settings = {
   restaurant_name: "Krunchies Pizza",
   phone: "03002022633",
   whatsapp: "923002022633",
-  logo: "/logo.svg",
+  logo: "/logo.png",
   opening_time: "11:00 AM",
   closing_time: "11:00 PM",
   cash_on_delivery_fee: 50,

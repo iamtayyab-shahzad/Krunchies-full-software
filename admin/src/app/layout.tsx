@@ -12,6 +12,15 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "Krunchies Admin",
   description: "Admin dashboard for Krunchies Pizza",
+  applicationName: "Krunchies Admin",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/logo.png", type: "image/png" },
+    ],
+    apple: [{ url: "/logo.png" }],
+    shortcut: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({

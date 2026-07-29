@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Menu, ShoppingBag, User, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -26,9 +27,19 @@ export function Header() {
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:h-16 sm:px-6 lg:px-8">
         <Link
           href="/"
-          className="font-display text-xl tracking-wide text-white sm:text-2xl"
+          className="flex items-center gap-2 font-display text-xl tracking-wide text-white sm:gap-2.5 sm:text-2xl"
         >
-          <span className="text-orange-500">Krunchies</span> Pizza
+          <Image
+            src="/icons/icon-192.png"
+            alt="Krunchies Pizza"
+            width={40}
+            height={40}
+            className="h-9 w-9 rounded-full object-cover sm:h-10 sm:w-10"
+            priority
+          />
+          <span>
+            <span className="text-orange-500">Krunchies</span> Pizza
+          </span>
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
