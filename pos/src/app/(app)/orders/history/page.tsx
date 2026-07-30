@@ -5,9 +5,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { printCustomerReceipt } from "@/lib/receipt";
+import { printCustomerReceipt, ensureReceiptItemNames } from "@/lib/receipt";
 import { cn, formatPrice, LAST_RECEIPT_KEY } from "@/lib/utils";
-import { ordersApi, settingsApi } from "@/services/api";
+import { ordersApi, productsApi, settingsApi } from "@/services/api";
 import type { Order } from "@/types";
 
 export default function OrderHistoryPage() {
@@ -26,6 +26,17 @@ export default function OrderHistoryPage() {
     queryFn: settingsApi.get,
     staleTime: 5 * 60_000,
   });
+  const { data: products = [] } = useQuery({
+    queryKey: ["products"],
+    queryFn: productsApi.list,
+    staleTime: 5 * 60_000,
+  });
+
+  const productNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of products) map.set(p.id, p.name);
+    return map;
+  }, [products]);
 
   const filtered = useMemo(() => {
     return orders
@@ -67,8 +78,9 @@ export default function OrderHistoryPage() {
   };
 
   const reprint = (order: Order) => {
-    localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(order));
-    printCustomerReceipt(order, settings || null, true);
+    const printable = ensureReceiptItemNames(order, productNameById);
+    localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
+    printCustomerReceipt(printable, settings || null, true);
   };
 
   return (

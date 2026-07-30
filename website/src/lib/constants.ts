@@ -1,9 +1,12 @@
 export const SITE_NAME = "Krunchies Pizza";
-export const SITE_URL = "https://krunchies.pk";
+/** Canonical host must match production redirect (www) or Google drops favicon/SEO signals. */
+export const SITE_URL = "https://www.krunchies.pk";
 export const SITE_DESCRIPTION =
   "Order fresh pizza, burgers, deals & shakes from Krunchies Pizza. Fast delivery and takeaway across Pakistan.";
 
-export const SITE_OG_IMAGE = "/icons/icon-512.png";
+/** Cache-busted so Google/browsers pick up logo favicon after deploys. */
+export const SITE_OG_IMAGE = "/icons/icon-512.png?v=3";
+export const FAVICON_VERSION = "3";
 
 export const NAV_LINKS = [
   { href: "/", label: "Home" },

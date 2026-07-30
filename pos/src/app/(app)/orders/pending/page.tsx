@@ -14,8 +14,8 @@ import {
   makeLineKey,
   WALKIN_LOCATION_ID,
 } from "@/lib/utils";
-import { printCustomerReceipt, printKitchenReceipt, decodeKitchenInstructions, parseTableNumber } from "@/lib/receipt";
-import { ordersApi, settingsApi } from "@/services/api";
+import { printCustomerReceipt, printKitchenReceipt, decodeKitchenInstructions, parseTableNumber, ensureReceiptItemNames } from "@/lib/receipt";
+import { ordersApi, productsApi, settingsApi } from "@/services/api";
 import { isOnline } from "@/lib/network";
 import type { Order, OrderType, PaymentMethod } from "@/types";
 
@@ -61,6 +61,18 @@ export default function PendingOrdersPage() {
     staleTime: 5 * 60_000,
   });
 
+  const { data: products = [] } = useQuery({
+    queryKey: ["products"],
+    queryFn: productsApi.list,
+    staleTime: 5 * 60_000,
+  });
+
+  const productNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of products) map.set(p.id, p.name);
+    return map;
+  }, [products]);
+
   const { data: orders = [], isLoading, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["orders", "pending"],
     queryFn: ordersApi.pending,
@@ -100,13 +112,16 @@ export default function PendingOrdersPage() {
     ]);
   };
 
+  const printableOrder = (order: Order) =>
+    ensureReceiptItemNames(order, productNameById);
+
   const complete = (order: Order) => {
     // Optimistic: remove + print immediately; persist in background.
     queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
       (old || []).filter((o) => o.id !== order.id),
     );
     const printed = printCustomerReceipt(
-      { ...order, order_status: "COMPLETED" },
+      { ...printableOrder(order), order_status: "COMPLETED" },
       settings || null,
     );
     toast.success(
@@ -128,7 +143,7 @@ export default function PendingOrdersPage() {
   };
 
   const reprintKitchen = (order: Order) => {
-    const printed = printKitchenReceipt(order);
+    const printed = printKitchenReceipt(printableOrder(order));
     toast.message(
       printed
         ? "Kitchen receipt sent to printer"

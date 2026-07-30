@@ -540,7 +540,9 @@ async function buildLocalOrder(
         special_instructions: item.special_instructions,
         product,
         product_size: size,
-      };
+        product_name: product?.name || "Item",
+        size: size?.size || "-",
+      } as OrderItem;
     }),
   );
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);

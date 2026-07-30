@@ -36,7 +36,35 @@ const nextConfig: NextConfig = {
       ],
     },
     {
-      source: "/(.*)\\.(webp|avif|png|jpg|jpeg|svg|ico|woff2)",
+      // Favicons must not be immutable forever — Google/browser keep stale icons.
+      source: "/favicon.ico",
+      headers: [
+        {
+          key: "Cache-Control",
+          value: "public, max-age=86400, must-revalidate",
+        },
+      ],
+    },
+    {
+      source: "/icons/:path*",
+      headers: [
+        {
+          key: "Cache-Control",
+          value: "public, max-age=86400, must-revalidate",
+        },
+      ],
+    },
+    {
+      source: "/apple-touch-icon.png",
+      headers: [
+        {
+          key: "Cache-Control",
+          value: "public, max-age=86400, must-revalidate",
+        },
+      ],
+    },
+    {
+      source: "/(.*)\\.(webp|avif|jpg|jpeg|svg|woff2)",
       headers: [
         {
           key: "Cache-Control",

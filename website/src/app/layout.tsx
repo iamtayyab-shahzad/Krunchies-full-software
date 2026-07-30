@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
 import { JsonLd } from "@/components/seo/json-ld";
 import {
+  FAVICON_VERSION,
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_OG_IMAGE,
@@ -47,13 +48,40 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      {
+        url: `/favicon.ico?v=${FAVICON_VERSION}`,
+        sizes: "48x48",
+        type: "image/x-icon",
+      },
+      {
+        url: `/icons/icon-48.png?v=${FAVICON_VERSION}`,
+        sizes: "48x48",
+        type: "image/png",
+      },
+      {
+        url: `/icons/icon-32.png?v=${FAVICON_VERSION}`,
+        sizes: "32x32",
+        type: "image/png",
+      },
+      {
+        url: `/icons/icon-192.png?v=${FAVICON_VERSION}`,
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: `/icons/icon-512.png?v=${FAVICON_VERSION}`,
+        sizes: "512x512",
+        type: "image/png",
+      },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
-    shortcut: "/favicon.ico",
+    apple: [
+      {
+        url: `/apple-touch-icon.png?v=${FAVICON_VERSION}`,
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+    shortcut: `/favicon.ico?v=${FAVICON_VERSION}`,
   },
   manifest: "/manifest.webmanifest",
   openGraph: {

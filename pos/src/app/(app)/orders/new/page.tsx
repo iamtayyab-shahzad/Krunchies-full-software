@@ -185,7 +185,7 @@ export default function NewOrderPage() {
     };
   };
 
-  /** Ensure kitchen/customer receipts have product names even offline. */
+  /** Ensure kitchen/customer receipts always show product names (never blank). */
   const enrichOrderForPrint = (order: Order): Order => {
     const fallbackItems: Order["items"] = bill.items.map((b, i) => ({
       id: `${order.id}-line-${i}`,
@@ -207,7 +207,7 @@ export default function NewOrderPage() {
         created_at: "",
         updated_at: "",
         category_id: "",
-        name: b.product_name,
+        name: b.product_name || "Item",
         description: "",
         image: b.product_image || "",
         featured: false,
@@ -219,13 +219,21 @@ export default function NewOrderPage() {
         created_at: "",
         updated_at: "",
         product_id: b.product_id,
-        size: b.size,
+        size: b.size || "-",
         price: b.price,
       },
-    }));
+      // Flat fields survive JSON round-trips / IndexedDB even if nested product is dropped.
+      product_name: b.product_name || "Item",
+      size: b.size || "-",
+    })) as Order["items"];
 
+    // Always prefer bill lines for print — server/local rows often omit nested product.
     const source =
-      order.items && order.items.length > 0 ? order.items : fallbackItems;
+      bill.items.length > 0
+        ? fallbackItems
+        : order.items && order.items.length > 0
+          ? order.items
+          : fallbackItems;
 
     return {
       ...order,
@@ -239,40 +247,42 @@ export default function NewOrderPage() {
             : bill.items.find(
                 (b) =>
                   b.product_id === item.product_id &&
-                  b.size_id === item.product_size_id &&
-                  (b.special_instructions || "") ===
-                    (item.special_instructions ||
-                      b.special_instructions ||
-                      ""),
-              ) ||
-              bill.items.find(
-                (b) =>
-                  b.product_id === item.product_id &&
                   b.size_id === item.product_size_id,
-              ) ||
-              billLine;
+              ) || billLine;
+        const name =
+          match?.product_name?.trim() ||
+          item.product?.name?.trim() ||
+          (item as { product_name?: string }).product_name?.trim() ||
+          "Item";
+        const size =
+          match?.size?.trim() ||
+          item.product_size?.size?.trim() ||
+          (item as { size?: string }).size?.trim() ||
+          "-";
         return {
           ...item,
-          product: item.product || {
+          product: {
             id: item.product_id,
-            created_at: "",
-            updated_at: "",
-            category_id: "",
-            name: match?.product_name || "Item",
-            description: "",
-            image: match?.product_image || "",
+            created_at: item.product?.created_at || "",
+            updated_at: item.product?.updated_at || "",
+            category_id: item.product?.category_id || "",
+            name,
+            description: item.product?.description || "",
+            image: match?.product_image || item.product?.image || "",
             featured: false,
             available: true,
             display_order: 0,
           },
-          product_size: item.product_size || {
+          product_size: {
             id: item.product_size_id,
             created_at: "",
             updated_at: "",
             product_id: item.product_id,
-            size: match?.size || "-",
+            size,
             price: item.price,
           },
+          product_name: name,
+          size,
           special_instructions:
             item.special_instructions ||
             encodeKitchenInstructions({
@@ -282,7 +292,7 @@ export default function NewOrderPage() {
               notes: match?.special_instructions,
             }),
         };
-      }),
+      }) as Order["items"],
     };
   };
 

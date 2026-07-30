@@ -10,24 +10,22 @@ function escapeHtml(value: string) {
 }
 
 /**
- * Print via hidden iframe first — `window.open` is often blocked in installed
- * PWAs / Chrome apps, which silently skipped kitchen/customer receipts.
+ * Print silently when Chrome was launched with --kiosk-printing
+ * (use pos/scripts/Launch-POS.bat). Otherwise the system print dialog appears.
+ * Prefer hidden iframe so installed PWAs are not popup-blocked.
  */
 function openPrintWindow(html: string, title: string) {
   if (typeof document === "undefined") return false;
 
-  // Strip auto-print scripts; we trigger print ourselves after load.
-  const cleanHtml = html.replace(
-    /<script>[\s\S]*?<\/script>/gi,
-    "",
-  );
+  const cleanHtml = html.replace(/<script>[\s\S]*?<\/script>/gi, "");
 
   try {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("title", title);
     iframe.setAttribute("aria-hidden", "true");
+    // Must have a tiny non-zero box — some printers skip 0×0 iframes.
     iframe.style.cssText =
-      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none";
+      "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;z-index:-1";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -57,12 +55,14 @@ function openPrintWindow(html: string, title: string) {
       } catch {
         /* ignore */
       } finally {
-        setTimeout(cleanup, 1500);
+        // Keep iframe briefly so the print spooler can read the document.
+        setTimeout(cleanup, 60_000);
+        win.addEventListener?.("afterprint", cleanup, { once: true });
       }
     };
 
-    // Give the browser a tick to layout thermal HTML before print dialog.
-    setTimeout(doPrint, 80);
+    // Layout thermal HTML before printing.
+    setTimeout(doPrint, 120);
     return true;
   } catch {
     const w = window.open("", "_blank", "width=320,height=600");
@@ -70,6 +70,14 @@ function openPrintWindow(html: string, title: string) {
     w.document.write(html);
     w.document.title = title;
     w.document.close();
+    w.focus();
+    setTimeout(() => {
+      try {
+        w.print();
+      } catch {
+        /* ignore */
+      }
+    }, 120);
     return true;
   }
 }
@@ -136,19 +144,67 @@ export function decodeKitchenInstructions(
 }
 
 function itemName(item: OrderItem) {
-  return (
-    item.product?.name ||
-    (item as { product_name?: string }).product_name ||
-    "Item"
-  );
+  const nested = item.product?.name?.trim();
+  if (nested) return nested;
+  const flat = (item as { product_name?: string }).product_name?.trim();
+  if (flat) return flat;
+  return "Item";
 }
 
 function itemSize(item: OrderItem) {
-  return (
-    item.product_size?.size ||
-    (item as { size?: string }).size ||
-    "-"
-  );
+  const nested = item.product_size?.size?.trim();
+  if (nested) return nested;
+  const flat = (item as { size?: string }).size?.trim();
+  if (flat) return flat;
+  return "-";
+}
+
+/**
+ * Fill missing product/size names on an order before printing.
+ * Handles empty nested `product: {}` objects from API/IndexedDB.
+ */
+export function ensureReceiptItemNames(
+  order: Order,
+  nameByProductId?: Map<string, string>,
+): Order {
+  const items = (order.items || []).map((item) => {
+    const fromMap = nameByProductId?.get(item.product_id)?.trim();
+    const name =
+      item.product?.name?.trim() ||
+      (item as { product_name?: string }).product_name?.trim() ||
+      fromMap ||
+      "Item";
+    const size =
+      item.product_size?.size?.trim() ||
+      (item as { size?: string }).size?.trim() ||
+      "-";
+    return {
+      ...item,
+      product: {
+        id: item.product_id,
+        created_at: item.product?.created_at || "",
+        updated_at: item.product?.updated_at || "",
+        category_id: item.product?.category_id || "",
+        name,
+        description: item.product?.description || "",
+        image: item.product?.image || "",
+        featured: false,
+        available: true,
+        display_order: 0,
+      },
+      product_size: {
+        id: item.product_size_id,
+        created_at: "",
+        updated_at: "",
+        product_id: item.product_id,
+        size,
+        price: item.price,
+      },
+      product_name: name,
+      size,
+    };
+  });
+  return { ...order, items: items as Order["items"] };
 }
 
 export function buildKitchenReceiptHtml(order: Order) {
@@ -283,7 +339,7 @@ export function buildKitchenReceiptHtml(order: Order) {
 
 export function printKitchenReceipt(order: Order) {
   return openPrintWindow(
-    buildKitchenReceiptHtml(order),
+    buildKitchenReceiptHtml(ensureReceiptItemNames(order)),
     `Kitchen ${order.order_number || order.id}`,
   );
 }
@@ -463,7 +519,7 @@ export function printCustomerReceipt(
   reprint = false,
 ) {
   return openPrintWindow(
-    buildCustomerReceiptHtml(order, settings, reprint),
+    buildCustomerReceiptHtml(ensureReceiptItemNames(order), settings, reprint),
     `Receipt ${order.order_number || order.id}`,
   );
 }
