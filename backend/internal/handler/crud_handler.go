@@ -40,12 +40,22 @@ func (h *CRUDHandler[T]) Create(c *gin.Context) {
 }
 
 func (h *CRUDHandler[T]) List(c *gin.Context) {
-	data, err := h.service.List()
+	limit, offset, paged := parsePage(c)
+	if !paged {
+		data, err := h.service.List()
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		utils.Success(c, http.StatusOK, h.name+" list", data)
+		return
+	}
+	items, total, err := h.service.ListPaged(limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, h.name+" list", data)
+	utils.Success(c, http.StatusOK, h.name+" list", pageResult(items, total, limit, offset))
 }
 
 func (h *CRUDHandler[T]) GetByID(c *gin.Context) {

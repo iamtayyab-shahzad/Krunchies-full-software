@@ -19,12 +19,22 @@ func NewInventoryHandler(s *service.InventoryService) *InventoryHandler {
 }
 
 func (h *InventoryHandler) List(c *gin.Context) {
-	data, err := h.service.List()
+	limit, offset, paged := parsePage(c)
+	if !paged {
+		data, err := h.service.List()
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		utils.Success(c, http.StatusOK, "inventory list", data)
+		return
+	}
+	items, total, err := h.service.ListPaged(limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "inventory list", data)
+	utils.Success(c, http.StatusOK, "inventory list", pageResult(items, total, limit, offset))
 }
 
 func (h *InventoryHandler) GetByID(c *gin.Context) {

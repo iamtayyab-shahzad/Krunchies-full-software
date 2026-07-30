@@ -42,12 +42,22 @@ func (h *OfferHandler) Create(c *gin.Context) {
 }
 
 func (h *OfferHandler) List(c *gin.Context) {
-	data, err := h.service.List()
+	limit, offset, paged := parsePage(c)
+	if !paged {
+		data, err := h.service.List()
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		utils.Success(c, http.StatusOK, "offers list", data)
+		return
+	}
+	items, total, err := h.service.ListPaged(limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "offers list", data)
+	utils.Success(c, http.StatusOK, "offers list", pageResult(items, total, limit, offset))
 }
 
 func (h *OfferHandler) GetByID(c *gin.Context) {

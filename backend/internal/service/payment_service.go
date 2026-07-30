@@ -49,6 +49,10 @@ func (s *PaymentService) List() ([]domain.Payment, error) {
 	return s.repo.List()
 }
 
+func (s *PaymentService) ListPaged(limit, offset int) ([]domain.Payment, int64, error) {
+	return s.repo.ListPaged(limit, offset)
+}
+
 func (s *PaymentService) GetByID(id uuid.UUID) (*domain.Payment, error) {
 	return s.repo.GetByID(id)
 }

@@ -21,6 +21,9 @@ func NewOfferService(db *gorm.DB) *OfferService {
 func (s *OfferService) Create(model *domain.Offer) error            { return s.crud.Create(model) }
 func (s *OfferService) GetByID(id uuid.UUID) (*domain.Offer, error) { return s.crud.GetByID(id) }
 func (s *OfferService) List() ([]domain.Offer, error)               { return s.crud.List() }
+func (s *OfferService) ListPaged(limit, offset int) ([]domain.Offer, int64, error) {
+	return s.crud.ListPaged(limit, offset)
+}
 func (s *OfferService) Update(id uuid.UUID, updates map[string]any) error {
 	return s.crud.Update(id, updates)
 }

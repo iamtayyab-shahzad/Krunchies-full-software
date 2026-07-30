@@ -50,11 +50,28 @@ type PurchaseInput struct {
 }
 
 func (s *PurchaseService) List() ([]domain.Purchase, error) {
-	var rows []domain.Purchase
-	err := s.db.Preload("Items").Preload("Items.Inventory").Preload("Supplier").
-		Order("purchase_date desc, created_at desc").
-		Find(&rows).Error
+	rows, _, err := s.ListPaged(0, 0)
 	return rows, err
+}
+
+func (s *PurchaseService) ListPaged(limit, offset int) ([]domain.Purchase, int64, error) {
+	var total int64
+	var rows []domain.Purchase
+	if err := s.db.Model(&domain.Purchase{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	q := s.db.Preload("Items").Preload("Items.Inventory").Preload("Supplier").
+		Order("purchase_date desc, created_at desc")
+	if offset > 0 {
+		q = q.Offset(offset)
+	}
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }
 
 func (s *PurchaseService) GetByID(id uuid.UUID) (*domain.Purchase, error) {

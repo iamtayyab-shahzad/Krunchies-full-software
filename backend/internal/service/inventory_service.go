@@ -58,6 +58,10 @@ func (s *InventoryService) List() ([]domain.Inventory, error) {
 	return s.repo.List()
 }
 
+func (s *InventoryService) ListPaged(limit, offset int) ([]domain.Inventory, int64, error) {
+	return s.repo.ListPaged(limit, offset)
+}
+
 func (s *InventoryService) GetByID(id uuid.UUID) (*domain.Inventory, error) {
 	return s.repo.GetByID(id)
 }

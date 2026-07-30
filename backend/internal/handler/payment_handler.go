@@ -34,12 +34,22 @@ func (h *PaymentHandler) Create(c *gin.Context) {
 }
 
 func (h *PaymentHandler) List(c *gin.Context) {
-	payments, err := h.service.List()
+	limit, offset, paged := parsePage(c)
+	if !paged {
+		payments, err := h.service.List()
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		utils.Success(c, http.StatusOK, "payments list", payments)
+		return
+	}
+	items, total, err := h.service.ListPaged(limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "payments list", payments)
+	utils.Success(c, http.StatusOK, "payments list", pageResult(items, total, limit, offset))
 }
 
 func (h *PaymentHandler) GetByID(c *gin.Context) {

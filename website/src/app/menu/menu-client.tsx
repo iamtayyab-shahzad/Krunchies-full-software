@@ -13,16 +13,24 @@ import {
 } from "@/services/api";
 import type { Category, Product } from "@/types";
 
-export default function MenuPage() {
+type MenuClientProps = {
+  initialCategories?: Category[];
+  initialProducts?: Product[];
+};
+
+export default function MenuClient({
+  initialCategories = [],
+  initialProducts = [],
+}: MenuClientProps) {
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category") ?? "all";
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [products, setProducts] = useState<Product[]>(initialProducts);
   const [categoryId, setCategoryId] = useState(initialCategory);
   const [search, setSearch] = useState("");
   const [sizeFilter, setSizeFilter] = useState<"all" | "pizza" | "other">("all");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialProducts.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -37,6 +45,10 @@ export default function MenuPage() {
   );
 
   useEffect(() => {
+    // Server already hydrated a full catalog — skip the first client fetch.
+    if (reloadKey === 0 && initialProducts.length > 0) {
+      return;
+    }
     let active = true;
     setLoading(true);
     setError(null);
@@ -61,7 +73,7 @@ export default function MenuPage() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, initialProducts.length]);
 
   const retry = useCallback(() => {
     clearCatalogCache();

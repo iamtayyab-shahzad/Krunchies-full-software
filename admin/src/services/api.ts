@@ -961,7 +961,42 @@ export const purchasesApi = {
 
 export const expensesApi = {
   categories: () => apiFetch<string[]>("/expenses/categories"),
-  list: async (): Promise<Expense[]> => {
+  list: async (params?: { limit?: number; offset?: number }): Promise<Expense[]> => {
+    const qs = new URLSearchParams();
+    if (params?.limit != null) qs.set("limit", String(params.limit));
+    if (params?.offset != null) qs.set("offset", String(params.offset));
+    const suffix = qs.toString() ? `?${qs}` : "";
+
+    if (params?.limit != null) {
+      const page = await apiFetch<{
+        items: {
+          id: string;
+          category: string;
+          title: string;
+          amount: number;
+          expense_date: string;
+          payment_method: string;
+          notes: string;
+          receipt_image: string;
+          recurrence: string;
+        }[];
+        total: number;
+        limit: number;
+        offset: number;
+      }>(`/expenses${suffix}`);
+      return (page.items || []).map((e) => ({
+        id: e.id,
+        category: e.category,
+        title: e.title || "",
+        amount: Number(e.amount || 0),
+        expenseDate: (e.expense_date || "").slice(0, 10),
+        paymentMethod: e.payment_method || "cash",
+        notes: e.notes || "",
+        receiptImage: e.receipt_image || "",
+        recurrence: e.recurrence || "NONE",
+      }));
+    }
+
     const rows = await apiFetch<
       {
         id: string;
@@ -974,7 +1009,7 @@ export const expensesApi = {
         receipt_image: string;
         recurrence: string;
       }[]
-    >("/expenses");
+    >(`/expenses${suffix}`);
     return rows.map((e) => ({
       id: e.id,
       category: e.category,

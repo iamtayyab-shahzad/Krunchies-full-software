@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import MenuClient from "./menu-client";
 import { pageSeo } from "@/lib/seo";
+import { getCategories, getProducts } from "@/services/api";
+import type { Category, Product } from "@/types";
 
 export const metadata: Metadata = pageSeo({
   title: "Krunchies Pizza Menu | Pizza, Burgers, Deals & Shakes",
@@ -11,12 +13,35 @@ export const metadata: Metadata = pageSeo({
   absoluteTitle: true,
 });
 
-export default function MenuPage() {
+/** Revalidate catalog periodically so menu stays fresh without a cold client fetch. */
+export const revalidate = 60;
+
+async function loadMenuCatalog(): Promise<{
+  categories: Category[];
+  products: Product[];
+}> {
+  try {
+    const [categories, products] = await Promise.all([
+      getCategories(),
+      getProducts(),
+    ]);
+    return { categories, products };
+  } catch {
+    return { categories: [], products: [] };
+  }
+}
+
+export default async function MenuPage() {
+  const { categories, products } = await loadMenuCatalog();
+
   return (
     <Suspense
       fallback={<div className="p-10 text-zinc-500">Loading menu...</div>}
     >
-      <MenuClient />
+      <MenuClient
+        initialCategories={categories}
+        initialProducts={products}
+      />
     </Suspense>
   );
 }

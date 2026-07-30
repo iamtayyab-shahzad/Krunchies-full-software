@@ -93,6 +93,10 @@ export interface OrderItem extends BaseEntity {
   special_instructions?: string;
   product?: Product;
   product_size?: ProductSize;
+  /** Flat name kept for IndexedDB / print when nested `product` is dropped. */
+  product_name?: string;
+  /** Flat size label kept for IndexedDB / print when nested size is dropped. */
+  size?: string;
 }
 
 export interface Order extends BaseEntity {

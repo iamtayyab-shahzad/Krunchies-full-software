@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -65,46 +66,41 @@ function startOfWeek(d: Date) {
 }
 
 export default function ExpensesPage() {
-  const [loading, setLoading] = useState(true);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState(() => emptyForm([]));
 
-  const refresh = async () => {
-    const [rows, cats] = await Promise.all([
-      expensesApi.list(),
-      expensesApi.categories(),
-    ]);
-    setExpenses(
-      rows.slice().sort((a, b) => b.expenseDate.localeCompare(a.expenseDate)),
-    );
-    setCategories(cats.length ? cats : ["Miscellaneous"]);
-  };
+  const { data, isLoading: loading, isError, error, refetch } = useQuery({
+    queryKey: ["expenses"],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const [rows, cats] = await Promise.all([
+        expensesApi.list(),
+        expensesApi.categories(),
+      ]);
+      return {
+        expenses: rows
+          .slice()
+          .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate)),
+        categories: cats.length ? cats : ["Miscellaneous"],
+      };
+    },
+  });
+
+  const expenses = data?.expenses ?? [];
+  const categories = data?.categories ?? ["Miscellaneous"];
 
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      try {
-        await refresh();
-      } catch (e) {
-        if (!cancelled) {
-          toast.error(
-            e instanceof Error ? e.message : "Failed to load expenses",
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (isError) {
+      toast.error(error instanceof Error ? error.message : "Failed to load expenses");
+    }
+  }, [isError, error]);
 
+  const refresh = async () => {
+    await refetch();
+    await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  };
   const stats = useMemo(() => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

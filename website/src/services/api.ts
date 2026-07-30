@@ -44,6 +44,10 @@ async function backendFetch<T>(
       ...options,
       headers,
       signal: controller.signal,
+      // Next.js server components: cache catalog briefly (ISR-friendly).
+      ...(typeof window === "undefined"
+        ? { next: { revalidate: 60 } }
+        : {}),
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {

@@ -19,12 +19,22 @@ func NewPurchaseHandler(s *service.PurchaseService) *PurchaseHandler {
 }
 
 func (h *PurchaseHandler) List(c *gin.Context) {
-	data, err := h.service.List()
+	limit, offset, paged := parsePage(c)
+	if !paged {
+		data, err := h.service.List()
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		utils.Success(c, http.StatusOK, "purchase list", data)
+		return
+	}
+	items, total, err := h.service.ListPaged(limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "purchase list", data)
+	utils.Success(c, http.StatusOK, "purchase list", pageResult(items, total, limit, offset))
 }
 
 func (h *PurchaseHandler) GetByID(c *gin.Context) {
@@ -98,12 +108,22 @@ func NewSupplierHandler(s *service.SupplierService) *SupplierHandler {
 }
 
 func (h *SupplierHandler) List(c *gin.Context) {
-	data, err := h.service.List()
+	limit, offset, paged := parsePage(c)
+	if !paged {
+		data, err := h.service.List()
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		utils.Success(c, http.StatusOK, "supplier list", data)
+		return
+	}
+	items, total, err := h.service.ListPaged(limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "supplier list", data)
+	utils.Success(c, http.StatusOK, "supplier list", pageResult(items, total, limit, offset))
 }
 
 func (h *SupplierHandler) GetByID(c *gin.Context) {
@@ -180,12 +200,22 @@ func (h *ExpenseHandler) Categories(c *gin.Context) {
 }
 
 func (h *ExpenseHandler) List(c *gin.Context) {
-	data, err := h.service.List(nil, nil)
+	limit, offset, paged := parsePage(c)
+	if !paged {
+		data, err := h.service.List(nil, nil)
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		utils.Success(c, http.StatusOK, "expense list", data)
+		return
+	}
+	items, total, err := h.service.ListPaged(nil, nil, limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "expense list", data)
+	utils.Success(c, http.StatusOK, "expense list", pageResult(items, total, limit, offset))
 }
 
 func (h *ExpenseHandler) GetByID(c *gin.Context) {
@@ -258,12 +288,22 @@ func NewRecipeHandler(s *service.RecipeService) *RecipeHandler {
 }
 
 func (h *RecipeHandler) List(c *gin.Context) {
-	data, err := h.service.List()
+	limit, offset, paged := parsePage(c)
+	if !paged {
+		data, err := h.service.List()
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		utils.Success(c, http.StatusOK, "recipe list", data)
+		return
+	}
+	items, total, err := h.service.ListPaged(limit, offset)
 	if err != nil {
 		HandleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "recipe list", data)
+	utils.Success(c, http.StatusOK, "recipe list", pageResult(items, total, limit, offset))
 }
 
 func (h *RecipeHandler) ListByProduct(c *gin.Context) {

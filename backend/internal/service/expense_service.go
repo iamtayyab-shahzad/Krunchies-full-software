@@ -31,9 +31,27 @@ type SupplierInput struct {
 }
 
 func (s *SupplierService) List() ([]domain.Supplier, error) {
-	var rows []domain.Supplier
-	err := s.db.Order("name asc").Find(&rows).Error
+	rows, _, err := s.ListPaged(0, 0)
 	return rows, err
+}
+
+func (s *SupplierService) ListPaged(limit, offset int) ([]domain.Supplier, int64, error) {
+	var total int64
+	var rows []domain.Supplier
+	if err := s.db.Model(&domain.Supplier{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	q := s.db.Order("name asc")
+	if offset > 0 {
+		q = q.Offset(offset)
+	}
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }
 
 func (s *SupplierService) GetByID(id uuid.UUID) (*domain.Supplier, error) {
@@ -122,16 +140,36 @@ func (s *ExpenseService) Categories() []string {
 }
 
 func (s *ExpenseService) List(start, end *time.Time) ([]domain.Expense, error) {
+	rows, _, err := s.ListPaged(start, end, 0, 0)
+	return rows, err
+}
+
+func (s *ExpenseService) ListPaged(start, end *time.Time, limit, offset int) ([]domain.Expense, int64, error) {
+	var total int64
 	var rows []domain.Expense
+	countQ := s.db.Model(&domain.Expense{})
 	q := s.db.Order("expense_date desc, created_at desc")
 	if start != nil {
+		countQ = countQ.Where("expense_date >= ?", *start)
 		q = q.Where("expense_date >= ?", *start)
 	}
 	if end != nil {
+		countQ = countQ.Where("expense_date < ?", *end)
 		q = q.Where("expense_date < ?", *end)
 	}
-	err := q.Find(&rows).Error
-	return rows, err
+	if err := countQ.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if offset > 0 {
+		q = q.Offset(offset)
+	}
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }
 
 func (s *ExpenseService) GetByID(id uuid.UUID) (*domain.Expense, error) {

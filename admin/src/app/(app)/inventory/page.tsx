@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Save, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -122,8 +123,8 @@ function emptyRow(item: InventoryItem): RowEdit {
 }
 
 export default function InventoryPage() {
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("stock");
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [rows, setRows] = useState<Record<string, RowEdit>>({});
@@ -173,8 +174,7 @@ export default function InventoryPage() {
     setRows(next);
   };
 
-  const refresh = async () => {
-    const list = await inventoryApi.list();
+  const applyList = (list: InventoryItem[]) => {
     setItems(list);
     syncRows(list);
   };
@@ -201,22 +201,33 @@ export default function InventoryPage() {
     setWastageRows(wasteTx.map(map));
   };
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        await refresh();
-        await loadSideTabs();
-        const menu = await productsApi.list().catch(() => [] as Product[]);
-        setProducts(menu.filter((p) => p.available !== false));
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to load inventory");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const { isLoading: loading, isError, error } = useQuery({
+    queryKey: ["inventory-page"],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const list = await inventoryApi.list();
+      applyList(list);
+      await loadSideTabs();
+      const menu = await productsApi.list().catch(() => [] as Product[]);
+      setProducts(menu.filter((p) => p.available !== false));
+      return list;
+    },
+  });
 
+  useEffect(() => {
+    if (isError) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load inventory",
+      );
+    }
+  }, [isError, error]);
+
+  const refresh = async () => {
+    const list = await inventoryApi.list();
+    applyList(list);
+    await queryClient.invalidateQueries({ queryKey: ["inventory-page"] });
+    await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  };
   const patchRow = (id: string, patch: Partial<RowEdit>) => {
     setRows((prev) => ({
       ...prev,

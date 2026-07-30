@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Package,
@@ -20,14 +21,7 @@ import {
   analyticsApi,
   inventoryApi,
   ordersApi,
-  type BackendOrder,
 } from "@/services/api";
-
-type StockBucket = {
-  low: InventoryItem[];
-  out: InventoryItem[];
-  negative: InventoryItem[];
-};
 
 function stockTone(item: InventoryItem): "warning" | "danger" {
   if (item.currentStock < 0 || item.currentStock === 0) return "danger";
@@ -40,77 +34,96 @@ function stockLabel(item: InventoryItem) {
   return "Low";
 }
 
-export default function DashboardPage() {
-  const [recent, setRecent] = useState<BackendOrder[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [sales, setSales] = useState({ today: 0, week: 0, month: 0 });
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [alerts, setAlerts] = useState<{
-    low: number;
-    out: number;
-    negative: number;
-  }>({ low: 0, out: 0, negative: 0 });
+function mapAlertItem(i: {
+  id: string;
+  name: string;
+  category?: string;
+  unit?: string;
+  unit_kind?: string;
+  purchase_unit?: string;
+  units_per_purchase?: number;
+  stock?: number;
+  minimum_stock?: number;
+  purchase_price?: number;
+  avg_cost_micros?: number;
+  supplier?: string;
+  supplier_id?: string;
+  is_active?: boolean;
+}): InventoryItem {
+  const stock = Number(i.stock || 0);
+  const avg = Number(i.avg_cost_micros || 0);
+  return {
+    id: i.id,
+    name: i.name,
+    category: i.category || "",
+    currentStock: stock,
+    unit: i.unit || "g",
+    unitKind: i.unit_kind || "WEIGHT",
+    purchaseUnit: i.purchase_unit || i.unit || "KG",
+    unitsPerPurchase: Number(i.units_per_purchase || 1) || 1,
+    purchasePrice: Number(i.purchase_price || 0),
+    avgCostMicros: avg,
+    supplier: i.supplier || "",
+    supplierId: i.supplier_id || "",
+    minimumStock: Number(i.minimum_stock || 0),
+    isActive: i.is_active !== false,
+    stockValue: Math.round((Math.max(stock, 0) * avg) / 1_000_000),
+  };
+}
 
-  useEffect(() => {
-    Promise.all([
+async function loadDashboard() {
+  const [todaySales, weeklySales, monthlySales, orderRows, pendingRows, alertRows] =
+    await Promise.all([
       analyticsApi.todaySales(),
       analyticsApi.weeklySales(),
       analyticsApi.monthlySales(),
       ordersApi.list({ limit: 10 }),
       ordersApi.pending(),
-      inventoryApi.list(),
-      inventoryApi.alerts().catch(() => null),
-    ])
-      .then(
-        ([
-          todaySales,
-          weeklySales,
-          monthlySales,
-          orderRows,
-          pendingRows,
-          inventoryRows,
-          alertRows,
-        ]) => {
-          setSales({
-            today: todaySales.total || 0,
-            week: weeklySales.total || 0,
-            month: monthlySales.total || 0,
-          });
-          setRecent(orderRows);
-          setPendingCount(pendingRows.length);
-          setInventory(inventoryRows);
-          if (alertRows) {
-            setAlerts({
-              low: alertRows.low_stock?.length || 0,
-              out: alertRows.out_of_stock?.length || 0,
-              negative: alertRows.negative_stock?.length || 0,
-            });
-          }
-        },
-      )
-      .catch((error) =>
-        toast.error(
-          error instanceof Error ? error.message : "Failed to load dashboard",
-        ),
+      inventoryApi.alerts(),
+    ]);
+
+  const negative = (alertRows.negative_stock || []).map(mapAlertItem);
+  const out = (alertRows.out_of_stock || []).map(mapAlertItem);
+  const low = (alertRows.low_stock || []).map(mapAlertItem);
+
+  return {
+    sales: {
+      today: todaySales.total || 0,
+      week: weeklySales.total || 0,
+      month: monthlySales.total || 0,
+    },
+    recent: orderRows,
+    pendingCount: pendingRows.length,
+    alerts: {
+      low: low.length,
+      out: out.length,
+      negative: negative.length,
+    },
+    alertItems: [...negative, ...out, ...low],
+  };
+}
+
+export default function DashboardPage() {
+  const { data, isError, error, isPending } = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: loadDashboard,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (isError) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load dashboard",
       );
-  }, []);
+    }
+  }, [isError, error]);
 
-  const stockBuckets: StockBucket = useMemo(() => {
-    const negative = inventory.filter((i) => i.currentStock < 0);
-    const out = inventory.filter((i) => i.currentStock === 0);
-    const low = inventory.filter(
-      (i) => i.currentStock > 0 && i.currentStock <= i.minimumStock,
-    );
-    return { low, out, negative };
-  }, [inventory]);
-
-  const alertItems = [
-    ...stockBuckets.negative,
-    ...stockBuckets.out,
-    ...stockBuckets.low,
-  ];
-  const alertCount =
-    alerts.low + alerts.out + alerts.negative || alertItems.length;
+  const sales = data?.sales ?? { today: 0, week: 0, month: 0 };
+  const recent = data?.recent ?? [];
+  const pendingCount = data?.pendingCount ?? 0;
+  const alerts = data?.alerts ?? { low: 0, out: 0, negative: 0 };
+  const alertItems = data?.alertItems ?? [];
+  const alertCount = alerts.low + alerts.out + alerts.negative;
 
   return (
     <div>
@@ -137,18 +150,18 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Today's Sales"
-          value={formatPrice(sales.today)}
+          value={isPending ? "…" : formatPrice(sales.today)}
           hint="Completed orders"
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
           label="Weekly Sales"
-          value={formatPrice(sales.week)}
+          value={isPending ? "…" : formatPrice(sales.week)}
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
           label="Monthly Sales"
-          value={formatPrice(sales.month)}
+          value={isPending ? "…" : formatPrice(sales.month)}
           icon={<TrendingUp className="h-5 w-5" />}
         />
         <StatCard
@@ -202,7 +215,9 @@ export default function DashboardPage() {
               </div>
             ))}
             {!recent.length ? (
-              <p className="text-zinc-400">No orders yet.</p>
+              <p className="text-zinc-400">
+                {isPending ? "Loading…" : "No orders yet."}
+              </p>
             ) : null}
           </div>
         </Card>
@@ -214,25 +229,21 @@ export default function DashboardPage() {
               <h2 className="text-lg font-bold">Stock Alerts</h2>
             </div>
             <div className="flex flex-wrap gap-2">
-              {(alerts.low || stockBuckets.low.length) > 0 ? (
-                <Badge tone="warning">
-                  {alerts.low || stockBuckets.low.length} low
-                </Badge>
+              {alerts.low > 0 ? (
+                <Badge tone="warning">{alerts.low} low</Badge>
               ) : null}
-              {(alerts.out || stockBuckets.out.length) > 0 ? (
-                <Badge tone="danger">
-                  {alerts.out || stockBuckets.out.length} out
-                </Badge>
+              {alerts.out > 0 ? (
+                <Badge tone="danger">{alerts.out} out</Badge>
               ) : null}
-              {(alerts.negative || stockBuckets.negative.length) > 0 ? (
-                <Badge tone="danger">
-                  {alerts.negative || stockBuckets.negative.length} negative
-                </Badge>
+              {alerts.negative > 0 ? (
+                <Badge tone="danger">{alerts.negative} negative</Badge>
               ) : null}
             </div>
           </div>
           {alertItems.length === 0 ? (
-            <p className="text-zinc-400">All inventory levels look healthy.</p>
+            <p className="text-zinc-400">
+              {isPending ? "Loading…" : "All inventory levels look healthy."}
+            </p>
           ) : (
             <div className="space-y-3">
               {alertItems.slice(0, 8).map((item) => (

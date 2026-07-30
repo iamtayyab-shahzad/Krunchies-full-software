@@ -1,6 +1,8 @@
 "use client";
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { AuthProvider } from "@/context/auth-context";
 import { CartProvider, useCart } from "@/context/cart-context";
 import { Header } from "@/components/layout/header";
@@ -45,11 +47,26 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60_000,
+            retry: 1,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
+
   return (
-    <AuthProvider>
-      <CartProvider>
-        <Shell>{children}</Shell>
-      </CartProvider>
-    </AuthProvider>
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <CartProvider>
+          <Shell>{children}</Shell>
+        </CartProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

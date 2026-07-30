@@ -42,7 +42,7 @@ import {
   productsApi,
   settingsApi,
 } from "@/services/api";
-import type { Order, Product, ProductSize } from "@/types";
+import type { Order, OrderItem, Product, ProductSize } from "@/types";
 
 const DealFlavorDialog = dynamic(
   () =>
@@ -187,7 +187,9 @@ export default function NewOrderPage() {
 
   /** Ensure kitchen/customer receipts always show product names (never blank). */
   const enrichOrderForPrint = (order: Order): Order => {
-    const fallbackItems: Order["items"] = bill.items.map((b, i) => ({
+    // Order.items is optional on the type; always build a concrete array here so
+    // print enrichment cannot hit `possibly undefined` on .map().
+    const fallbackItems: OrderItem[] = bill.items.map((b, i) => ({
       id: `${order.id}-line-${i}`,
       created_at: order.created_at || new Date().toISOString(),
       updated_at: order.updated_at || new Date().toISOString(),
@@ -225,15 +227,14 @@ export default function NewOrderPage() {
       // Flat fields survive JSON round-trips / IndexedDB even if nested product is dropped.
       product_name: b.product_name || "Item",
       size: b.size || "-",
-    })) as Order["items"];
+    }));
 
     // Always prefer bill lines for print — server/local rows often omit nested product.
-    const source =
-      bill.items.length > 0
+    const orderItems = order.items ?? [];
+    const source: OrderItem[] =
+      bill.items.length > 0 || orderItems.length === 0
         ? fallbackItems
-        : order.items && order.items.length > 0
-          ? order.items
-          : fallbackItems;
+        : orderItems;
 
     return {
       ...order,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -68,10 +69,8 @@ const emptyForm = (categories: Category[]): Omit<Product, "id"> => ({
 });
 
 export default function ProductsPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(() => emptyForm([]));
@@ -83,32 +82,35 @@ export default function ProductsPage() {
     { label: "XL", price: 0 },
   ]);
 
-  // Load categories + products from backend.
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
+  const { data, isLoading: loading, isError, error, refetch } = useQuery({
+    queryKey: ["products-page"],
+    staleTime: 60_000,
+    queryFn: async () => {
       const [cats, prods] = await Promise.all([
         categoriesApi.list(),
         productsApi.list(),
       ]);
-      if (cancelled) return;
-      setCategories(cats);
-      setProducts(prods);
-      setLoading(false);
-      // If create dialog opens early, make sure default category is valid.
-      setForm(emptyForm(cats));
-    };
-    load().catch((e) => {
-      toast.error(e instanceof Error ? e.message : "Failed to load products");
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      return { categories: cats, products: prods };
+    },
+  });
 
+  const categories = data?.categories ?? [];
+  const products = data?.products ?? [];
+
+  useEffect(() => {
+    if (categories.length) setForm((f) => (f.categoryId ? f : emptyForm(categories)));
+  }, [categories]);
+
+  useEffect(() => {
+    if (isError) {
+      toast.error(error instanceof Error ? error.message : "Failed to load products");
+    }
+  }, [isError, error]);
+
+  const refresh = async () => {
+    await refetch();
+    await queryClient.invalidateQueries({ queryKey: ["products-page"] });
+  };
   const categoryName = useMemo(() => {
     const map = Object.fromEntries(categories.map((c) => [c.id, c.name]));
     return (id: string) => map[id] || "—";
@@ -201,13 +203,8 @@ export default function ProductsPage() {
         toast.success("Product added");
       }
 
-      const [cats, prods] = await Promise.all([
-        categoriesApi.list(),
-        productsApi.list(),
-      ]);
-      setCategories(cats);
-      setProducts(prods);
-      setForm(emptyForm(cats));
+      await refresh();
+      setForm(emptyForm(categories));
       setOpen(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
@@ -219,13 +216,8 @@ export default function ProductsPage() {
       if (!confirm("Delete this product?")) return;
       await productsApi.remove(id);
       toast.success("Product deleted");
-      const [cats, prods] = await Promise.all([
-        categoriesApi.list(),
-        productsApi.list(),
-      ]);
-      setCategories(cats);
-      setProducts(prods);
-      setForm(emptyForm(cats));
+      await refresh();
+      setForm(emptyForm(categories));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Delete failed");
     }

@@ -43,11 +43,27 @@ func (r *PaymentRepository) GetByOrderID(orderID uuid.UUID) (*domain.Payment, er
 }
 
 func (r *PaymentRepository) List() ([]domain.Payment, error) {
+	rows, _, err := r.ListPaged(0, 0)
+	return rows, err
+}
+
+func (r *PaymentRepository) ListPaged(limit, offset int) ([]domain.Payment, int64, error) {
+	var total int64
 	var payments []domain.Payment
-	if err := r.db.Order("created_at desc").Find(&payments).Error; err != nil {
-		return nil, err
+	if err := r.db.Model(&domain.Payment{}).Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
-	return payments, nil
+	q := r.db.Order("created_at desc")
+	if offset > 0 {
+		q = q.Offset(offset)
+	}
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	if err := q.Find(&payments).Error; err != nil {
+		return nil, 0, err
+	}
+	return payments, total, nil
 }
 
 func (r *PaymentRepository) Update(id uuid.UUID, updates map[string]any) error {

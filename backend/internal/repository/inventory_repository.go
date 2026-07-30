@@ -194,6 +194,25 @@ func (r *InventoryRepository) List() ([]domain.Inventory, error) {
 	return items, nil
 }
 
+func (r *InventoryRepository) ListPaged(limit, offset int) ([]domain.Inventory, int64, error) {
+	var total int64
+	var items []domain.Inventory
+	if err := r.db.Model(&domain.Inventory{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	q := r.db.Order("name asc")
+	if offset > 0 {
+		q = q.Offset(offset)
+	}
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	if err := q.Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
 func (r *InventoryRepository) LowStock() ([]domain.Inventory, error) {
 	var inv []domain.Inventory
 	if err := r.db.

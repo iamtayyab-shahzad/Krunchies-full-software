@@ -39,6 +39,26 @@ func (s *RecipeService) List() ([]domain.Recipe, error) {
 	return rows, err
 }
 
+func (s *RecipeService) ListPaged(limit, offset int) ([]domain.Recipe, int64, error) {
+	var total int64
+	var rows []domain.Recipe
+	if err := s.db.Model(&domain.Recipe{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	q := s.db.Preload("Product").Preload("ProductSize").Preload("Inventory").
+		Order("product_id, product_size_id nulls first")
+	if offset > 0 {
+		q = q.Offset(offset)
+	}
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
 // ListByProduct returns BOM lines for one product.
 func (s *RecipeService) ListByProduct(productID uuid.UUID) ([]domain.Recipe, error) {
 	var rows []domain.Recipe
