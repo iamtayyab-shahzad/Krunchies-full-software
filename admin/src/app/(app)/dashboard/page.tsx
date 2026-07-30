@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  ClipboardList,
   Package,
   Receipt,
   ShoppingBag,
@@ -122,21 +121,15 @@ export default function DashboardPage() {
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Button asChild variant="secondary" size="sm">
-          <Link href="/purchases">
-            <ClipboardList className="h-4 w-4" />
-            Purchases
+          <Link href="/inventory">
+            <Package className="h-4 w-4" />
+            Inventory
           </Link>
         </Button>
         <Button asChild variant="secondary" size="sm">
           <Link href="/profit-loss">
             <Receipt className="h-4 w-4" />
             Profit &amp; Loss
-          </Link>
-        </Button>
-        <Button asChild variant="secondary" size="sm">
-          <Link href="/inventory">
-            <Package className="h-4 w-4" />
-            Inventory
           </Link>
         </Button>
       </div>

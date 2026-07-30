@@ -230,7 +230,7 @@ export default function ProfitLossPage() {
             <StatCard
               label="Inventory Value"
               value={formatPrice(report.inventory_value)}
-              hint={`Purchases ${formatPrice(report.purchases_spend)}`}
+              hint={`Stock buys ${formatPrice(report.purchases_spend)}`}
               icon={<Boxes className="h-5 w-5" />}
             />
           </div>

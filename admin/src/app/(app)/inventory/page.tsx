@@ -1,21 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  Clock,
-  Database,
-  Pencil,
-  Plus,
-  Search,
-  ShoppingCart,
-  Trash2,
-  Trash,
-} from "lucide-react";
+import { Plus, Save, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,40 +24,22 @@ import {
 } from "@/components/ui/dialog";
 import { formatPrice, formatStock } from "@/lib/utils";
 import type { InventoryItem } from "@/lib/mock-data";
-import {
-  inventoryApi,
-  inventoryTransactionsApi,
-} from "@/services/api";
+import { inventoryApi, inventoryTransactionsApi } from "@/services/api";
 
-type Tab = "items" | "to-buy" | "wastage" | "history";
+type Tab = "stock" | "wastage" | "history";
 
-type AlertsSummary = {
-  low: number;
-  out: number;
-  negative: number;
-  stockValue: number;
-};
-
-type Recommendation = {
-  inventory_id: string;
-  name: string;
-  category: string;
-  unit: string;
-  purchase_unit: string;
-  current_stock: number;
-  minimum_stock: number;
-  avg_daily_usage: number;
-  days_remaining: number;
-  suggested_qty_base: number;
-  suggested_qty_purchase: number;
-  estimated_cost: number;
-  urgency: string;
-  reason: string;
+type RowEdit = {
+  purchaseUnit: string;
+  unitsPerPurchase: number;
+  /** Min stock in purchase units (easier for staff). */
+  minStockPurchase: string;
+  buyQty: string;
+  buyCost: string;
+  dirty: boolean;
 };
 
 type TxRow = {
   id: string;
-  inventoryId: string;
   itemName: string;
   unit: string;
   quantity: number;
@@ -115,927 +86,689 @@ function defaultUnitsPerPurchase(purchaseUnit: string): number {
   if (["l", "litre", "liter", "ltr"].includes(pu)) return 1000;
   if (["carton", "case"].includes(pu)) return 24;
   if (pu === "dozen") return 12;
-  if (["pcs", "piece", "pieces", "g", "gram", "grams", "ml"].includes(pu)) return 1;
   return 1;
 }
 
-function stockStatus(item: InventoryItem): {
-  label: string;
-  tone: "success" | "warning" | "danger";
-} {
-  if (item.currentStock < 0) return { label: "Negative", tone: "danger" };
-  if (item.currentStock === 0) return { label: "Out", tone: "danger" };
-  if (item.currentStock <= item.minimumStock)
-    return { label: "Low", tone: "warning" };
-  return { label: "OK", tone: "success" };
+function toPurchaseQty(baseQty: number, unitsPerPurchase: number) {
+  const upp = Number(unitsPerPurchase || 1);
+  if (upp > 1) return baseQty / upp;
+  return baseQty;
 }
 
-function urgencyTone(
-  urgency: string,
-): "danger" | "warning" | "orange" | "default" | "success" {
-  const u = urgency.toUpperCase();
-  if (u === "CRITICAL") return "danger";
-  if (u === "HIGH") return "warning";
-  if (u === "MEDIUM") return "orange";
-  if (u === "LOW") return "success";
-  return "default";
+function toBaseQty(purchaseQty: number, unitsPerPurchase: number) {
+  const upp = Number(unitsPerPurchase || 1);
+  return Math.round(purchaseQty * upp);
 }
 
-function txTone(
-  type: string,
-): "success" | "warning" | "danger" | "orange" | "default" {
-  const t = type.toUpperCase();
-  if (t === "PURCHASE" || t === "IN" || t === "ADJUST_IN") return "success";
-  if (t === "WASTAGE") return "danger";
-  if (t === "SALE" || t === "OUT" || t === "USAGE") return "orange";
-  if (t === "REVERSE" || t === "ADJUST") return "warning";
-  return "default";
+function stockTone(item: InventoryItem): "success" | "warning" | "danger" {
+  if (item.currentStock < 0 || item.currentStock === 0) return "danger";
+  if (item.currentStock <= item.minimumStock) return "warning";
+  return "success";
 }
 
-type ItemForm = {
-  name: string;
-  category: string;
-  unitKind: string;
-  purchaseUnit: string;
-  unitsPerPurchase: number;
-  currentStock: number;
-  minimumStock: number;
-  purchasePrice: number;
-  supplier: string;
-};
-
-const emptyItemForm = (): ItemForm => ({
-  name: "",
-  category: "",
-  unitKind: "WEIGHT",
-  purchaseUnit: "KG",
-  unitsPerPurchase: 1000,
-  currentStock: 0,
-  minimumStock: 0,
-  purchasePrice: 0,
-  supplier: "",
-});
+function emptyRow(item: InventoryItem): RowEdit {
+  return {
+    purchaseUnit: item.purchaseUnit || item.unit || "KG",
+    unitsPerPurchase: item.unitsPerPurchase || 1,
+    minStockPurchase: String(
+      Number(
+        toPurchaseQty(item.minimumStock, item.unitsPerPurchase || 1).toFixed(3),
+      ),
+    ),
+    buyQty: "",
+    buyCost: "",
+    dirty: false,
+  };
+}
 
 export default function InventoryPage() {
-  const [tab, setTab] = useState<Tab>("items");
+  const [tab, setTab] = useState<Tab>("stock");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [rows, setRows] = useState<Record<string, RowEdit>>({});
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
 
-  const [alerts, setAlerts] = useState<AlertsSummary>({
-    low: 0,
-    out: 0,
-    negative: 0,
-    stockValue: 0,
-  });
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [openAdd, setOpenAdd] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addKind, setAddKind] = useState<string>("WEIGHT");
+  const [addUnit, setAddUnit] = useState("KG");
+  const [addOpening, setAddOpening] = useState("0");
+  const [addMin, setAddMin] = useState("0");
+
+  const [detail, setDetail] = useState<InventoryItem | null>(null);
+
+  const [wastageItemId, setWastageItemId] = useState("");
+  const [wastageQty, setWastageQty] = useState("");
+  const [wastageReason, setWastageReason] = useState("");
   const [historyRows, setHistoryRows] = useState<TxRow[]>([]);
   const [wastageRows, setWastageRows] = useState<TxRow[]>([]);
 
-  const [openItemDialog, setOpenItemDialog] = useState(false);
-  const [editing, setEditing] = useState<InventoryItem | null>(null);
-  const [itemForm, setItemForm] = useState(emptyItemForm());
+  const dirtyCount = useMemo(
+    () => Object.values(rows).filter((r) => r.dirty).length,
+    [rows],
+  );
 
-  const [wastageItemId, setWastageItemId] = useState("");
-  const [wastageQty, setWastageQty] = useState(0);
-  const [wastageReason, setWastageReason] = useState("");
-  const [savingWastage, setSavingWastage] = useState(false);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((i) => !q || i.name.toLowerCase().includes(q));
+  }, [items, query]);
 
-  const knownCategories = useMemo(() => {
-    const set = new Set(
-      items.map((i) => i.category.trim()).filter(Boolean),
-    );
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [items]);
-
-  const mapTx = (
-    r: Awaited<ReturnType<typeof inventoryTransactionsApi.list>>[number],
-  ): TxRow => ({
-    id: r.id,
-    inventoryId: r.inventory_id,
-    itemName: r.inventory?.name || r.inventory_id,
-    unit: r.inventory?.unit || "",
-    quantity: r.quantity,
-    type: r.transaction_type,
-    reason: r.reason,
-    createdAt: r.created_at,
-    totalCost: r.total_cost,
-    balanceAfter: r.balance_after,
-  });
-
-  const refreshItems = async () => {
-    const inv = await inventoryApi.list();
-    setItems(inv);
+  const syncRows = (list: InventoryItem[]) => {
+    const next: Record<string, RowEdit> = {};
+    for (const item of list) next[item.id] = emptyRow(item);
+    setRows(next);
   };
 
-  const refreshAlerts = async () => {
-    const a = await inventoryApi.alerts();
-    setAlerts({
-      low: a.low_stock?.length || 0,
-      out: a.out_of_stock?.length || 0,
-      negative: a.negative_stock?.length || 0,
-      stockValue: Number(a.stock_value || 0),
+  const refresh = async () => {
+    const list = await inventoryApi.list();
+    setItems(list);
+    syncRows(list);
+  };
+
+  const loadSideTabs = async () => {
+    const [allTx, wasteTx] = await Promise.all([
+      inventoryTransactionsApi.list(),
+      inventoryTransactionsApi.list(undefined, "WASTAGE"),
+    ]);
+    const map = (
+      r: Awaited<ReturnType<typeof inventoryTransactionsApi.list>>[number],
+    ): TxRow => ({
+      id: r.id,
+      itemName: r.inventory?.name || r.inventory_id,
+      unit: r.inventory?.unit || "",
+      quantity: r.quantity,
+      type: r.transaction_type,
+      reason: r.reason,
+      createdAt: r.created_at,
+      totalCost: r.total_cost,
+      balanceAfter: r.balance_after,
     });
-  };
-
-  const refreshRecommendations = async () => {
-    const rows = await inventoryApi.recommendations();
-    setRecommendations(Array.isArray(rows) ? rows : []);
-  };
-
-  const refreshHistory = async () => {
-    const rows = await inventoryTransactionsApi.list();
-    setHistoryRows(rows.map(mapTx));
-  };
-
-  const refreshWastage = async () => {
-    const rows = await inventoryTransactionsApi.list(undefined, "WASTAGE");
-    setWastageRows(rows.map(mapTx));
+    setHistoryRows(allTx.map(map));
+    setWastageRows(wasteTx.map(map));
   };
 
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
+    (async () => {
       try {
-        await Promise.all([refreshItems(), refreshAlerts()]);
+        setLoading(true);
+        await refresh();
+        await loadSideTabs();
       } catch (e) {
-        if (!cancelled) {
-          toast.error(
-            e instanceof Error ? e.message : "Failed to load inventory",
-          );
-        }
+        toast.error(e instanceof Error ? e.message : "Failed to load inventory");
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
+    })();
   }, []);
 
-  useEffect(() => {
-    if (tab === "to-buy") {
-      refreshRecommendations().catch((e) =>
-        toast.error(
-          e instanceof Error ? e.message : "Failed to load recommendations",
-        ),
-      );
-    }
-    if (tab === "wastage") {
-      refreshWastage().catch((e) =>
-        toast.error(e instanceof Error ? e.message : "Failed to load wastage"),
-      );
-    }
-    if (tab === "history") {
-      refreshHistory().catch((e) =>
-        toast.error(e instanceof Error ? e.message : "Failed to load history"),
-      );
-    }
-  }, [tab]);
-
-  const filteredItems = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items.filter((i) => {
-      if (categoryFilter !== "all" && i.category !== categoryFilter) return false;
-      if (!q) return true;
-      return (
-        i.name.toLowerCase().includes(q) ||
-        i.category.toLowerCase().includes(q) ||
-        i.supplier.toLowerCase().includes(q)
-      );
-    });
-  }, [items, query, categoryFilter]);
-
-  const openCreate = () => {
-    setEditing(null);
-    setItemForm(emptyItemForm());
-    setOpenItemDialog(true);
-  };
-
-  const openEdit = (item: InventoryItem) => {
-    setEditing(item);
-    setItemForm({
-      name: item.name,
-      category: item.category,
-      unitKind: item.unitKind || "WEIGHT",
-      purchaseUnit: item.purchaseUnit || defaultPurchaseUnit(item.unitKind),
-      unitsPerPurchase: item.unitsPerPurchase || 1,
-      currentStock: item.currentStock,
-      minimumStock: item.minimumStock,
-      purchasePrice: item.purchasePrice,
-      supplier: item.supplier,
-    });
-    setOpenItemDialog(true);
-  };
-
-  const setUnitKind = (kind: string) => {
-    const purchaseUnit = defaultPurchaseUnit(kind);
-    setItemForm((f) => ({
-      ...f,
-      unitKind: kind,
-      purchaseUnit,
-      unitsPerPurchase: defaultUnitsPerPurchase(purchaseUnit),
+  const patchRow = (id: string, patch: Partial<RowEdit>) => {
+    setRows((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || emptyRow(items.find((i) => i.id === id)!)), ...patch, dirty: true },
     }));
   };
 
-  const setPurchaseUnit = (purchaseUnit: string) => {
-    setItemForm((f) => ({
-      ...f,
-      purchaseUnit,
-      unitsPerPurchase: defaultUnitsPerPurchase(purchaseUnit),
-    }));
-  };
-
-  const saveItem = async () => {
-    if (!itemForm.name.trim()) {
-      toast.error("Item name is required");
+  const saveAll = async () => {
+    const dirtyIds = Object.entries(rows)
+      .filter(([, r]) => r.dirty)
+      .map(([id]) => id);
+    if (!dirtyIds.length) {
+      toast.message("Nothing to save");
       return;
     }
-    const upp = Number(itemForm.unitsPerPurchase || 0) || 1;
-    const baseUnit = baseUnitForKind(itemForm.unitKind);
-    const stockForSave = editing
-      ? Number(itemForm.currentStock || 0)
-      : Math.round(Number(itemForm.currentStock || 0) * upp);
+
+    const payload = [];
+    for (const id of dirtyIds) {
+      const item = items.find((i) => i.id === id);
+      const row = rows[id];
+      if (!item || !row) continue;
+
+      const buyQty = Number(row.buyQty || 0);
+      const buyCost = Number(row.buyCost || 0);
+      if (buyQty < 0 || buyCost < 0) {
+        toast.error(`${item.name}: today bought / cost cannot be negative`);
+        return;
+      }
+      if (buyQty > 0 && buyCost <= 0) {
+        toast.error(`${item.name}: enter the money you paid for today's buy`);
+        return;
+      }
+
+      const minPurchase = Number(row.minStockPurchase || 0);
+      if (minPurchase < 0) {
+        toast.error(`${item.name}: min stock cannot be negative`);
+        return;
+      }
+
+      payload.push({
+        inventoryId: id,
+        purchaseUnit: row.purchaseUnit,
+        unitsPerPurchase: row.unitsPerPurchase,
+        minimumStock: toBaseQty(minPurchase, row.unitsPerPurchase),
+        buyQty,
+        buyCost,
+      });
+    }
 
     try {
-      const payload = {
-        name: itemForm.name.trim(),
-        category: itemForm.category.trim(),
-        unitKind: itemForm.unitKind,
-        unit: baseUnit,
-        purchaseUnit: itemForm.purchaseUnit,
-        unitsPerPurchase: upp,
-        currentStock: stockForSave,
-        minimumStock: Number(itemForm.minimumStock || 0),
-        purchasePrice: Number(itemForm.purchasePrice || 0),
-        supplier: itemForm.supplier.trim(),
-      };
-      if (editing) {
-        await inventoryApi.update(editing.id, payload);
-        toast.success("Inventory item updated");
-      } else {
-        await inventoryApi.create(payload);
-        toast.success("Inventory item created");
-      }
-      setOpenItemDialog(false);
-      await Promise.all([refreshItems(), refreshAlerts()]);
+      setSaving(true);
+      await inventoryApi.bulkSave(payload);
+      toast.success(`Saved ${payload.length} item(s)`);
+      await refresh();
+      await loadSideTabs();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const deleteItem = async (id: string) => {
-    if (!confirm("Delete this inventory item?")) return;
+  const createItem = async () => {
+    const name = addName.trim();
+    if (!name) {
+      toast.error("Enter item name");
+      return;
+    }
+    const upp = defaultUnitsPerPurchase(addUnit);
+    const openingPurchase = Number(addOpening || 0);
+    const minPurchase = Number(addMin || 0);
     try {
-      await inventoryApi.remove(id);
-      toast.success("Inventory item deleted");
-      await Promise.all([refreshItems(), refreshAlerts()]);
+      await inventoryApi.create({
+        name,
+        category: "",
+        unitKind: addKind,
+        unit: baseUnitForKind(addKind),
+        purchaseUnit: addUnit,
+        unitsPerPurchase: upp,
+        currentStock: toBaseQty(openingPurchase, upp),
+        minimumStock: toBaseQty(minPurchase, upp),
+        purchasePrice: 0,
+        supplier: "",
+        isActive: true,
+      });
+      toast.success("Item added");
+      setOpenAdd(false);
+      setAddName("");
+      setAddOpening("0");
+      setAddMin("0");
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add item");
+    }
+  };
+
+  const removeItem = async (item: InventoryItem) => {
+    if (!confirm(`Delete ${item.name}? Only if unused in recipes.`)) return;
+    try {
+      await inventoryApi.remove(item.id);
+      toast.success("Deleted");
+      setDetail(null);
+      await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Delete failed");
     }
   };
 
-  const submitWastage = async () => {
+  const saveWastage = async () => {
     if (!wastageItemId) {
-      toast.error("Select an inventory item");
+      toast.error("Select an item");
       return;
     }
-    if (Number(wastageQty) <= 0) {
-      toast.error("Quantity must be greater than zero");
+    const item = items.find((i) => i.id === wastageItemId);
+    const qtyPurchase = Number(wastageQty || 0);
+    if (!item || qtyPurchase <= 0) {
+      toast.error("Enter wastage quantity");
       return;
     }
-    if (!wastageReason.trim()) {
-      toast.error("Reason is required");
-      return;
-    }
-    setSavingWastage(true);
     try {
       await inventoryApi.wastage(
         wastageItemId,
-        Number(wastageQty),
-        wastageReason.trim(),
+        toBaseQty(qtyPurchase, item.unitsPerPurchase || 1),
+        wastageReason.trim() || "Wastage",
       );
       toast.success("Wastage recorded");
-      setWastageQty(0);
+      setWastageQty("");
       setWastageReason("");
-      await Promise.all([
-        refreshItems(),
-        refreshAlerts(),
-        refreshWastage(),
-      ]);
+      await refresh();
+      await loadSideTabs();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to record wastage");
-    } finally {
-      setSavingWastage(false);
+      toast.error(e instanceof Error ? e.message : "Wastage failed");
     }
   };
 
-  const selectedWastageItem = items.find((i) => i.id === wastageItemId);
-  const purchaseUnitOptions =
-    PURCHASE_UNITS_BY_KIND[itemForm.unitKind] || PURCHASE_UNITS_BY_KIND.WEIGHT;
-
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Inventory"
-        description="Stock levels, to-buy list, wastage, and history"
-      />
-
-      {(alerts.low > 0 || alerts.out > 0 || alerts.negative > 0) && (
-        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" />
-          <p className="text-sm font-semibold text-amber-200">
-            Stock alerts:
-            {alerts.low > 0 ? (
-              <span className="ml-2 text-amber-400">{alerts.low} low</span>
-            ) : null}
-            {alerts.out > 0 ? (
-              <span className="ml-2 text-red-400">{alerts.out} out</span>
-            ) : null}
-            {alerts.negative > 0 ? (
-              <span className="ml-2 text-red-300">
-                {alerts.negative} negative
-              </span>
-            ) : null}
-            <span className="ml-3 text-zinc-400">
-              Value {formatPrice(alerts.stockValue)}
-            </span>
-          </p>
-        </div>
-      )}
-
-      <div className="mb-6 flex flex-wrap gap-2">
-        {(
-          [
-            ["items", "Inventory Items", Database],
-            ["to-buy", "To Buy", ShoppingCart],
-            ["wastage", "Wastage", Trash],
-            ["history", "Stock History", Clock],
-          ] as const
-        ).map(([key, label, Icon]) => {
-          const active = tab === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold ${
-                active
-                  ? "bg-orange-500 text-black"
-                  : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          );
-        })}
-
-        <div className="ml-auto">
-          {tab === "items" ? (
-            <Button onClick={openCreate}>
-              <Plus className="h-4 w-4" />
-              Add Item
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {tab === "items" ? (
-        <>
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <div className="relative w-full max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <Input
-                className="pl-10"
-                placeholder="Search by name, category, supplier..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
-            <Select
-              value={categoryFilter}
-              onValueChange={setCategoryFilter}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All categories</SelectItem>
-                {knownCategories.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {loading ? (
-            <div className="flex min-h-[320px] items-center justify-center text-zinc-400">
-              Loading inventory...
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-zinc-800">
-              <table className="w-full min-w-[980px] text-left">
-                <thead className="bg-zinc-950 text-sm uppercase text-zinc-500">
-                  <tr>
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Category</th>
-                    <th className="px-4 py-3">Stock</th>
-                    <th className="px-4 py-3">Min</th>
-                    <th className="px-4 py-3">Value</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item) => {
-                    const status = stockStatus(item);
-                    return (
-                      <tr
-                        key={item.id}
-                        className="border-t border-zinc-800 align-top"
-                      >
-                        <td className="px-4 py-3 font-bold">{item.name}</td>
-                        <td className="px-4 py-3 text-zinc-300">
-                          {item.category || "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          {formatStock(
-                            item.currentStock,
-                            item.unit,
-                            item.purchaseUnit,
-                            item.unitsPerPurchase,
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-zinc-400">
-                          {formatStock(
-                            item.minimumStock,
-                            item.unit,
-                            item.purchaseUnit,
-                            item.unitsPerPurchase,
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-orange-400">
-                          {formatPrice(item.stockValue)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge tone={status.tone}>{status.label}</Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => openEdit(item)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              onClick={() => deleteItem(item.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!filteredItems.length ? (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-4 py-10 text-center text-zinc-500"
-                      >
-                        No inventory items found.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      ) : null}
-
-      {tab === "to-buy" ? (
-        <div className="overflow-x-auto rounded-xl border border-zinc-800">
-          <table className="w-full min-w-[980px] text-left">
-            <thead className="bg-zinc-950 text-sm uppercase text-zinc-500">
-              <tr>
-                <th className="px-4 py-3">Item</th>
-                <th className="px-4 py-3">Urgency</th>
-                <th className="px-4 py-3">Current</th>
-                <th className="px-4 py-3">Suggested Qty</th>
-                <th className="px-4 py-3">Est. Cost</th>
-                <th className="px-4 py-3">Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recommendations.map((r) => (
-                <tr key={r.inventory_id} className="border-t border-zinc-800">
-                  <td className="px-4 py-3">
-                    <p className="font-bold">{r.name}</p>
-                    <p className="text-sm text-zinc-500">
-                      {r.category || "—"}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={urgencyTone(r.urgency)}>{r.urgency}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-zinc-300">
-                    {formatStock(
-                      r.current_stock,
-                      r.unit,
-                      r.purchase_unit,
-                    )}
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-orange-400">
-                    {Number(r.suggested_qty_purchase || 0).toLocaleString(
-                      "en-PK",
-                      { maximumFractionDigits: 2 },
-                    )}{" "}
-                    {r.purchase_unit || r.unit}
-                  </td>
-                  <td className="px-4 py-3 text-orange-400">
-                    {formatPrice(r.estimated_cost)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-zinc-400">
-                    {r.reason}
-                    {r.days_remaining >= 0 ? (
-                      <span className="mt-1 block text-xs text-zinc-500">
-                        ~{Number(r.days_remaining).toFixed(1)} days remaining
-                      </span>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-              {!recommendations.length ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-10 text-center text-zinc-500"
-                  >
-                    Nothing to buy right now — stock looks healthy.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-
-      {tab === "wastage" ? (
-        <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
-          <Card>
-            <h2 className="mb-4 text-lg font-bold">Record Wastage</h2>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Item</Label>
-                <Select
-                  value={wastageItemId || undefined}
-                  onValueChange={setWastageItemId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select item" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {items.map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        {i.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>
-                  Quantity
-                  {selectedWastageItem
-                    ? ` (${selectedWastageItem.unit} base)`
-                    : " (base unit)"}
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={wastageQty}
-                  onChange={(e) => setWastageQty(Number(e.target.value))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Reason</Label>
-                <Textarea
-                  value={wastageReason}
-                  onChange={(e) => setWastageReason(e.target.value)}
-                  placeholder="Spoiled, spilled, expired..."
-                />
-              </div>
-              <Button
-                className="w-full"
-                disabled={savingWastage}
-                onClick={submitWastage}
-              >
-                {savingWastage ? "Saving..." : "Record Wastage"}
+        description="Update stock on one page. Today buy adds stock + average cost (not an expense)."
+        action={
+          tab === "stock" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => setOpenAdd(true)}>
+                <Plus className="h-4 w-4" />
+                Add item
+              </Button>
+              <Button onClick={() => void saveAll()} disabled={saving || !dirtyCount}>
+                <Save className="h-4 w-4" />
+                {saving ? "Saving…" : `Save all${dirtyCount ? ` (${dirtyCount})` : ""}`}
               </Button>
             </div>
-          </Card>
+          ) : null
+        }
+      />
+
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["stock", "Stock"],
+            ["wastage", "Wastage"],
+            ["history", "History"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={`rounded-lg px-4 py-2 text-sm font-bold ${
+              tab === id
+                ? "bg-orange-500 text-black"
+                : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <p className="text-zinc-400">Loading inventory…</p>
+      ) : null}
+
+      {!loading && tab === "stock" ? (
+        <div className="space-y-3">
+          <div className="relative max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            <Input
+              className="pl-9"
+              placeholder="Search item…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
 
           <div className="overflow-x-auto rounded-xl border border-zinc-800">
-            <table className="w-full min-w-[640px] text-left">
-              <thead className="bg-zinc-950 text-sm uppercase text-zinc-500">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-zinc-900/80 text-zinc-400">
                 <tr>
-                  <th className="px-4 py-3">Item</th>
-                  <th className="px-4 py-3">Qty</th>
-                  <th className="px-4 py-3">Reason</th>
-                  <th className="px-4 py-3">When</th>
+                  <th className="px-3 py-3 font-semibold">Item</th>
+                  <th className="px-3 py-3 font-semibold">Unit</th>
+                  <th className="px-3 py-3 font-semibold">Current stock</th>
+                  <th className="px-3 py-3 font-semibold">Min stock</th>
+                  <th className="px-3 py-3 font-semibold">Today bought</th>
+                  <th className="px-3 py-3 font-semibold">Today cost (Rs)</th>
+                  <th className="px-3 py-3 font-semibold" />
                 </tr>
               </thead>
               <tbody>
-                {wastageRows.map((row) => (
-                  <tr key={row.id} className="border-t border-zinc-800">
-                    <td className="px-4 py-3 font-bold">{row.itemName}</td>
-                    <td className="px-4 py-3 text-red-400">
-                      {Math.abs(row.quantity)} {row.unit}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400">{row.reason}</td>
-                    <td className="px-4 py-3 text-sm text-zinc-500">
-                      {new Date(row.createdAt).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-                {!wastageRows.length ? (
+                {filtered.map((item) => {
+                  const row = rows[item.id] || emptyRow(item);
+                  const units =
+                    PURCHASE_UNITS_BY_KIND[item.unitKind] ||
+                    PURCHASE_UNITS_BY_KIND.WEIGHT;
+                  const newStockPreview =
+                    item.currentStock +
+                    toBaseQty(Number(row.buyQty || 0), row.unitsPerPurchase);
+                  return (
+                    <tr
+                      key={item.id}
+                      className="border-t border-zinc-800 hover:bg-zinc-900/40"
+                    >
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left font-bold text-white hover:text-orange-400"
+                          onClick={() => setDetail(item)}
+                        >
+                          {item.name}
+                        </button>
+                        <div className="mt-1">
+                          <Badge tone={stockTone(item)}>
+                            {item.currentStock < 0
+                              ? "Negative"
+                              : item.currentStock === 0
+                                ? "Out"
+                                : item.currentStock <= item.minimumStock
+                                  ? "Low"
+                                  : "OK"}
+                          </Badge>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <Select
+                          value={row.purchaseUnit}
+                          onValueChange={(v) =>
+                            patchRow(item.id, {
+                              purchaseUnit: v,
+                              unitsPerPurchase: defaultUnitsPerPurchase(v),
+                            })
+                          }
+                        >
+                          <SelectTrigger className="w-[110px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {units.map((u) => (
+                              <SelectItem key={u} value={u}>
+                                {u}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-3 py-2 font-semibold text-zinc-200">
+                        {formatStock(
+                          item.currentStock,
+                          item.unit,
+                          row.purchaseUnit,
+                          row.unitsPerPurchase,
+                        )}
+                        {Number(row.buyQty || 0) > 0 ? (
+                          <p className="text-xs text-emerald-400">
+                            →{" "}
+                            {formatStock(
+                              newStockPreview,
+                              item.unit,
+                              row.purchaseUnit,
+                              row.unitsPerPurchase,
+                            )}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Input
+                          className="w-[100px]"
+                          inputMode="decimal"
+                          value={row.minStockPurchase}
+                          onChange={(e) =>
+                            patchRow(item.id, {
+                              minStockPurchase: e.target.value,
+                            })
+                          }
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <Input
+                          className="w-[110px]"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={row.buyQty}
+                          onChange={(e) =>
+                            patchRow(item.id, { buyQty: e.target.value })
+                          }
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <Input
+                          className="w-[120px]"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={row.buyCost}
+                          onChange={(e) =>
+                            patchRow(item.id, { buyCost: e.target.value })
+                          }
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {row.dirty ? (
+                          <span className="text-xs font-bold text-orange-400">
+                            edited
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!filtered.length ? (
                   <tr>
                     <td
-                      colSpan={4}
-                      className="px-4 py-10 text-center text-zinc-500"
+                      colSpan={7}
+                      className="px-3 py-8 text-center text-zinc-500"
                     >
-                      No wastage recorded yet.
+                      No inventory items yet. Click “Add item”.
                     </td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
           </div>
+          <p className="text-xs text-zinc-500">
+            Tip: fill “Today bought” + “Today cost”, then Save all. Stock goes up
+            and average cost updates automatically. Rent/bills stay in Expenses.
+          </p>
         </div>
       ) : null}
 
-      {tab === "history" ? (
+      {!loading && tab === "wastage" ? (
+        <div className="max-w-xl space-y-4 rounded-xl border border-zinc-800 p-4">
+          <div className="space-y-2">
+            <Label>Item</Label>
+            <Select value={wastageItemId || undefined} onValueChange={setWastageItemId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select item" />
+              </SelectTrigger>
+              <SelectContent>
+                {items.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>
+              Quantity spoiled (
+              {items.find((i) => i.id === wastageItemId)?.purchaseUnit || "unit"})
+            </Label>
+            <Input
+              inputMode="decimal"
+              value={wastageQty}
+              onChange={(e) => setWastageQty(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Reason</Label>
+            <Textarea
+              value={wastageReason}
+              onChange={(e) => setWastageReason(e.target.value)}
+              placeholder="Expired / damaged…"
+            />
+          </div>
+          <Button onClick={() => void saveWastage()}>Record wastage</Button>
+
+          <div className="overflow-x-auto pt-4">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-zinc-400">
+                <tr>
+                  <th className="py-2">When</th>
+                  <th className="py-2">Item</th>
+                  <th className="py-2">Qty</th>
+                  <th className="py-2">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {wastageRows.slice(0, 30).map((r) => (
+                  <tr key={r.id} className="border-t border-zinc-800">
+                    <td className="py-2 text-zinc-400">
+                      {new Date(r.createdAt).toLocaleString("en-PK")}
+                    </td>
+                    <td className="py-2">{r.itemName}</td>
+                    <td className="py-2">{r.quantity}</td>
+                    <td className="py-2 text-zinc-400">{r.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {!loading && tab === "history" ? (
         <div className="overflow-x-auto rounded-xl border border-zinc-800">
-          <table className="w-full min-w-[900px] text-left">
-            <thead className="bg-zinc-950 text-sm uppercase text-zinc-500">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-zinc-900/80 text-zinc-400">
               <tr>
-                <th className="px-4 py-3">Item</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Change</th>
-                <th className="px-4 py-3">Reason</th>
-                <th className="px-4 py-3">When</th>
+                <th className="px-3 py-3">When</th>
+                <th className="px-3 py-3">Item</th>
+                <th className="px-3 py-3">Type</th>
+                <th className="px-3 py-3">Qty</th>
+                <th className="px-3 py-3">Cost</th>
+                <th className="px-3 py-3">Balance</th>
+                <th className="px-3 py-3">Reason</th>
               </tr>
             </thead>
             <tbody>
-              {historyRows.map((row) => (
-                <tr key={row.id} className="border-t border-zinc-800">
-                  <td className="px-4 py-3 font-bold">{row.itemName}</td>
-                  <td className="px-4 py-3">
-                    <Badge tone={txTone(row.type)}>{row.type}</Badge>
+              {historyRows.slice(0, 80).map((r) => (
+                <tr key={r.id} className="border-t border-zinc-800">
+                  <td className="px-3 py-2 text-zinc-400">
+                    {new Date(r.createdAt).toLocaleString("en-PK")}
                   </td>
-                  <td
-                    className={`px-4 py-3 font-bold ${
-                      row.quantity >= 0 ? "text-emerald-400" : "text-red-400"
-                    }`}
-                  >
-                    {row.quantity > 0 ? `+${row.quantity}` : row.quantity}{" "}
-                    {row.unit}
+                  <td className="px-3 py-2">{r.itemName}</td>
+                  <td className="px-3 py-2">
+                    <Badge>{r.type}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-zinc-400">{row.reason || "—"}</td>
-                  <td className="px-4 py-3 text-sm text-zinc-500">
-                    {new Date(row.createdAt).toLocaleString()}
+                  <td className="px-3 py-2">{r.quantity}</td>
+                  <td className="px-3 py-2">
+                    {r.totalCost != null ? formatPrice(r.totalCost) : "—"}
                   </td>
+                  <td className="px-3 py-2">{r.balanceAfter ?? "—"}</td>
+                  <td className="px-3 py-2 text-zinc-400">{r.reason}</td>
                 </tr>
               ))}
-              {!historyRows.length ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-10 text-center text-zinc-500"
-                  >
-                    No stock history found.
-                  </td>
-                </tr>
-              ) : null}
             </tbody>
           </table>
         </div>
       ) : null}
 
-      <Dialog open={openItemDialog} onOpenChange={setOpenItemDialog}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={openAdd} onOpenChange={setOpenAdd}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {editing ? "Edit Inventory Item" : "Add Inventory Item"}
-            </DialogTitle>
+            <DialogTitle>Add inventory item</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
+          <div className="space-y-3">
+            <div className="space-y-2">
               <Label>Name</Label>
               <Input
-                value={itemForm.name}
-                onChange={(e) =>
-                  setItemForm((f) => ({ ...f, name: e.target.value }))
-                }
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                placeholder="Cheese, Flour…"
               />
             </div>
-
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select
-                value={
-                  knownCategories.includes(itemForm.category)
-                    ? itemForm.category
-                    : itemForm.category
-                      ? "__custom__"
-                      : undefined
-                }
-                onValueChange={(v) => {
-                  if (v === "__custom__") {
-                    setItemForm((f) => ({ ...f, category: "" }));
-                    return;
-                  }
-                  setItemForm((f) => ({ ...f, category: v }));
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick or type below" />
-                </SelectTrigger>
-                <SelectContent>
-                  {knownCategories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="__custom__">Custom...</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                className="mt-2"
-                value={itemForm.category}
-                onChange={(e) =>
-                  setItemForm((f) => ({ ...f, category: e.target.value }))
-                }
-                placeholder="e.g. Dairy, Meat, Bakery"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={addKind}
+                  onValueChange={(v) => {
+                    setAddKind(v);
+                    setAddUnit(defaultPurchaseUnit(v));
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UNIT_KINDS.map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {k === "WEIGHT"
+                          ? "Weight"
+                          : k === "VOLUME"
+                            ? "Volume"
+                            : "Count"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Buy unit</Label>
+                <Select value={addUnit} onValueChange={setAddUnit}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(PURCHASE_UNITS_BY_KIND[addKind] || []).map((u) => (
+                      <SelectItem key={u} value={u}>
+                        {u}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-
-            <div className="space-y-2">
-              <Label>Unit Kind</Label>
-              <Select value={itemForm.unitKind} onValueChange={setUnitKind}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNIT_KINDS.map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {k}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-zinc-500">
-                Base unit: {baseUnitForKind(itemForm.unitKind)}
-              </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Opening stock ({addUnit})</Label>
+                <Input
+                  inputMode="decimal"
+                  value={addOpening}
+                  onChange={(e) => setAddOpening(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Min stock ({addUnit})</Label>
+                <Input
+                  inputMode="decimal"
+                  value={addMin}
+                  onChange={(e) => setAddMin(e.target.value)}
+                />
+              </div>
             </div>
-
-            <div className="space-y-2">
-              <Label>Purchase Unit</Label>
-              <Select
-                value={itemForm.purchaseUnit}
-                onValueChange={setPurchaseUnit}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {purchaseUnitOptions.map((u) => (
-                    <SelectItem key={u} value={u}>
-                      {u}
-                    </SelectItem>
-                  ))}
-                  {!purchaseUnitOptions.includes(itemForm.purchaseUnit) &&
-                  itemForm.purchaseUnit ? (
-                    <SelectItem value={itemForm.purchaseUnit}>
-                      {itemForm.purchaseUnit}
-                    </SelectItem>
-                  ) : null}
-                </SelectContent>
-              </Select>
-              <Input
-                className="mt-2"
-                value={itemForm.purchaseUnit}
-                onChange={(e) => setPurchaseUnit(e.target.value)}
-                placeholder="Or type custom unit"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Units Per Purchase</Label>
-              <Input
-                type="number"
-                min={1}
-                value={itemForm.unitsPerPurchase}
-                onChange={(e) =>
-                  setItemForm((f) => ({
-                    ...f,
-                    unitsPerPurchase: Number(e.target.value) || 1,
-                  }))
-                }
-              />
-              <p className="text-xs text-zinc-500">
-                Base units in one {itemForm.purchaseUnit || "purchase unit"}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                {editing
-                  ? `Current Stock (${baseUnitForKind(itemForm.unitKind)})`
-                  : `Opening Stock (${itemForm.purchaseUnit || "purchase units"})`}
-              </Label>
-              <Input
-                type="number"
-                value={itemForm.currentStock}
-                onChange={(e) =>
-                  setItemForm((f) => ({
-                    ...f,
-                    currentStock: Number(e.target.value),
-                  }))
-                }
-              />
-              {!editing ? (
-                <p className="text-xs text-zinc-500">
-                  Saves as{" "}
-                  {Math.round(
-                    Number(itemForm.currentStock || 0) *
-                      (Number(itemForm.unitsPerPurchase || 0) || 1),
-                  )}{" "}
-                  {baseUnitForKind(itemForm.unitKind)}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                Minimum Stock ({baseUnitForKind(itemForm.unitKind)})
-              </Label>
-              <Input
-                type="number"
-                value={itemForm.minimumStock}
-                onChange={(e) =>
-                  setItemForm((f) => ({
-                    ...f,
-                    minimumStock: Number(e.target.value),
-                  }))
-                }
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Purchase Price (per purchase unit)</Label>
-              <Input
-                type="number"
-                value={itemForm.purchasePrice}
-                onChange={(e) =>
-                  setItemForm((f) => ({
-                    ...f,
-                    purchasePrice: Number(e.target.value),
-                  }))
-                }
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Supplier</Label>
-              <Input
-                value={itemForm.supplier}
-                onChange={(e) =>
-                  setItemForm((f) => ({ ...f, supplier: e.target.value }))
-                }
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              variant="secondary"
-              onClick={() => setOpenItemDialog(false)}
-            >
-              Cancel
+            <Button className="w-full" onClick={() => void createItem()}>
+              Save item
             </Button>
-            <Button onClick={saveItem}>{editing ? "Save" : "Create"}</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{detail?.name}</DialogTitle>
+          </DialogHeader>
+          {detail ? (
+            <div className="space-y-3 text-sm">
+              <p>
+                <span className="text-zinc-400">Current stock: </span>
+                {formatStock(
+                  detail.currentStock,
+                  detail.unit,
+                  detail.purchaseUnit,
+                  detail.unitsPerPurchase,
+                )}
+              </p>
+              <p>
+                <span className="text-zinc-400">Stock value: </span>
+                {formatPrice(detail.stockValue)}
+              </p>
+              <p>
+                <span className="text-zinc-400">Last buy price / unit: </span>
+                {formatPrice(detail.purchasePrice)}
+              </p>
+              <p className="text-zinc-500">
+                Edit stock buys and min stock on the main table, then Save all.
+              </p>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => void removeItem(detail)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete item
+              </Button>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

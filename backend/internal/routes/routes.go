@@ -121,6 +121,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			staff.GET("/inventory/transactions", inventoryTxHandler.List)
 			staff.POST("/inventory/wastage", inventoryHandler.Wastage)
 			staff.POST("/inventory/adjust", inventoryHandler.Adjust)
+			staff.POST("/inventory/bulk-save", inventoryHandler.BulkSave)
 			staff.GET("/inventory/:id", inventoryHandler.GetByID)
 			staff.PUT("/inventory/:id", inventoryHandler.Update)
 			staff.DELETE("/inventory/:id", inventoryHandler.Delete)

@@ -112,6 +112,19 @@ func (h *InventoryHandler) Adjust(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "stock adjusted", nil)
 }
 
+func (h *InventoryHandler) BulkSave(c *gin.Context) {
+	var in service.BulkStockInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		utils.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.service.BulkSave(in); err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "inventory saved", nil)
+}
+
 func (h *InventoryHandler) Alerts(c *gin.Context) {
 	data, err := h.service.Alerts()
 	if err != nil {

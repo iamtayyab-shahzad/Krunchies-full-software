@@ -600,6 +600,31 @@ export const inventoryApi = {
       }),
     });
   },
+  /** Save many rows: min stock / unit + optional today buy (stock + weighted avg). Not an expense. */
+  bulkSave: async (
+    items: {
+      inventoryId: string;
+      minimumStock?: number;
+      purchaseUnit?: string;
+      unitsPerPurchase?: number;
+      buyQty?: number;
+      buyCost?: number;
+    }[],
+  ) => {
+    await apiFetch<unknown>("/inventory/bulk-save", {
+      method: "POST",
+      body: JSON.stringify({
+        items: items.map((i) => ({
+          inventory_id: i.inventoryId,
+          minimum_stock: i.minimumStock,
+          purchase_unit: i.purchaseUnit,
+          units_per_purchase: i.unitsPerPurchase,
+          buy_qty: Number(i.buyQty || 0),
+          buy_cost: Number(i.buyCost || 0),
+        })),
+      }),
+    });
+  },
   alerts: () =>
     apiFetch<{
       out_of_stock: BackendInventory[];

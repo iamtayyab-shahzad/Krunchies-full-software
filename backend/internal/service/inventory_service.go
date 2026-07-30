@@ -275,6 +275,110 @@ func (s *InventoryService) AdjustStock(in StockChangeInput) error {
 	})
 }
 
+// BulkStockLine is one row from the simple Inventory "Save all" screen.
+// BuyQty is in purchase units (e.g. 1.5 for 1.5 KG). BuyCost is total Rs paid
+// for that buy. Neither is written to Expenses — stock value / COGS handles it.
+type BulkStockLine struct {
+	InventoryID      uuid.UUID `json:"inventory_id"`
+	MinimumStock     *int64    `json:"minimum_stock"`
+	PurchaseUnit     string    `json:"purchase_unit"`
+	UnitsPerPurchase int64     `json:"units_per_purchase"`
+	BuyQty           float64   `json:"buy_qty"`
+	BuyCost          int       `json:"buy_cost"`
+}
+
+// BulkStockInput saves many inventory rows in one transaction.
+type BulkStockInput struct {
+	Items []BulkStockLine `json:"items"`
+}
+
+// BulkSave applies min-stock / unit tweaks and optional stock buys with
+// weighted-average cost. Buys are NOT posted as expenses.
+func (s *InventoryService) BulkSave(in BulkStockInput) error {
+	if len(in.Items) == 0 {
+		return utils.NewAppError(http.StatusBadRequest, "no inventory rows to save")
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		for _, line := range in.Items {
+			if line.InventoryID == uuid.Nil {
+				return utils.NewAppError(http.StatusBadRequest, "inventory_id is required")
+			}
+			var item domain.Inventory
+			if err := tx.First(&item, "id = ?", line.InventoryID).Error; err != nil {
+				return utils.NewAppError(http.StatusBadRequest, "inventory item not found")
+			}
+
+			updates := map[string]any{}
+			purchaseUnit := strings.TrimSpace(line.PurchaseUnit)
+			if purchaseUnit != "" && purchaseUnit != item.PurchaseUnit {
+				updates["purchase_unit"] = purchaseUnit
+			}
+			unitsPer := line.UnitsPerPurchase
+			if unitsPer <= 0 {
+				if purchaseUnit != "" {
+					unitsPer = domain.DefaultUnitsPerPurchase(purchaseUnit)
+				} else {
+					unitsPer = item.UnitsPerPurchase
+				}
+			}
+			if unitsPer <= 0 {
+				unitsPer = 1
+			}
+			if unitsPer != item.UnitsPerPurchase {
+				updates["units_per_purchase"] = unitsPer
+			}
+			if line.MinimumStock != nil {
+				updates["minimum_stock"] = *line.MinimumStock
+			}
+
+			if line.BuyQty < 0 {
+				return utils.NewAppError(http.StatusBadRequest,
+					"today bought cannot be negative for "+item.Name)
+			}
+			if line.BuyCost < 0 {
+				return utils.NewAppError(http.StatusBadRequest,
+					"today cost cannot be negative for "+item.Name)
+			}
+
+			qtyBase := int64(0)
+			if line.BuyQty > 0 {
+				qtyBase = int64(line.BuyQty*float64(unitsPer) + 0.5)
+				if qtyBase < 1 {
+					return utils.NewAppError(http.StatusBadRequest,
+						"today bought is too small for "+item.Name)
+				}
+				// Last paid price per purchase unit (for next quick entry).
+				if line.BuyQty > 0 {
+					updates["purchase_price"] = int(float64(line.BuyCost)/line.BuyQty + 0.5)
+				}
+			}
+
+			if len(updates) > 0 {
+				if err := tx.Model(&domain.Inventory{}).
+					Where("id = ?", line.InventoryID).
+					Updates(updates).Error; err != nil {
+					return err
+				}
+			}
+
+			if qtyBase > 0 {
+				unitCost := domain.CostMicrosPerBaseUnit(line.BuyCost, qtyBase)
+				if _, err := s.repo.ApplyMovement(tx, repository.Movement{
+					InventoryID:    line.InventoryID,
+					QuantityBase:   qtyBase,
+					Type:           domain.StockPurchase,
+					Reason:         "Stock buy (inventory page)",
+					UnitCostMicros: unitCost,
+					ReferenceType:  domain.RefManual,
+				}); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
 func (s *InventoryService) ListTransactions(
 	inventoryID *uuid.UUID,
 	movementType string,
