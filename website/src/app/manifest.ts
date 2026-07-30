@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
-import { SITE_NAME } from "@/lib/constants";
+import { FAVICON_VERSION, SITE_NAME } from "@/lib/constants";
 
 export default function manifest(): MetadataRoute.Manifest {
+  const v = FAVICON_VERSION;
   return {
     name: SITE_NAME,
     short_name: "Krunchies",
@@ -15,19 +16,31 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: "en-PK",
     icons: [
       {
-        src: "/icons/icon-192.png",
+        src: `/favicon.ico?v=${v}`,
+        sizes: "48x48",
+        type: "image/x-icon",
+        purpose: "any",
+      },
+      {
+        src: `/icon.png?v=${v}`,
+        sizes: "48x48",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: `/icons/icon-192.png?v=${v}`,
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icons/icon-512.png",
+        src: `/icons/icon-512.png?v=${v}`,
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icons/icon-512.png",
+        src: `/icons/icon-512.png?v=${v}`,
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

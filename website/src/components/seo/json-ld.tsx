@@ -22,7 +22,7 @@ function to24h(time: string): string | null {
 export function JsonLd() {
   const opens = to24h(restaurant.openingTime || "11:00 AM") || "11:00";
   const closes = to24h(restaurant.closingTime || "11:00 PM") || "23:00";
-  const logoUrl = `${SITE_URL}/icons/icon-192.png?v=3`;
+  const logoUrl = `${SITE_URL}/icons/icon-192.png?v=4`;
   const phone = restaurant.phone
     ? `+92${restaurant.phone.replace(/^0/, "").replace(/\D/g, "")}`
     : undefined;

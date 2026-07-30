@@ -47,6 +47,7 @@ export const metadata: Metadata = {
     canonical: canonicalUrl("/"),
   },
   icons: {
+    // Google prefers a stable /favicon.ico (≥48px). Also expose PNG icons.
     icon: [
       {
         url: `/favicon.ico?v=${FAVICON_VERSION}`,
@@ -54,13 +55,23 @@ export const metadata: Metadata = {
         type: "image/x-icon",
       },
       {
-        url: `/icons/icon-48.png?v=${FAVICON_VERSION}`,
+        url: `/favicon.png?v=${FAVICON_VERSION}`,
+        sizes: "48x48",
+        type: "image/png",
+      },
+      {
+        url: `/icon.png?v=${FAVICON_VERSION}`,
         sizes: "48x48",
         type: "image/png",
       },
       {
         url: `/icons/icon-32.png?v=${FAVICON_VERSION}`,
         sizes: "32x32",
+        type: "image/png",
+      },
+      {
+        url: `/icons/icon-48.png?v=${FAVICON_VERSION}`,
+        sizes: "48x48",
         type: "image/png",
       },
       {
