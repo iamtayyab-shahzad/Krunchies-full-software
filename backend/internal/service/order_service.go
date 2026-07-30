@@ -69,13 +69,22 @@ func (s *OrderService) CreateOrder(
 		return nil, utils.NewAppError(http.StatusBadRequest, "cart cannot be empty")
 	}
 
+	locationID := input.LocationID
+	if locationID == uuid.Nil && orderType == "walkin" {
+		// Deterministic in-store location seeded by importmenu / POS.
+		locationID = uuid.MustParse("50000000-0000-4000-8000-000000000000")
+	}
+	if locationID == uuid.Nil {
+		return nil, utils.NewAppError(http.StatusBadRequest, "delivery location is required")
+	}
+
 	tx := s.db.Begin()
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
 
 	var location domain.Location
-	if err := tx.First(&location, "id = ?", input.LocationID).Error; err != nil {
+	if err := tx.First(&location, "id = ?", locationID).Error; err != nil {
 		tx.Rollback()
 		if err == gorm.ErrRecordNotFound {
 			return nil, utils.NewAppError(http.StatusBadRequest, "invalid location")
@@ -107,7 +116,7 @@ func (s *OrderService) CreateOrder(
 		CustomerName:      customerName,
 		Phone:             phone,
 		Address:           address,
-		LocationID:        input.LocationID,
+		LocationID:        locationID,
 		DeliveryCharge:    location.DeliveryCharge,
 		CashOnDeliveryFee: codFee,
 		PaymentMethod:     method,

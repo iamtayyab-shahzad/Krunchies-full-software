@@ -29,7 +29,9 @@ type CreateOrderRequest struct {
 	CustomerName  string                   `json:"customer_name" binding:"required,min=2,max=120"`
 	Phone         string                   `json:"phone" binding:"required,min=7,max=20"`
 	Address       string                   `json:"address" binding:"max=500"`
-	LocationID    uuid.UUID                `json:"location_id" binding:"required"`
+	// LocationID is required for delivery orders. Walk-in may omit it; the
+	// service falls back to the seeded "In Store (Walk-in)" location.
+	LocationID uuid.UUID `json:"location_id"`
 	PaymentMethod string                   `json:"payment_method" binding:"required,oneof=cash easypaisa jazzcash card bank cod"`
 	OrderNotes    string                   `json:"order_notes" binding:"max=2000"`
 	ClientOrderID *uuid.UUID               `json:"client_order_id"`

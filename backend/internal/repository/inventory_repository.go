@@ -271,12 +271,15 @@ func (r *InventoryRepository) WastageCostBetween(start, end time.Time) (int, err
 }
 
 // PurchaseCostBetween totals money spent on stock in a window.
+// Uses the inventory ledger (PURCHASE movements) so Inventory-page bulk buys
+// and posted purchase invoices are both counted — the Purchases UI is gone,
+// but older purchase rows still wrote PURCHASE movements when posted.
 func (r *InventoryRepository) PurchaseCostBetween(start, end time.Time) (int, error) {
 	var total int
-	err := r.db.Model(&domain.Purchase{}).
-		Select("COALESCE(SUM(grand_total), 0)").
-		Where("status = ? AND purchase_date >= ? AND purchase_date < ?",
-			domain.PurchaseStatusPosted, start, end).
+	err := r.db.Model(&domain.InventoryTransaction{}).
+		Select("COALESCE(SUM(total_cost), 0)").
+		Where("transaction_type = ? AND created_at >= ? AND created_at < ?",
+			domain.StockPurchase, start, end).
 		Scan(&total).Error
 	return total, err
 }
