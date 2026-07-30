@@ -99,6 +99,20 @@ func (h *InventoryHandler) Wastage(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "wastage recorded", nil)
 }
 
+func (h *InventoryHandler) ProductWastage(c *gin.Context) {
+	var in service.ProductWastageInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		utils.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := h.service.RecordProductWastage(in)
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "product wastage recorded", data)
+}
+
 func (h *InventoryHandler) Adjust(c *gin.Context) {
 	var in service.StockChangeInput
 	if err := c.ShouldBindJSON(&in); err != nil {

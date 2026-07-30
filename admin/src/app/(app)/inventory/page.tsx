@@ -23,8 +23,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatPrice, formatStock } from "@/lib/utils";
-import type { InventoryItem } from "@/lib/mock-data";
-import { inventoryApi, inventoryTransactionsApi } from "@/services/api";
+import type { InventoryItem, Product } from "@/lib/mock-data";
+import { inventoryApi, inventoryTransactionsApi, productsApi } from "@/services/api";
 
 type Tab = "stock" | "wastage" | "history";
 
@@ -138,11 +138,24 @@ export default function InventoryPage() {
 
   const [detail, setDetail] = useState<InventoryItem | null>(null);
 
+  const [wastageMode, setWastageMode] = useState<"ingredient" | "product">(
+    "product",
+  );
   const [wastageItemId, setWastageItemId] = useState("");
   const [wastageQty, setWastageQty] = useState("");
   const [wastageReason, setWastageReason] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [wastageProductId, setWastageProductId] = useState("");
+  const [wastageSizeId, setWastageSizeId] = useState("");
+  const [wastageProductQty, setWastageProductQty] = useState("1");
   const [historyRows, setHistoryRows] = useState<TxRow[]>([]);
   const [wastageRows, setWastageRows] = useState<TxRow[]>([]);
+
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === wastageProductId) || null,
+    [products, wastageProductId],
+  );
+  const productSizes = selectedProduct?.pizzaSizes || [];
 
   const dirtyCount = useMemo(
     () => Object.values(rows).filter((r) => r.dirty).length,
@@ -194,6 +207,8 @@ export default function InventoryPage() {
         setLoading(true);
         await refresh();
         await loadSideTabs();
+        const menu = await productsApi.list().catch(() => [] as Product[]);
+        setProducts(menu.filter((p) => p.available !== false));
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to load inventory");
       } finally {
@@ -334,6 +349,40 @@ export default function InventoryPage() {
       await loadSideTabs();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Wastage failed");
+    }
+  };
+
+  const saveProductWastage = async () => {
+    if (!wastageProductId) {
+      toast.error("Select a menu product (e.g. pizza)");
+      return;
+    }
+    if (productSizes.length > 0 && !wastageSizeId) {
+      toast.error("Select the size that was wasted");
+      return;
+    }
+    const qty = Math.max(1, Math.round(Number(wastageProductQty || 1)));
+    try {
+      const result = await inventoryApi.productWastage({
+        productId: wastageProductId,
+        productSizeId: wastageSizeId || undefined,
+        quantity: qty,
+        reason: wastageReason.trim() || "Product wastage / staff meal",
+      });
+      const summary = (result.lines || [])
+        .map((l) => `${l.inventory_name} (${l.quantity_base}${l.unit})`)
+        .join(", ");
+      toast.success(
+        `Deducted recipe for ${result.quantity}× ${result.product_name}${
+          summary ? `: ${summary}` : ""
+        }`,
+      );
+      setWastageProductQty("1");
+      setWastageReason("");
+      await refresh();
+      await loadSideTabs();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Product wastage failed");
     }
   };
 
@@ -551,41 +600,145 @@ export default function InventoryPage() {
 
       {!loading && tab === "wastage" ? (
         <div className="max-w-xl space-y-4 rounded-xl border border-zinc-800 p-4">
-          <div className="space-y-2">
-            <Label>Item</Label>
-            <Select value={wastageItemId || undefined} onValueChange={setWastageItemId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select item" />
-              </SelectTrigger>
-              <SelectContent>
-                {items.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {i.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setWastageMode("product")}
+              className={`rounded-lg px-3 py-2 text-sm font-bold ${
+                wastageMode === "product"
+                  ? "bg-orange-500 text-black"
+                  : "bg-zinc-900 text-zinc-300"
+              }`}
+            >
+              Finished product (pizza)
+            </button>
+            <button
+              type="button"
+              onClick={() => setWastageMode("ingredient")}
+              className={`rounded-lg px-3 py-2 text-sm font-bold ${
+                wastageMode === "ingredient"
+                  ? "bg-orange-500 text-black"
+                  : "bg-zinc-900 text-zinc-300"
+              }`}
+            >
+              Single ingredient
+            </button>
           </div>
-          <div className="space-y-2">
-            <Label>
-              Quantity spoiled (
-              {items.find((i) => i.id === wastageItemId)?.purchaseUnit || "unit"})
-            </Label>
-            <Input
-              inputMode="decimal"
-              value={wastageQty}
-              onChange={(e) => setWastageQty(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Reason</Label>
-            <Textarea
-              value={wastageReason}
-              onChange={(e) => setWastageReason(e.target.value)}
-              placeholder="Expired / damaged…"
-            />
-          </div>
-          <Button onClick={() => void saveWastage()}>Record wastage</Button>
+
+          {wastageMode === "product" ? (
+            <>
+              <p className="text-sm text-zinc-400">
+                Pick a menu item (e.g. Chicken Tikka pizza). The system deducts
+                every recipe ingredient automatically — no need to enter cheese,
+                dough, etc. one by one. Recipes must be set under Recipes first.
+              </p>
+              <div className="space-y-2">
+                <Label>Product</Label>
+                <Select
+                  value={wastageProductId || undefined}
+                  onValueChange={(id) => {
+                    setWastageProductId(id);
+                    setWastageSizeId("");
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select pizza / item" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {productSizes.length > 0 ? (
+                <div className="space-y-2">
+                  <Label>Size</Label>
+                  <Select
+                    value={wastageSizeId || undefined}
+                    onValueChange={setWastageSizeId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select size" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {productSizes
+                        .filter((s) => Boolean(s.id))
+                        .map((s) => (
+                          <SelectItem key={s.id!} value={s.id!}>
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <Label>How many wasted / staff meals</Label>
+                <Input
+                  inputMode="numeric"
+                  value={wastageProductQty}
+                  onChange={(e) => setWastageProductQty(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reason</Label>
+                <Textarea
+                  value={wastageReason}
+                  onChange={(e) => setWastageReason(e.target.value)}
+                  placeholder="Burnt / staff meal / customer return…"
+                />
+              </div>
+              <Button onClick={() => void saveProductWastage()}>
+                Deduct recipe stock
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>Ingredient</Label>
+                <Select
+                  value={wastageItemId || undefined}
+                  onValueChange={setWastageItemId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select item" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Quantity spoiled (
+                  {items.find((i) => i.id === wastageItemId)?.purchaseUnit ||
+                    "unit"}
+                  )
+                </Label>
+                <Input
+                  inputMode="decimal"
+                  value={wastageQty}
+                  onChange={(e) => setWastageQty(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reason</Label>
+                <Textarea
+                  value={wastageReason}
+                  onChange={(e) => setWastageReason(e.target.value)}
+                  placeholder="Expired / damaged…"
+                />
+              </div>
+              <Button onClick={() => void saveWastage()}>Record wastage</Button>
+            </>
+          )}
 
           <div className="overflow-x-auto pt-4">
             <table className="min-w-full text-left text-sm">

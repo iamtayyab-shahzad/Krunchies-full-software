@@ -120,6 +120,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			staff.GET("/inventory/recommendations", inventoryHandler.Recommendations)
 			staff.GET("/inventory/transactions", inventoryTxHandler.List)
 			staff.POST("/inventory/wastage", inventoryHandler.Wastage)
+			staff.POST("/inventory/wastage/product", inventoryHandler.ProductWastage)
 			staff.POST("/inventory/adjust", inventoryHandler.Adjust)
 			staff.POST("/inventory/bulk-save", inventoryHandler.BulkSave)
 			staff.GET("/inventory/:id", inventoryHandler.GetByID)

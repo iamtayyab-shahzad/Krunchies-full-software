@@ -590,6 +590,32 @@ export const inventoryApi = {
       }),
     });
   },
+  /** Waste a finished menu item; deducts all recipe ingredients automatically. */
+  productWastage: async (payload: {
+    productId: string;
+    productSizeId?: string;
+    quantity: number;
+    reason: string;
+  }) => {
+    return apiFetch<{
+      product_name: string;
+      quantity: number;
+      lines: {
+        inventory_id: string;
+        inventory_name: string;
+        unit: string;
+        quantity_base: number;
+      }[];
+    }>("/inventory/wastage/product", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: payload.productId,
+        product_size_id: payload.productSizeId || undefined,
+        quantity: payload.quantity,
+        reason: payload.reason,
+      }),
+    });
+  },
   adjust: async (inventoryId: string, quantity: number, reason: string) => {
     await apiFetch<unknown>("/inventory/adjust", {
       method: "POST",

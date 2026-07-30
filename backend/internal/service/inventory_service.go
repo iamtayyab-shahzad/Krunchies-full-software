@@ -254,6 +254,115 @@ func (s *InventoryService) RecordWastage(in StockChangeInput) error {
 	})
 }
 
+// ProductWastageInput wastes finished menu items (e.g. one whole pizza / staff meal)
+// and deducts every ingredient from the product recipe automatically.
+type ProductWastageInput struct {
+	ProductID     uuid.UUID  `json:"product_id"`
+	ProductSizeID *uuid.UUID `json:"product_size_id"`
+	// Quantity is how many finished products were wasted (usually 1).
+	Quantity int    `json:"quantity"`
+	Reason   string `json:"reason"`
+}
+
+// ProductWastageLine is one ingredient deducted for the staff UI summary.
+type ProductWastageLine struct {
+	InventoryID   uuid.UUID `json:"inventory_id"`
+	InventoryName string    `json:"inventory_name"`
+	Unit          string    `json:"unit"`
+	QuantityBase  int64     `json:"quantity_base"`
+}
+
+// ProductWastageResult summarizes what was deducted.
+type ProductWastageResult struct {
+	ProductName string               `json:"product_name"`
+	Quantity    int                  `json:"quantity"`
+	Lines       []ProductWastageLine `json:"lines"`
+}
+
+// RecordProductWastage looks up the BOM for a product (+ optional size) and
+// writes WASTAGE movements for each ingredient × finished quantity.
+func (s *InventoryService) RecordProductWastage(in ProductWastageInput) (*ProductWastageResult, error) {
+	if in.ProductID == uuid.Nil {
+		return nil, utils.NewAppError(http.StatusBadRequest, "select a product")
+	}
+	if in.Quantity <= 0 {
+		return nil, utils.NewAppError(http.StatusBadRequest, "quantity must be at least 1")
+	}
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" {
+		reason = "Product wastage / staff meal"
+	}
+
+	var product domain.Product
+	if err := s.db.First(&product, "id = ?", in.ProductID).Error; err != nil {
+		return nil, utils.NewAppError(http.StatusBadRequest, "product not found")
+	}
+
+	sizeID := uuid.Nil
+	if in.ProductSizeID != nil {
+		sizeID = *in.ProductSizeID
+	}
+
+	var result *ProductWastageResult
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		recipes, err := s.repo.RecipeLinesFor(tx, in.ProductID, sizeID)
+		if err != nil {
+			return err
+		}
+		if len(recipes) == 0 {
+			return utils.NewAppError(http.StatusBadRequest,
+				"no recipe for this product — set ingredients under Recipes first")
+		}
+
+		// Aggregate duplicate inventory lines (same ingredient listed twice).
+		need := map[uuid.UUID]int64{}
+		for _, r := range recipes {
+			if r.QuantityRequired <= 0 {
+				continue
+			}
+			need[r.InventoryID] += r.QuantityRequired * int64(in.Quantity)
+		}
+		if len(need) == 0 {
+			return utils.NewAppError(http.StatusBadRequest, "recipe has no usable quantities")
+		}
+
+		lines := make([]ProductWastageLine, 0, len(need))
+		detail := reason + " — " + product.Name
+		for invID, qty := range need {
+			var inv domain.Inventory
+			if err := tx.First(&inv, "id = ?", invID).Error; err != nil {
+				return utils.NewAppError(http.StatusBadRequest, "recipe ingredient missing from inventory")
+			}
+			if _, err := s.repo.ApplyMovement(tx, repository.Movement{
+				InventoryID:   invID,
+				QuantityBase:  -qty,
+				Type:          domain.StockWastage,
+				Reason:        detail,
+				ReferenceType: domain.RefManual,
+			}); err != nil {
+				return err
+			}
+			lines = append(lines, ProductWastageLine{
+				InventoryID:   invID,
+				InventoryName: inv.Name,
+				Unit:          inv.Unit,
+				QuantityBase:  qty,
+			})
+		}
+
+		result = &ProductWastageResult{
+			ProductName: product.Name,
+			Quantity:    in.Quantity,
+			Lines:       lines,
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // AdjustStock applies a signed correction, used for stock-takes.
 func (s *InventoryService) AdjustStock(in StockChangeInput) error {
 	if in.Quantity == 0 {

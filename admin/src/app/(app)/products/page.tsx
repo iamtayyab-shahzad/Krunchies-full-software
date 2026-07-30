@@ -30,6 +30,7 @@ import {
   type Product,
 } from "@/lib/mock-data";
 import { formatPrice } from "@/lib/utils";
+import { prepareProductImage } from "@/lib/image-upload";
 import { categoriesApi, productsApi } from "@/services/api";
 
 const FALLBACK_PRODUCT_IMAGE =
@@ -418,20 +419,33 @@ export default function ProductsPage() {
               />
               <Input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
+                  e.target.value = "";
                   if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    setForm((f) => ({
-                      ...f,
-                      image: String(reader.result || ""),
-                    }));
-                  };
-                  reader.readAsDataURL(file);
+                  void (async () => {
+                    try {
+                      toast.message("Optimizing image…");
+                      const prepared = await prepareProductImage(file);
+                      setForm((f) => ({ ...f, image: prepared.dataUrl }));
+                      toast.success(
+                        `Image ready (~${Math.round(prepared.bytesApprox / 1024)}KB)`,
+                      );
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : "Image upload failed",
+                      );
+                    }
+                  })();
                 }}
               />
+              <p className="text-xs text-zinc-500">
+                Max ~400KB after auto-resize (up to 1200px). Large phone photos
+                are compressed automatically.
+              </p>
             </div>
             <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-3">
               <Label>Available</Label>
