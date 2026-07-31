@@ -66,8 +66,9 @@ type menuFile struct {
 		Image       string `json:"image"`
 		Featured    bool   `json:"featured"`
 		Sizes       []struct {
-			Name  string `json:"name"`
-			Price int    `json:"price"`
+			Name     string `json:"name"`
+			Price    int    `json:"price"`
+			WasPrice int    `json:"wasPrice"`
 		} `json:"sizes"`
 	} `json:"products"`
 }
@@ -154,6 +155,7 @@ func main() {
 				ProductID: productID,
 				Size:      s.Name,
 				Price:     s.Price,
+				WasPrice:  s.WasPrice,
 			})
 		}
 	}
@@ -191,6 +193,10 @@ func main() {
 			price = p.Sizes[0].Price
 		}
 		offerIDs = append(offerIDs, id)
+		saveLabel := p.Name
+		if len(p.Sizes) > 0 && p.Sizes[0].WasPrice > p.Sizes[0].Price {
+			saveLabel = fmt.Sprintf("Save Rs %s", groupThousands(p.Sizes[0].WasPrice-p.Sizes[0].Price))
+		}
 		offers = append(offers, domain.Offer{
 			BaseModel:     domain.BaseModel{ID: uuid.MustParse(id), CreatedAt: now, UpdatedAt: now},
 			Title:         p.Name,
@@ -199,7 +205,7 @@ func main() {
 			Active:        true,
 			OfferPopup:    false,
 			HomepageDeal:  true,
-			DiscountLabel: p.Name,
+			DiscountLabel: saveLabel,
 		})
 	}
 
@@ -213,7 +219,7 @@ func main() {
 		if err := upsert(tx, &products, "category_id", "name", "description", "image", "featured", "available", "display_order", "updated_at"); err != nil {
 			return fmt.Errorf("products: %w", err)
 		}
-		if err := upsert(tx, &sizes, "product_id", "size", "price", "updated_at"); err != nil {
+		if err := upsert(tx, &sizes, "product_id", "size", "price", "was_price", "updated_at"); err != nil {
 			return fmt.Errorf("product sizes: %w", err)
 		}
 		if err := upsert(tx, &offers, "title", "description", "image", "active", "offer_popup", "homepage_deal", "discount_label", "start_date", "end_date", "updated_at"); err != nil {

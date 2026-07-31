@@ -10,12 +10,16 @@ import {
   type ReactNode,
 } from "react";
 import { CART_STORAGE_KEY } from "@/lib/constants";
+import { isDealProduct } from "@/lib/deal-flavors";
+import { weekendDiscount } from "@/lib/weekend-promo";
 import type { CartItem, Product, ProductSize } from "@/types";
 
 interface CartStateValue {
   items: CartItem[];
   itemCount: number;
   subtotal: number;
+  discount: number;
+  payable: number;
 }
 
 interface CartActionsValue {
@@ -123,6 +127,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             price: size.price,
             quantity,
             special_instructions: specialInstructions,
+            is_deal: isDealProduct(product),
+            was_price: size.was_price || undefined,
           },
         ];
       });
@@ -210,8 +216,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       (sum, item) => sum + item.price * item.quantity,
       0,
     );
+    const discount = weekendDiscount(items);
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-    return { items, itemCount, subtotal };
+    return {
+      items,
+      itemCount,
+      subtotal,
+      discount,
+      payable: Math.max(0, subtotal - discount),
+    };
   }, [items]);
 
   const actions = useMemo<CartActionsValue>(

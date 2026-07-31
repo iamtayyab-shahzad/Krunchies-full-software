@@ -17,6 +17,8 @@ export default function CartPage() {
   const {
     items,
     subtotal,
+    discount,
+    payable,
     changeSize,
     updateQuantity,
     updateInstructions,
@@ -169,6 +171,12 @@ export default function CartPage() {
               <span>Subtotal</span>
               <span>{formatPrice(subtotal, currency)}</span>
             </div>
+            {discount > 0 ? (
+              <div className="flex justify-between text-emerald-400">
+                <span>Fri–Sun 10% off</span>
+                <span>-{formatPrice(discount, currency)}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between text-zinc-400">
               <span>Delivery Charges</span>
               <span className="text-zinc-500">Calculated at checkout</span>
@@ -183,7 +191,7 @@ export default function CartPage() {
             <div className="flex justify-between text-base font-semibold text-white">
               <span>Grand Total</span>
               <span className="text-orange-400">
-                {formatPrice(subtotal, currency)}+
+                {formatPrice(payable, currency)}+
               </span>
             </div>
           </div>
@@ -203,7 +211,7 @@ export default function CartPage() {
         <div className="fixed inset-x-0 bottom-0 z-40 space-y-2 border-t border-zinc-800 bg-black/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm lg:hidden">
           <Button asChild className="min-h-12 w-full" size="lg">
             <Link href="/checkout">
-              Checkout · {formatPrice(subtotal, currency)}+
+              Checkout · {formatPrice(payable, currency)}+
             </Link>
           </Button>
           <Button asChild variant="outline" className="min-h-11 w-full">

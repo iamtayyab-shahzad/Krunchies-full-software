@@ -20,7 +20,9 @@ type Order struct {
 	OrderType       string      `gorm:"size:30;not null;default:'website';index" json:"order_type"`
 	OrderNotes      string      `gorm:"type:text" json:"order_notes"`
 	Subtotal        int         `gorm:"not null;default:0" json:"subtotal"`
-	GrandTotal      int         `gorm:"not null;default:0" json:"grand_total"`
+	// Discount is order-level promo (e.g. Fri–Sun 10% on non-deal items).
+	Discount   int `gorm:"not null;default:0" json:"discount"`
+	GrandTotal int `gorm:"not null;default:0" json:"grand_total"`
 	Items           []OrderItem `gorm:"foreignKey:OrderID" json:"items,omitempty"`
 	Payment         *Payment    `gorm:"foreignKey:OrderID" json:"payment,omitempty"`
 }

@@ -377,7 +377,7 @@ export function buildCustomerReceiptHtml(
 
   const delivery = order.delivery_charge || 0;
   const cod = order.cash_on_delivery_fee || 0;
-  const discount = 0;
+  const discount = order.discount || 0;
   const tax = 0;
   const notes = stripTableFromNotes(order.order_notes);
 

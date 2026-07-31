@@ -21,6 +21,7 @@ export interface ProductSize extends BaseEntity {
   product_id: string;
   size: string;
   price: number;
+  was_price?: number;
 }
 
 export interface Product extends BaseEntity {
@@ -47,6 +48,7 @@ export interface Offer extends BaseEntity {
   active: boolean;
   start_date?: string | null;
   end_date?: string | null;
+  discount_label?: string;
 }
 
 export interface InventoryItem extends BaseEntity {
@@ -115,6 +117,7 @@ export interface Order extends BaseEntity {
   order_type: string;
   order_notes: string;
   subtotal: number;
+  discount?: number;
   grand_total: number;
   items?: OrderItem[];
   sync_status?: "local" | "pending_sync" | "synced";
@@ -186,6 +189,9 @@ export interface BillLine {
   crust?: string;
   toppings?: string;
   extras?: string;
+  /** Flyer/combo deal — excluded from Fri–Sun 10% promo. */
+  is_deal?: boolean;
+  was_price?: number;
 }
 
 export interface ProductSizeInput {

@@ -24,6 +24,8 @@ import {
   POS_SYNC_COMPLETE_EVENT,
 } from "@/lib/sync-engine";
 import { calcCodFee, calcGrandTotal } from "@/lib/utils";
+import { weekendDiscount } from "@/lib/weekend-promo";
+import { isDealProduct } from "@/lib/deal-flavors";
 import {
   catalogRepo,
   customersRepo,
@@ -546,6 +548,14 @@ async function buildLocalOrder(
     }),
   );
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const discount = weekendDiscount(
+    items.map((i) => ({
+      product_name: i.product_name || i.product?.name,
+      price: i.price,
+      quantity: i.quantity,
+      is_deal: i.product ? isDealProduct(i.product) : undefined,
+    })),
+  );
   const locations =
     (await cacheGet<Location[]>("locations")) ||
     (await locationsRepo.list().catch(() => []));
@@ -561,6 +571,7 @@ async function buildLocalOrder(
     subtotal,
     delivery_charge,
     cash_on_delivery_fee,
+    discount,
   );
   return {
     id,
@@ -579,6 +590,7 @@ async function buildLocalOrder(
     order_type: orderType,
     order_notes: input.order_notes || "",
     subtotal,
+    discount,
     grand_total,
     items,
     sync_status: "pending_sync",

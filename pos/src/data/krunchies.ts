@@ -48,14 +48,21 @@ export const krunchiesProducts: Product[] = catalog.products.map(
       featured: product.featured,
       available: true,
       display_order: index + 1,
-      sizes: product.sizes.map((size, sizeIndex) => ({
-        id: sizeId(product.id, sizeIndex),
-        created_at: now,
-        updated_at: now,
-        product_id: product.id,
-        size: size.name,
-        price: size.price,
-      })),
+      sizes: product.sizes.map((size, sizeIndex) => {
+        const wasPrice =
+          "wasPrice" in size && typeof size.wasPrice === "number"
+            ? size.wasPrice
+            : 0;
+        return {
+          id: sizeId(product.id, sizeIndex),
+          created_at: now,
+          updated_at: now,
+          product_id: product.id,
+          size: size.name,
+          price: size.price,
+          was_price: wasPrice > 0 ? wasPrice : undefined,
+        };
+      }),
     };
   },
 );
@@ -74,15 +81,33 @@ export const krunchiesOffers: Offer[] = [
   })),
   ...catalog.products
     .filter((product) => product.category === "deals")
-    .map((deal, index) => ({
-      id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-      created_at: now,
-      updated_at: now,
-      title: deal.name,
-      description: `${deal.description} — ${catalog.restaurant.currency} ${deal.sizes[0].price.toLocaleString("en-PK")}`,
-      image: deal.image,
-      active: true,
-    })),
+    .map((deal, index) => {
+      const price = deal.sizes[0]?.price ?? 0;
+      const wasPrice =
+        deal.sizes[0] &&
+        "wasPrice" in deal.sizes[0] &&
+        typeof deal.sizes[0].wasPrice === "number"
+          ? deal.sizes[0].wasPrice
+          : 0;
+      const save = wasPrice > price ? wasPrice - price : 0;
+      const saveNote =
+        save > 0
+          ? ` Save ${catalog.restaurant.currency} ${save.toLocaleString("en-PK")}.`
+          : "";
+      return {
+        id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+        created_at: now,
+        updated_at: now,
+        title: deal.name,
+        description: `${deal.description} — ${catalog.restaurant.currency} ${price.toLocaleString("en-PK")}.${saveNote}`,
+        image: deal.image,
+        active: true,
+        discount_label:
+          save > 0
+            ? `Save Rs ${save.toLocaleString("en-PK")}`
+            : deal.name,
+      };
+    }),
 ];
 
 export const krunchiesSettings: Settings = {

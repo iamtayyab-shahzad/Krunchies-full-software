@@ -15,12 +15,12 @@
   "promotions": [
     {
       "id": "70000000-0000-4000-8000-000000000001",
-      "title": "Friday & Sunday 10% Off",
-      "description": "10% discount on purchases over Rs 1,000. Valid Fridays and Sundays from 1 July 2026 to 31 August 2026.",
-      "image": "/products/deals/birthday.webp",
+      "title": "Friday to Sunday 10% Off",
+      "description": "10% discount on non-deal items when your eligible total is over Rs 1,000. Valid Friday, Saturday and Sunday. Flyer deals already have special pricing and are excluded.",
+      "image": "/products/deals/deal-1.webp",
       "active": true,
       "startDate": "2026-07-01",
-      "endDate": "2026-08-31"
+      "endDate": "2026-12-31"
     }
   ],
   "notes": [
@@ -1339,98 +1339,120 @@
     {
       "id": "20000000-0000-4000-8000-000000000073",
       "category": "deals",
-      "name": "Birthday Deal",
-      "description": "1 XL Pizza Special, 2 Pizza Burger, 1 Pasta, 10 Wings and 1 Pound Cake.",
-      "image": "/products/deals/birthday.webp",
+      "name": "Mega Deal — Large Combo",
+      "description": "1 Large Pizza, 2 Zinger Burgers and 1 Liter Soft Drink. Perfect Combo Great Taste Best Value!",
+      "image": "/products/deals/deal-2.webp",
       "featured": true,
       "sizes": [
         {
           "name": "Deal",
-          "price": 5500
+          "price": 2000,
+          "wasPrice": 2280
         }
       ]
     },
     {
       "id": "20000000-0000-4000-8000-000000000074",
       "category": "deals",
-      "name": "Deal 1 — Family Deal",
-      "description": "1 Zinger Burger, 5 Hot Wings and 1 Regular Drink.",
-      "image": "/products/deals/deal-1.webp",
+      "name": "Mega Deal — XL Feast",
+      "description": "1 XL Pizza, 2 Zinger Burgers, 1 Soft Drink 2 Liter, 2 Tikka Rolls and 1 Masala Fries. Home Delivery Free!",
+      "image": "/products/deals/deal-5.webp",
       "featured": true,
       "sizes": [
         {
           "name": "Deal",
-          "price": 699
+          "price": 3500,
+          "wasPrice": 3820
         }
       ]
     },
     {
       "id": "20000000-0000-4000-8000-000000000075",
       "category": "deals",
-      "name": "Deal 2",
-      "description": "1 Large Pizza, 1 Half L Drink and 1 Regular Fries.",
-      "image": "/products/deals/deal-2.webp",
+      "name": "Value Deal — Small Combo",
+      "description": "1 Small Pizza, 1 Zinger Burger and 1 Regular Drink. Perfect Combo Great Taste Best Value!",
+      "image": "/products/deals/deal-1.webp",
       "featured": true,
       "sizes": [
         {
           "name": "Deal",
-          "price": 1590
+          "price": 899,
+          "wasPrice": 999
         }
       ]
     },
     {
       "id": "20000000-0000-4000-8000-000000000076",
       "category": "deals",
-      "name": "Deal 3",
-      "description": "1 Large Pizza, 2 Zinger Burger, 1 Masala Fries and 1.5 L Drink.",
-      "image": "/products/deals/deal-3.webp",
+      "name": "Mega Combo Deal",
+      "description": "2 XL Pizzas, 5 Zinger Burgers, 4 Tikka Rolls, 2 Soft Drinks 2 Liter, 1 Masala Fries, 1 Loaded Fries, 2 Hot Wings and 1 Big Coffee. Home Delivery Free!",
+      "image": "/products/deals/birthday.webp",
       "featured": true,
       "sizes": [
         {
           "name": "Deal",
-          "price": 2650
+          "price": 7520,
+          "wasPrice": 8520
         }
       ]
     },
     {
       "id": "20000000-0000-4000-8000-000000000077",
       "category": "deals",
-      "name": "Deal 4",
-      "description": "2 Medium Pizza, 1 Zinger Burger, 6 Pc. Hot Wings and 1.5 L Drink.",
-      "image": "/products/deals/deal-4.webp",
+      "name": "Super Deal — Wings Combo",
+      "description": "1 Zinger Burger, 5 Pieces Hot Wings and 1 Regular Drink. Mazay Ka Perfect Combo!",
+      "image": "/products/deals/deal-1.webp",
       "featured": true,
       "sizes": [
         {
           "name": "Deal",
-          "price": 2999
+          "price": 699,
+          "wasPrice": 0
         }
       ]
     },
     {
       "id": "20000000-0000-4000-8000-000000000078",
       "category": "deals",
-      "name": "Deal 5",
-      "description": "1 XL Pizza, 1 Grill Burger, 1 Creamy Pasta and 1.5 L Drink.",
-      "image": "/products/deals/deal-5.webp",
+      "name": "Deal Offer — Dual Medium",
+      "description": "2 Medium Pizzas, 2 Zinger Burgers, 1 Masala Fries, 1 Tikka Roll and 1 Soft Drink 1.5 Liter.",
+      "image": "/products/deals/deal-4.webp",
       "featured": true,
       "sizes": [
         {
           "name": "Deal",
-          "price": 3200
+          "price": 3170,
+          "wasPrice": 3470
         }
       ]
     },
     {
       "id": "20000000-0000-4000-8000-000000000079",
       "category": "deals",
-      "name": "Deal 6",
-      "description": "4 Zinger Burgers, 2 Large Pizzas, 2 Shawarmas, 2 Dip Sauce and 2 Drinks 1.5 L.",
+      "name": "Deal Offer — Large Loaded",
+      "description": "1 Large Pizza, 2 Zinger Burgers, 1 Loaded Fries and 1 Soft Drink 1.5 Liter.",
+      "image": "/products/deals/deal-3.webp",
+      "featured": true,
+      "sizes": [
+        {
+          "name": "Deal",
+          "price": 2500,
+          "wasPrice": 2750
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000080",
+      "category": "deals",
+      "name": "Super Deal — Double Combo",
+      "description": "4 Zinger Burgers, 2 Large Pizzas, 2 Tikka Rolls, 2 Dip Sauces and 1 Soft Drink 1.5 Liter. Mazay Ka Double Combo!",
       "image": "/products/burgers/mighty-zinger.webp",
       "featured": true,
       "sizes": [
         {
           "name": "Deal",
-          "price": 5150
+          "price": 4750,
+          "wasPrice": 5200
         }
       ]
     }

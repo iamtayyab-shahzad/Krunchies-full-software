@@ -68,12 +68,19 @@ export const products: Product[] = catalog.products.map((product, index) => {
     available: true,
     display_order: index + 1,
     popular: product.featured,
-    sizes: product.sizes.map((size, sizeIndex) => ({
-      id: sizeId(product.id, sizeIndex),
-      product_id: product.id,
-      size: size.name,
-      price: size.price,
-    })),
+    sizes: product.sizes.map((size, sizeIndex) => {
+      const wasPrice =
+        "wasPrice" in size && typeof size.wasPrice === "number"
+          ? size.wasPrice
+          : 0;
+      return {
+        id: sizeId(product.id, sizeIndex),
+        product_id: product.id,
+        size: size.name,
+        price: size.price,
+        was_price: wasPrice > 0 ? wasPrice : undefined,
+      };
+    }),
   };
 });
 
@@ -89,13 +96,28 @@ export const offers: Offer[] = [
   })),
   ...catalog.products
     .filter((product) => product.category === "deals")
-    .map((deal, index) => ({
-      id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-      title: `${deal.name} — ${catalog.restaurant.currency} ${deal.sizes[0].price.toLocaleString("en-PK")}`,
-      description: deal.description,
-      image: deal.image,
-      active: true,
-    })),
+    .map((deal, index) => {
+      const price = deal.sizes[0]?.price ?? 0;
+      const wasPrice =
+        deal.sizes[0] &&
+        "wasPrice" in deal.sizes[0] &&
+        typeof deal.sizes[0].wasPrice === "number"
+          ? deal.sizes[0].wasPrice
+          : 0;
+      const save = wasPrice > price ? wasPrice - price : 0;
+      const priceLabel = `${catalog.restaurant.currency} ${price.toLocaleString("en-PK")}`;
+      const title =
+        save > 0
+          ? `${deal.name} — ${priceLabel} (Save ${catalog.restaurant.currency} ${save.toLocaleString("en-PK")})`
+          : `${deal.name} — ${priceLabel}`;
+      return {
+        id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+        title,
+        description: deal.description,
+        image: deal.image,
+        active: true,
+      };
+    }),
 ];
 
 // The printed menu confirms delivery but does not publish a street address.

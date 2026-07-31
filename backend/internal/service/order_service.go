@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"backend/internal/domain"
 	"backend/internal/dto"
@@ -126,6 +127,7 @@ func (s *OrderService) CreateOrder(
 	}
 
 	subtotal := 0
+	eligibleSubtotal := 0
 	order.Items = make([]domain.OrderItem, 0, len(input.Items))
 
 	sizeIDs := make([]uuid.UUID, 0, len(input.Items))
@@ -162,6 +164,9 @@ func (s *OrderService) CreateOrder(
 
 		lineTotal := size.Price * item.Quantity
 		subtotal += lineTotal
+		if !isDealProduct(product) {
+			eligibleSubtotal += lineTotal
+		}
 		order.Items = append(order.Items, domain.OrderItem{
 			ProductID:           item.ProductID,
 			ProductSizeID:       item.ProductSizeID,
@@ -171,8 +176,10 @@ func (s *OrderService) CreateOrder(
 		})
 	}
 
+	discount := WeekendDiscount(time.Now(), eligibleSubtotal)
 	order.Subtotal = subtotal
-	order.GrandTotal = subtotal + location.DeliveryCharge + codFee
+	order.Discount = discount
+	order.GrandTotal = subtotal - discount + location.DeliveryCharge + codFee
 
 	if err := s.orderRepo.Create(tx, order); err != nil {
 		tx.Rollback()
@@ -295,6 +302,7 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 			return utils.NewAppError(http.StatusBadRequest, "cart cannot be empty")
 		}
 		subtotal := 0
+		eligibleSubtotal := 0
 		newItems := make([]domain.OrderItem, 0, len(*input.Items))
 		sizeIDs := make([]uuid.UUID, 0, len(*input.Items))
 		productIDs := make([]uuid.UUID, 0, len(*input.Items))
@@ -328,6 +336,9 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 			}
 			lineTotal := size.Price * item.Quantity
 			subtotal += lineTotal
+			if !isDealProduct(product) {
+				eligibleSubtotal += lineTotal
+			}
 			newItems = append(newItems, domain.OrderItem{
 				ProductID:           item.ProductID,
 				ProductSizeID:       item.ProductSizeID,
@@ -336,14 +347,17 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 				SpecialInstructions: strings.TrimSpace(item.SpecialInstructions),
 			})
 		}
+		discount := WeekendDiscount(time.Now(), eligibleSubtotal)
 		updates["subtotal"] = subtotal
-		updates["grand_total"] = subtotal + location.DeliveryCharge + codFee
+		updates["discount"] = discount
+		updates["grand_total"] = subtotal - discount + location.DeliveryCharge + codFee
 		if err := s.orderRepo.ReplaceItems(tx, id, newItems); err != nil {
 			tx.Rollback()
 			return err
 		}
 	} else {
-		updates["grand_total"] = current.Subtotal + location.DeliveryCharge + codFee
+		discount := current.Discount
+		updates["grand_total"] = current.Subtotal - discount + location.DeliveryCharge + codFee
 	}
 
 	if err := s.orderRepo.Update(tx, id, updates); err != nil {

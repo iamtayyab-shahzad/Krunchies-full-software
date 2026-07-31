@@ -105,7 +105,12 @@ export default function NewOrderPage() {
     bill.paymentMethod,
     settings?.cash_on_delivery_fee || 0,
   );
-  const grandTotal = calcGrandTotal(bill.subtotal, deliveryCharge, codFee);
+  const grandTotal = calcGrandTotal(
+    bill.subtotal,
+    deliveryCharge,
+    codFee,
+    bill.discount,
+  );
 
   const productsWithCategories = useMemo(() => {
     const byId = Object.fromEntries(categories.map((c) => [c.id, c]));
@@ -369,12 +374,14 @@ export default function NewOrderPage() {
       payment_method: payload.payment_method,
       order_notes: payload.order_notes,
       subtotal: bill.subtotal,
+      discount: bill.discount,
       delivery_charge: delivery,
       cash_on_delivery_fee: cached?.cash_on_delivery_fee ?? codFee,
       grand_total: calcGrandTotal(
         bill.subtotal,
         delivery,
         cached?.cash_on_delivery_fee ?? codFee,
+        bill.discount,
       ),
       created_at: cached?.created_at || now,
       updated_at: now,
@@ -804,6 +811,12 @@ export default function NewOrderPage() {
               <span>Subtotal</span>
               <span>{formatPrice(bill.subtotal, currency)}</span>
             </div>
+            {bill.discount > 0 ? (
+              <div className="flex justify-between text-emerald-400">
+                <span>Fri–Sun 10% off</span>
+                <span>-{formatPrice(bill.discount, currency)}</span>
+              </div>
+            ) : null}
             {!isWalkin && (
               <div className="flex justify-between text-zinc-400">
                 <span>Delivery</span>

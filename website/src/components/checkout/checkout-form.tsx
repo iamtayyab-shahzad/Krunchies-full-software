@@ -48,7 +48,7 @@ interface CheckoutFormProps {
 
 export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
   const router = useRouter();
-  const { items, subtotal, clearCart } = useCart();
+  const { items, subtotal, discount, payable, clearCart } = useCart();
   const { customer, isAuthenticated } = useAuth();
   const [locations, setLocations] = useState<Location[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -103,7 +103,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
 
   const codFee =
     paymentMethod === "cod" ? (settings?.cash_on_delivery_fee ?? 0) : 0;
-  const grandTotal = subtotal + deliveryCharge + codFee;
+  const grandTotal = payable + deliveryCharge + codFee;
   const currency = settings?.currency ?? "Rs";
 
   if (items.length === 0) {
@@ -322,6 +322,12 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
               <span>Subtotal</span>
               <span>{formatPrice(subtotal, currency)}</span>
             </div>
+            {discount > 0 ? (
+              <div className="flex justify-between text-emerald-400">
+                <span>Fri–Sun 10% off</span>
+                <span>-{formatPrice(discount, currency)}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between text-zinc-400">
               <span>Delivery</span>
               <span>

@@ -29,6 +29,12 @@ function ProductCardInner({ product, currency = "Rs" }: ProductCardProps) {
   const { addItem } = useCartActions();
   const [open, setOpen] = useState(false);
   const startingPrice = Math.min(...product.sizes.map((s) => s.price));
+  const wasPrice = Math.max(
+    0,
+    ...product.sizes.map((s) => Number(s.was_price || 0)),
+  );
+  const saveAmount =
+    wasPrice > startingPrice ? wasPrice - startingPrice : 0;
 
   const requiresFlavorChoice =
     isDealProduct(product) &&
@@ -74,6 +80,11 @@ function ProductCardInner({ product, currency = "Rs" }: ProductCardProps) {
                 Featured
               </Badge>
             )}
+            {saveAmount > 0 ? (
+              <Badge className="absolute right-1 top-1 scale-90 bg-emerald-600 text-white sm:right-3 sm:top-3 sm:scale-100">
+                Save {formatPrice(saveAmount, currency)}
+              </Badge>
+            ) : null}
           </button>
 
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 sm:space-y-3 sm:p-4">
@@ -86,9 +97,17 @@ function ProductCardInner({ product, currency = "Rs" }: ProductCardProps) {
               </p>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-orange-400">
-                From {formatPrice(startingPrice, currency)}
-              </p>
+              <div>
+                <p className="text-sm font-semibold text-orange-400">
+                  {saveAmount > 0 ? "" : "From "}
+                  {formatPrice(startingPrice, currency)}
+                </p>
+                {saveAmount > 0 ? (
+                  <p className="text-xs text-zinc-500 line-through">
+                    Was {formatPrice(wasPrice, currency)}
+                  </p>
+                ) : null}
+              </div>
               <div className="flex gap-2">
                 <Button
                   asChild

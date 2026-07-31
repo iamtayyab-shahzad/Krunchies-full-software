@@ -15,7 +15,7 @@ const HIDDEN_PREFIXES = ["/cart", "/checkout", "/order-success", "/login", "/reg
  */
 export function MobileCartBar() {
   const pathname = usePathname();
-  const { itemCount, subtotal } = useCart();
+  const { itemCount, payable } = useCart();
   const { settings } = useSettings();
   const currency = settings?.currency ?? "Rs";
 
@@ -36,7 +36,7 @@ export function MobileCartBar() {
             {itemCount} {itemCount === 1 ? "item" : "items"}
           </span>
           <span className="font-bold">
-            {formatPrice(subtotal, currency)} · View cart
+            {formatPrice(payable, currency)} · View cart
           </span>
         </Link>
       </div>

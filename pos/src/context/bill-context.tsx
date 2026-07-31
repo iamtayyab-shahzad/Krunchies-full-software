@@ -23,6 +23,8 @@ import {
   makeLineKey,
   WALKIN_LOCATION_ID,
 } from "@/lib/utils";
+import { isDealProduct } from "@/lib/deal-flavors";
+import { weekendDiscount } from "@/lib/weekend-promo";
 import { deleteDraft, getDraft, saveDraft } from "@/lib/offline-db";
 
 const ACTIVE_DRAFT_ID = "active-cart";
@@ -68,6 +70,7 @@ interface BillContextValue extends BillState {
   loadDraft: (partial: Partial<BillState> & { items: BillLine[] }) => void;
   clearBill: () => void;
   subtotal: number;
+  discount: number;
   cartRecovered: boolean;
 }
 
@@ -226,6 +229,8 @@ export function BillProvider({ children }: { children: ReactNode }) {
               price: size.price,
               quantity: 1,
               special_instructions: instructions,
+              is_deal: isDealProduct(product),
+              was_price: size.was_price || undefined,
             },
           ],
         };
@@ -239,10 +244,12 @@ export function BillProvider({ children }: { children: ReactNode }) {
       (s, i) => s + i.price * i.quantity,
       0,
     );
+    const discount = weekendDiscount(state.items);
     return {
       ...state,
       cartRecovered,
       subtotal,
+      discount,
       setOrderType: (orderType) =>
         setState((p) => {
           if (orderType === "walkin") {

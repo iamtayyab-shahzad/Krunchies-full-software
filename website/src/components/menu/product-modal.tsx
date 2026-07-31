@@ -143,7 +143,10 @@ export function ProductModal({
           <div>
             <Label className="mb-2 block">Size</Label>
             <div className="flex flex-wrap gap-2">
-              {product.sizes.map((size) => (
+              {product.sizes.map((size) => {
+                const was = Number(size.was_price || 0);
+                const save = was > size.price ? was - size.price : 0;
+                return (
                 <button
                   key={size.id}
                   type="button"
@@ -156,8 +159,14 @@ export function ProductModal({
                   )}
                 >
                   {size.size} · {formatPrice(size.price)}
+                  {save > 0 ? (
+                    <span className="ml-1 text-xs text-emerald-400">
+                      (Save {formatPrice(save)})
+                    </span>
+                  ) : null}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
 

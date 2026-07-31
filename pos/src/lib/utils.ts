@@ -74,8 +74,9 @@ export function calcGrandTotal(
   subtotal: number,
   deliveryCharge: number,
   codFee: number,
+  discount = 0,
 ) {
-  return subtotal + deliveryCharge + codFee;
+  return Math.max(0, subtotal - discount) + deliveryCharge + codFee;
 }
 
 export function makeLineKey(

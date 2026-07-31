@@ -3,6 +3,7 @@ export interface ProductSize {
   product_id: string;
   size: string;
   price: number;
+  was_price?: number;
 }
 
 export interface Category {
@@ -71,6 +72,9 @@ export interface CartItem {
   price: number;
   quantity: number;
   special_instructions?: string;
+  /** Flyer/combo deal — excluded from Fri–Sun 10% promo. */
+  is_deal?: boolean;
+  was_price?: number;
 }
 
 export interface Customer {
@@ -124,6 +128,7 @@ export interface Order {
   order_type: string;
   order_notes?: string;
   subtotal: number;
+  discount?: number;
   grand_total: number;
   items: OrderItem[];
   created_at: string;

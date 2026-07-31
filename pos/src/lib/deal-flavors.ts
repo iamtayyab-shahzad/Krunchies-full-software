@@ -19,13 +19,16 @@ const SIZE_ALIASES: Record<string, PizzaSizeCode> = {
   l: "L",
   xl: "XL",
   "extra large": "XL",
+  "x large": "XL",
+  xlarge: "XL",
+  "x-large": "XL",
 };
 
 /** Parse deal description into pizza flavor slots matching size + regular/special. */
 export function parseDealPizzaSlots(description: string): DealPizzaSlot[] {
   const slots: DealPizzaSlot[] = [];
   const re =
-    /(\d+)\s*(small|medium|large|xl|extra\s*large|s|m|l)\s+pizzas?(?:\s+(special))?/gi;
+    /(\d+)\s*(small|medium|large|x\s*large|xl|extra\s*large|s|m|l)\s+pizzas?(?:\s+(special))?/gi;
   let match: RegExpExecArray | null;
   while ((match = re.exec(description)) !== null) {
     const count = Math.min(8, Math.max(1, Number(match[1]) || 1));
@@ -49,7 +52,8 @@ export function parseDealPizzaSlots(description: string): DealPizzaSlot[] {
 export function isDealProduct(product: Product) {
   const name = (product.category?.name || "").toLowerCase();
   if (name.includes("deal")) return true;
-  return (product.name || "").toLowerCase().includes("deal");
+  const productName = (product.name || "").toLowerCase();
+  return productName.includes("deal") || productName.includes("mega combo");
 }
 
 export function requiresDealFlavorChoice(product: Product) {
