@@ -17,17 +17,27 @@ func NewAnalyticsService(db *gorm.DB) *AnalyticsService {
 	return &AnalyticsService{repo: repository.NewAnalyticsRepository(db)}
 }
 
+// businessDayRange returns [start, end) for the calendar day in Asia/Karachi
+// (midnight 12:00 AM → next midnight), not restaurant opening hours.
+func businessDayRange(now time.Time) (time.Time, time.Time) {
+	loc := karachiLoc
+	if loc == nil {
+		loc = time.FixedZone("PKT", 5*3600)
+	}
+	local := now.In(loc)
+	start := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
+	return start, start.Add(24 * time.Hour)
+}
+
 func (s *AnalyticsService) TodaySales() (int, error) {
-	now := time.Now()
-	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	end := start.Add(24 * time.Hour)
+	start, end := businessDayRange(time.Now())
 	return s.repo.SalesBetween(start, end)
 }
 
 func (s *AnalyticsService) YesterdaySales() (int, error) {
-	now := time.Now()
-	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Add(-24 * time.Hour)
-	end := start.Add(24 * time.Hour)
+	start, end := businessDayRange(time.Now())
+	start = start.Add(-24 * time.Hour)
+	end = end.Add(-24 * time.Hour)
 	return s.repo.SalesBetween(start, end)
 }
 

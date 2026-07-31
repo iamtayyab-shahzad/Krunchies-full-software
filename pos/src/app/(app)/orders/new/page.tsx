@@ -33,7 +33,7 @@ import {
   paymentsForOrderType,
   WALKIN_LOCATION_ID,
 } from "@/lib/utils";
-import { printCustomerReceipt, printKitchenReceipt, encodeKitchenInstructions } from "@/lib/receipt";
+import { confirmAndPrintCustomerReceipt, printCustomerReceipt, printKitchenReceipt, encodeKitchenInstructions } from "@/lib/receipt";
 import { deleteDraft } from "@/lib/offline-db";
 import {
   categoriesApi,
@@ -331,7 +331,7 @@ export default function NewOrderPage() {
     return true;
   };
 
-  const placeOrder = (status: "COMPLETED" | "PENDING") => {
+  const placeOrder = async (status: "COMPLETED" | "PENDING") => {
     if (!validate() || busy) return;
 
     setBusy(true);
@@ -394,13 +394,26 @@ export default function NewOrderPage() {
     localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
 
     if (status === "COMPLETED") {
-      const printed = printCustomerReceipt(printable, settings || null);
+      const result = await confirmAndPrintCustomerReceipt(
+        printable,
+        settings || null,
+      );
+      if (result === "cancelled") {
+        toast.message("Print cancelled — order not completed (cart kept)");
+        setBusy(false);
+        return;
+      }
+      if (result === "blocked") {
+        toast.error(
+          "Allow popups to print the receipt, then press Complete again",
+        );
+        setBusy(false);
+        return;
+      }
       toast.success(
-        !printed
-          ? "Order completed — allow popups to print customer receipt"
-          : editingOrderId
-            ? "Order updated & completed"
-            : "Order completed & customer receipt printed",
+        editingOrderId
+          ? "Order updated & completed"
+          : "Order completed & customer receipt printed",
       );
     } else {
       const printed = printKitchenReceipt(printable);

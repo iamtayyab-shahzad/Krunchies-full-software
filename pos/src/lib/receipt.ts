@@ -348,6 +348,7 @@ export function buildCustomerReceiptHtml(
   order: Order,
   settings: Settings | null,
   reprint = false,
+  interactive = false,
 ) {
   const currency = settings?.currency || "Rs";
   const when = new Date(order.created_at || Date.now());
@@ -507,12 +508,132 @@ export function buildCustomerReceiptHtml(
   </div>
   ${notes ? `<p class="notes">Notes: ${escapeHtml(notes)}</p>` : ""}
   <p class="center">Thank you!</p>
-  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 400); };</script>
+  ${
+    interactive
+      ? `<div class="actions no-print">
+  <button type="button" id="btn-print">Print</button>
+  <button type="button" id="btn-cancel">Cancel</button>
+</div>
+<style>
+  .actions {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    gap: 8px;
+    padding: 10px 0 4px;
+    margin-top: 12px;
+    background: #fff;
+    border-top: 2px solid #000;
+  }
+  .actions button {
+    flex: 1;
+    min-height: 44px;
+    font-size: 16px;
+    font-weight: 800;
+    border: 2px solid #000;
+    cursor: pointer;
+  }
+  #btn-print { background: #f97316; color: #000; }
+  #btn-cancel { background: #fff; color: #000; }
+  @media print { .no-print { display: none !important; } }
+</style>
+<script>
+(function () {
+  var finished = false;
+  function done(result) {
+    if (finished) return;
+    finished = true;
+    try {
+      if (window.opener) {
+        window.opener.postMessage(
+          { source: "krunchies-receipt", result: result },
+          "*",
+        );
+      }
+    } catch (e) {}
+    try { window.close(); } catch (e) {}
+  }
+  document.getElementById("btn-print").onclick = function () {
+    try { window.print(); } catch (e) {}
+    done("printed");
+  };
+  document.getElementById("btn-cancel").onclick = function () {
+    done("cancelled");
+  };
+  window.addEventListener("beforeunload", function () {
+    if (!finished) done("cancelled");
+  });
+})();
+</script>`
+      : `<script>window.onload = () => { window.print(); setTimeout(() => window.close(), 400); };</script>`
+  }
 </body>
 </html>`;
 }
 
-/** Final customer receipt (prices + totals). Works fully offline. */
+export type ReceiptConfirmResult = "printed" | "cancelled" | "blocked";
+
+/**
+ * Opens a visible receipt window with Print / Cancel.
+ * Completing an order should only proceed when result === "printed".
+ */
+export function confirmAndPrintCustomerReceipt(
+  order: Order,
+  settings: Settings | null,
+  reprint = false,
+): Promise<ReceiptConfirmResult> {
+  if (typeof window === "undefined") {
+    return Promise.resolve("blocked");
+  }
+
+  const html = buildCustomerReceiptHtml(
+    ensureReceiptItemNames(order),
+    settings,
+    reprint,
+    true,
+  );
+
+  return new Promise((resolve) => {
+    const w = window.open("", "_blank", "width=380,height=720");
+    if (!w) {
+      resolve("blocked");
+      return;
+    }
+
+    let settled = false;
+    let poll = 0;
+    const finish = (result: ReceiptConfirmResult) => {
+      if (settled) return;
+      settled = true;
+      if (poll) window.clearInterval(poll);
+      window.removeEventListener("message", onMessage);
+      resolve(result);
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || data.source !== "krunchies-receipt") return;
+      if (data.result === "printed" || data.result === "cancelled") {
+        finish(data.result);
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+    w.document.write(html);
+    w.document.title = `Receipt ${order.order_number || order.id}`;
+    w.document.close();
+    w.focus();
+
+    // If cashier closes the tab with X, treat as cancel.
+    poll = window.setInterval(() => {
+      if (w.closed) {
+        finish("cancelled");
+      }
+    }, 400);
+  });
+}
+
+/** Final customer receipt (prices + totals). Works fully offline. Auto-prints. */
 export function printCustomerReceipt(
   order: Order,
   settings: Settings | null,

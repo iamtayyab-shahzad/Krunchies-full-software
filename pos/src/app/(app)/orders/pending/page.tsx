@@ -14,7 +14,7 @@ import {
   makeLineKey,
   WALKIN_LOCATION_ID,
 } from "@/lib/utils";
-import { printCustomerReceipt, printKitchenReceipt, decodeKitchenInstructions, parseTableNumber, ensureReceiptItemNames } from "@/lib/receipt";
+import { confirmAndPrintCustomerReceipt, printCustomerReceipt, printKitchenReceipt, decodeKitchenInstructions, parseTableNumber, ensureReceiptItemNames } from "@/lib/receipt";
 import { ordersApi, productsApi, settingsApi } from "@/services/api";
 import { isOnline } from "@/lib/network";
 import type { Order, OrderType, PaymentMethod } from "@/types";
@@ -115,20 +115,24 @@ export default function PendingOrdersPage() {
   const printableOrder = (order: Order) =>
     ensureReceiptItemNames(order, productNameById);
 
-  const complete = (order: Order) => {
-    // Optimistic: remove + print immediately; persist in background.
-    queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
-      (old || []).filter((o) => o.id !== order.id),
-    );
-    const printed = printCustomerReceipt(
+  const complete = async (order: Order) => {
+    const result = await confirmAndPrintCustomerReceipt(
       { ...printableOrder(order), order_status: "COMPLETED" },
       settings || null,
     );
-    toast.success(
-      printed
-        ? "Order completed — customer receipt printed"
-        : "Order completed — allow popups to print receipt",
+    if (result === "cancelled") {
+      toast.message("Print cancelled — order still pending");
+      return;
+    }
+    if (result === "blocked") {
+      toast.error("Allow popups to print the receipt, then try Complete again");
+      return;
+    }
+
+    queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
+      (old || []).filter((o) => o.id !== order.id),
     );
+    toast.success("Order completed — customer receipt printed");
     void ordersApi
       .complete(order.id)
       .then(() => {
