@@ -10,6 +10,30 @@ export function formatPrice(amount: number, currency = "Rs") {
   return `${currency} ${Number(amount || 0).toLocaleString("en-PK")}`;
 }
 
+/** Show stock in purchase units when conversion is available (same rules as admin). */
+export function formatStock(
+  qty: number,
+  unit: string,
+  purchaseUnit?: string,
+  unitsPerPurchase?: number,
+) {
+  const u = (unit || "").toLowerCase();
+  const pu = (purchaseUnit || "").toLowerCase();
+  const upp = Number(unitsPerPurchase || 0);
+  if (upp > 1 && (u === "g" || u === "ml") && qty >= upp) {
+    const converted = qty / upp;
+    const label = purchaseUnit || (u === "g" ? "KG" : "L");
+    return `${converted.toLocaleString("en-PK", { maximumFractionDigits: 2 })} ${label}`;
+  }
+  if ((u === "g" || u === "ml") && Math.abs(qty) >= 1000) {
+    return `${(qty / 1000).toLocaleString("en-PK", { maximumFractionDigits: 2 })} ${u === "g" ? "KG" : "L"}`;
+  }
+  if (pu === "carton" && upp > 1 && Math.abs(qty) >= upp) {
+    return `${(qty / upp).toLocaleString("en-PK", { maximumFractionDigits: 1 })} ${purchaseUnit}`;
+  }
+  return `${Number(qty || 0).toLocaleString("en-PK")} ${unit || ""}`.trim();
+}
+
 /** True when JWT is missing, malformed, or past its exp claim. */
 export function isTokenExpired(token: string | null): boolean {
   if (!token) return true;

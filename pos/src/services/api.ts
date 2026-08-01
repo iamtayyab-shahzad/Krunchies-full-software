@@ -45,6 +45,7 @@ import type {
   Category,
   CreateOrderInput,
   InventoryItem,
+  InventoryTransaction,
   Location,
   Offer,
   Order,
@@ -714,7 +715,7 @@ export const ordersApi = {
 
 export const inventoryApi = {
   list: () => inventoryRepo.list(),
-  create: async (payload: Partial<InventoryItem>) => {
+  create: async (payload: Partial<InventoryItem> | Record<string, unknown>) => {
     try {
       if (!isOnline()) throw new ApiError("Network unavailable", 0);
       const created = await apiFetch<InventoryItem>("/inventory", {
@@ -729,17 +730,19 @@ export const inventoryApi = {
         id: crypto.randomUUID(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        name: payload.name || "Item",
-        category: payload.category || "",
-        unit: payload.unit || "g",
-        unit_kind: payload.unit_kind || "WEIGHT",
-        purchase_unit: payload.purchase_unit || payload.unit || "g",
+        name: String(payload.name || "Item"),
+        category: String(payload.category || ""),
+        unit: String(payload.unit || "g"),
+        unit_kind: String(payload.unit_kind || "WEIGHT"),
+        purchase_unit: String(
+          payload.purchase_unit || payload.unit || "g",
+        ),
         units_per_purchase: Number(payload.units_per_purchase) || 1,
         stock: Number(payload.stock) || 0,
         purchase_price: Number(payload.purchase_price) || 0,
         avg_cost_micros: Number(payload.avg_cost_micros) || 0,
         minimum_stock: Number(payload.minimum_stock) || 0,
-        supplier: payload.supplier || "",
+        supplier: String(payload.supplier || ""),
         is_active: payload.is_active !== false,
       };
       const items = await listLocalInventory();
@@ -792,6 +795,86 @@ export const inventoryApi = {
   },
   remove: (id: string) =>
     apiFetch<null>(`/inventory/${id}`, { method: "DELETE" }),
+  wastage: async (inventoryId: string, quantity: number, reason: string) => {
+    if (!isOnline()) throw new ApiError("Wastage requires internet", 0);
+    await apiFetch<unknown>("/inventory/wastage", {
+      method: "POST",
+      body: JSON.stringify({
+        inventory_id: inventoryId,
+        quantity,
+        reason,
+      }),
+    });
+    await inventoryRepo.list();
+  },
+  productWastage: async (payload: {
+    productId: string;
+    productSizeId?: string;
+    quantity: number;
+    reason: string;
+  }) => {
+    if (!isOnline()) throw new ApiError("Wastage requires internet", 0);
+    const result = await apiFetch<{
+      product_name: string;
+      quantity: number;
+      lines: {
+        inventory_id: string;
+        inventory_name: string;
+        unit: string;
+        quantity_base: number;
+      }[];
+    }>("/inventory/wastage/product", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: payload.productId,
+        product_size_id: payload.productSizeId || undefined,
+        quantity: payload.quantity,
+        reason: payload.reason,
+      }),
+    });
+    await inventoryRepo.list();
+    return result;
+  },
+  bulkSave: async (
+    items: {
+      inventoryId: string;
+      minimumStock?: number;
+      purchaseUnit?: string;
+      unitsPerPurchase?: number;
+      buyQty?: number;
+      buyCost?: number;
+    }[],
+  ) => {
+    if (!isOnline()) throw new ApiError("Bulk save requires internet", 0);
+    await apiFetch<unknown>("/inventory/bulk-save", {
+      method: "POST",
+      body: JSON.stringify({
+        items: items.map((i) => ({
+          inventory_id: i.inventoryId,
+          minimum_stock: i.minimumStock,
+          purchase_unit: i.purchaseUnit,
+          units_per_purchase: i.unitsPerPurchase,
+          buy_qty: Number(i.buyQty || 0),
+          buy_cost: Number(i.buyCost || 0),
+        })),
+      }),
+    });
+    await inventoryRepo.list();
+  },
+};
+
+export const inventoryTransactionsApi = {
+  list: async (inventoryId?: string, type?: string) => {
+    const params = new URLSearchParams();
+    if (inventoryId) params.set("inventory_id", inventoryId);
+    if (type) params.set("type", type);
+    const qs = params.toString() ? `?${params}` : "";
+    return apiFetch<
+      (InventoryTransaction & {
+        inventory?: { id: string; name: string; unit: string };
+      })[]
+    >(`/inventory/transactions${qs}`);
+  },
 };
 
 export const recipesApi = {
@@ -809,6 +892,8 @@ export const recipesApi = {
     }
     return (await cacheGet<Recipe[]>("recipes")) || [];
   },
+  listByProduct: (productId: string) =>
+    apiFetch<Recipe[]>(`/recipes/product/${productId}`),
   create: async (payload: Partial<Recipe>) => {
     try {
       if (!isOnline()) throw new ApiError("Network unavailable", 0);
@@ -828,6 +913,15 @@ export const recipesApi = {
     }),
   remove: (id: string) =>
     apiFetch<null>(`/recipes/${id}`, { method: "DELETE" }),
+  replaceSet: (payload: {
+    product_id: string;
+    product_size_id?: string | null;
+    lines: { inventory_id: string; quantity_required: number }[];
+  }) =>
+    apiFetch<Recipe[]>("/recipes/set", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
 };
 
 export const offersApi = {
@@ -949,5 +1043,17 @@ export const analyticsApi = {
   paymentBreakdown: () =>
     apiFetch<Record<string, unknown>[]>("/analytics/payment-breakdown"),
   remainingInventory: () =>
-    apiFetch<unknown>("/analytics/remaining-inventory"),
+    apiFetch<
+      {
+        id: string;
+        name: string;
+        unit: string;
+        purchase_unit?: string;
+        units_per_purchase?: number;
+        stock: number;
+        minimum_stock: number;
+        category?: string;
+        is_active?: boolean;
+      }[]
+    >("/analytics/remaining-inventory"),
 };

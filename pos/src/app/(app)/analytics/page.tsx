@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn, formatPrice } from "@/lib/utils";
+import { cn, formatPrice, formatStock } from "@/lib/utils";
 import { analyticsApi, settingsApi } from "@/services/api";
 
 type PeriodResult = {
@@ -14,6 +14,27 @@ type PeriodResult = {
   from: string;
   to: string;
 };
+
+type InventoryRow = {
+  id: string;
+  name: string;
+  unit: string;
+  purchase_unit?: string;
+  units_per_purchase?: number;
+  stock: number;
+  minimum_stock: number;
+  category?: string;
+};
+
+function stockStatus(item: InventoryRow) {
+  if (item.stock < 0)
+    return { label: "Negative", className: "bg-red-600/20 text-red-400" };
+  if (item.stock === 0)
+    return { label: "Out", className: "bg-red-600/20 text-red-400" };
+  if (item.stock <= item.minimum_stock)
+    return { label: "Low", className: "bg-amber-500/20 text-amber-400" };
+  return { label: "OK", className: "bg-emerald-500/20 text-emerald-400" };
+}
 
 function todayIso() {
   const d = new Date();
@@ -50,7 +71,7 @@ export default function AnalyticsPage() {
     queryKey: ["analytics", "payments"],
     queryFn: analyticsApi.paymentBreakdown,
   });
-  const { data: inventory } = useQuery({
+  const { data: inventory = [] } = useQuery({
     queryKey: ["analytics", "inventory"],
     queryFn: analyticsApi.remainingInventory,
   });
@@ -58,6 +79,12 @@ export default function AnalyticsPage() {
     queryKey: ["analytics", "cancelled"],
     queryFn: analyticsApi.cancelled,
   });
+
+  const inventoryRows = (Array.isArray(inventory) ? inventory : []) as InventoryRow[];
+  const attentionItems = inventoryRows.filter(
+    (i) => i.stock <= i.minimum_stock || i.stock < 0,
+  );
+  const okCount = inventoryRows.length - attentionItems.length;
 
   const [mode, setMode] = useState<"day" | "range">("day");
   const [day, setDay] = useState(todayIso);
@@ -235,10 +262,93 @@ export default function AnalyticsPage() {
       </div>
 
       <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
-        <h2 className="mb-4 text-xl font-bold">Inventory Summary</h2>
-        <pre className="overflow-x-auto rounded-lg bg-black/50 p-4 text-xs text-zinc-300">
-          {JSON.stringify(inventory ?? [], null, 2)}
-        </pre>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-xl font-bold">Inventory Summary</h2>
+            <p className="text-sm text-zinc-400">
+              {inventoryRows.length} items · {attentionItems.length} need
+              attention · {okCount} OK
+            </p>
+          </div>
+        </div>
+        {!inventoryRows.length ? (
+          <p className="text-zinc-500">No inventory items yet.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-zinc-800">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-zinc-900/80 text-zinc-400">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">Item</th>
+                  <th className="px-3 py-2 font-semibold">Stock</th>
+                  <th className="px-3 py-2 font-semibold">Min</th>
+                  <th className="px-3 py-2 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(attentionItems.length ? attentionItems : inventoryRows)
+                  .slice(0, 30)
+                  .map((item) => {
+                    const status = stockStatus(item);
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-t border-zinc-800"
+                      >
+                        <td className="px-3 py-2 font-semibold text-white">
+                          {item.name}
+                          {item.category ? (
+                            <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+                              {item.category}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-200">
+                          {formatStock(
+                            item.stock,
+                            item.unit,
+                            item.purchase_unit,
+                            item.units_per_purchase,
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-400">
+                          {formatStock(
+                            item.minimum_stock,
+                            item.unit,
+                            item.purchase_unit,
+                            item.units_per_purchase,
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={cn(
+                              "rounded px-2 py-0.5 text-xs font-bold",
+                              status.className,
+                            )}
+                          >
+                            {status.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+            {attentionItems.length === 0 ? (
+              <p className="border-t border-zinc-800 px-3 py-2 text-xs text-emerald-400">
+                All stock levels look fine.
+              </p>
+            ) : attentionItems.length > 30 ? (
+              <p className="border-t border-zinc-800 px-3 py-2 text-xs text-zinc-500">
+                Showing first 30 of {attentionItems.length} items needing
+                attention. Open Inventory for the full list.
+              </p>
+            ) : (
+              <p className="border-t border-zinc-800 px-3 py-2 text-xs text-zinc-500">
+                Showing items that are low, out, or negative.
+              </p>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );
