@@ -25,6 +25,20 @@ func (r *AnalyticsRepository) SalesBetween(start, end time.Time) (int, error) {
 	return total, err
 }
 
+// SalesSummaryBetween returns completed-order sales total and count in [start, end).
+func (r *AnalyticsRepository) SalesSummaryBetween(start, end time.Time) (total int, count int64, err error) {
+	type row struct {
+		Total int
+		Count int64
+	}
+	var result row
+	err = r.db.Model(&domain.Order{}).
+		Where("order_status = ? AND created_at >= ? AND created_at < ?", "COMPLETED", start, end).
+		Select("COALESCE(SUM(grand_total), 0) AS total, COUNT(*) AS count").
+		Scan(&result).Error
+	return result.Total, result.Count, err
+}
+
 func (r *AnalyticsRepository) CancelledOrdersCount() (int64, error) {
 	var count int64
 	err := r.db.Model(&domain.Order{}).Where("order_status = ?", "CANCELLED").Count(&count).Error

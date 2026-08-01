@@ -1,8 +1,27 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { formatPrice } from "@/lib/utils";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn, formatPrice } from "@/lib/utils";
 import { analyticsApi, settingsApi } from "@/services/api";
+
+type PeriodResult = {
+  total: number;
+  order_count: number;
+  from: string;
+  to: string;
+};
+
+function todayIso() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 export default function AnalyticsPage() {
   const { data: settings } = useQuery({
@@ -40,6 +59,28 @@ export default function AnalyticsPage() {
     queryFn: analyticsApi.cancelled,
   });
 
+  const [mode, setMode] = useState<"day" | "range">("day");
+  const [day, setDay] = useState(todayIso);
+  const [from, setFrom] = useState(todayIso);
+  const [to, setTo] = useState(todayIso);
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookup, setLookup] = useState<PeriodResult | null>(null);
+
+  const runLookup = async () => {
+    setLookupBusy(true);
+    try {
+      const result =
+        mode === "day"
+          ? await analyticsApi.salesForPeriod({ date: day })
+          : await analyticsApi.salesForPeriod({ from, to });
+      setLookup(result);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load sales");
+    } finally {
+      setLookupBusy(false);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto p-6">
       <h1 className="mb-6 text-3xl font-black">Analytics</h1>
@@ -54,6 +95,94 @@ export default function AnalyticsPage() {
         <Card title="Cancelled" value={String(cancelled?.count || 0)} />
       </div>
 
+      <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+        <h2 className="mb-1 text-xl font-bold">Sales lookup</h2>
+        <p className="mb-4 text-sm text-zinc-400">
+          Pick one day or a date range (Pakistan time, midnight to midnight).
+        </p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setMode("day")}
+            className={cn(
+              "rounded-lg px-4 py-2 text-sm font-bold",
+              mode === "day"
+                ? "bg-orange-500 text-black"
+                : "bg-zinc-900 text-zinc-400",
+            )}
+          >
+            Single day
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("range")}
+            className={cn(
+              "rounded-lg px-4 py-2 text-sm font-bold",
+              mode === "range"
+                ? "bg-orange-500 text-black"
+                : "bg-zinc-900 text-zinc-400",
+            )}
+          >
+            Date range
+          </button>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          {mode === "day" ? (
+            <label className="block min-w-[12rem] flex-1">
+              <span className="mb-1 block text-xs text-zinc-500">Date</span>
+              <Input
+                type="date"
+                value={day}
+                onChange={(e) => setDay(e.target.value)}
+              />
+            </label>
+          ) : (
+            <>
+              <label className="block min-w-[12rem] flex-1">
+                <span className="mb-1 block text-xs text-zinc-500">From</span>
+                <Input
+                  type="date"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </label>
+              <label className="block min-w-[12rem] flex-1">
+                <span className="mb-1 block text-xs text-zinc-500">To</span>
+                <Input
+                  type="date"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </label>
+            </>
+          )}
+          <Button onClick={() => void runLookup()} disabled={lookupBusy}>
+            {lookupBusy ? "Loading..." : "Get sales"}
+          </Button>
+        </div>
+        {lookup ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Card
+              title={
+                lookup.from === lookup.to
+                  ? `Sales on ${lookup.from}`
+                  : `Sales ${lookup.from} → ${lookup.to}`
+              }
+              value={formatPrice(lookup.total, currency)}
+            />
+            <Card title="Completed orders" value={String(lookup.order_count)} />
+            <Card
+              title="Period"
+              value={
+                lookup.from === lookup.to
+                  ? lookup.from
+                  : `${lookup.from} → ${lookup.to}`
+              }
+            />
+          </div>
+        ) : null}
+      </section>
+
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
           <h2 className="mb-4 text-xl font-bold">Top Selling Products</h2>
@@ -65,7 +194,10 @@ export default function AnalyticsPage() {
               >
                 <span>
                   {String(
-                    row.name || row.product_name || row.Name || `Product ${i + 1}`,
+                    row.name ||
+                      row.product_name ||
+                      row.Name ||
+                      `Product ${i + 1}`,
                   )}
                 </span>
                 <span className="text-orange-400">

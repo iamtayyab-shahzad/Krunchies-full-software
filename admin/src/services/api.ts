@@ -504,6 +504,13 @@ export type AnalyticsInventoryRow = {
   supplier: string;
 };
 
+export type AnalyticsSalesPeriod = {
+  total: number;
+  order_count: number;
+  from: string;
+  to: string;
+};
+
 export const analyticsApi = {
   todaySales: () =>
     apiFetch<AnalyticsSalesTotal>("/analytics/today-sales"),
@@ -513,6 +520,14 @@ export const analyticsApi = {
     apiFetch<AnalyticsSalesTotal>("/analytics/weekly-sales"),
   monthlySales: () =>
     apiFetch<AnalyticsSalesTotal>("/analytics/monthly-sales"),
+  /** Single day: { date } or range: { from, to } — Asia/Karachi calendar days. */
+  salesForPeriod: (params: { date: string } | { from: string; to: string }) => {
+    const q =
+      "date" in params
+        ? `date=${encodeURIComponent(params.date)}`
+        : `from=${encodeURIComponent(params.from)}&to=${encodeURIComponent(params.to)}`;
+    return apiFetch<AnalyticsSalesPeriod>(`/analytics/sales?${q}`);
+  },
   bestSellingProducts: () =>
     apiFetch<AnalyticsBestSellingRow[]>("/analytics/best-selling-products"),
   cancelledOrders: () =>

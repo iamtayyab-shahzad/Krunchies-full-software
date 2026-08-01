@@ -177,6 +177,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			staff.GET("/analytics/yesterday-sales", analyticsHandler.YesterdaySales)
 			staff.GET("/analytics/weekly-sales", analyticsHandler.WeeklySales)
 			staff.GET("/analytics/monthly-sales", analyticsHandler.MonthlySales)
+			staff.GET("/analytics/sales", analyticsHandler.SalesPeriod)
 			staff.GET("/analytics/best-selling-products", analyticsHandler.BestSellingProducts)
 			staff.GET("/analytics/cancelled-orders", analyticsHandler.CancelledOrders)
 			staff.GET("/analytics/payment-breakdown", analyticsHandler.PaymentBreakdown)

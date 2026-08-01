@@ -1,10 +1,13 @@
 package service
 
 import (
+	"net/http"
+	"strings"
 	"time"
 
 	"backend/internal/domain"
 	"backend/internal/repository"
+	"backend/internal/utils"
 
 	"gorm.io/gorm"
 )
@@ -39,6 +42,52 @@ func (s *AnalyticsService) YesterdaySales() (int, error) {
 	start = start.Add(-24 * time.Hour)
 	end = end.Add(-24 * time.Hour)
 	return s.repo.SalesBetween(start, end)
+}
+
+// SalesPeriodResult is completed sales for a Karachi calendar day or inclusive range.
+type SalesPeriodResult struct {
+	Total      int       `json:"total"`
+	OrderCount int64     `json:"order_count"`
+	From       time.Time `json:"from"`
+	To         time.Time `json:"to"`
+}
+
+// SalesForPeriod returns sales for [fromDate, toDate] inclusive (YYYY-MM-DD, Asia/Karachi).
+func (s *AnalyticsService) SalesForPeriod(fromDate, toDate string) (*SalesPeriodResult, error) {
+	start, err := parseKarachiDate(fromDate)
+	if err != nil {
+		return nil, utils.NewAppError(http.StatusBadRequest, "invalid from/date (use YYYY-MM-DD)")
+	}
+	endDay, err := parseKarachiDate(toDate)
+	if err != nil {
+		return nil, utils.NewAppError(http.StatusBadRequest, "invalid to date (use YYYY-MM-DD)")
+	}
+	if endDay.Before(start) {
+		return nil, utils.NewAppError(http.StatusBadRequest, "to date must be on or after from date")
+	}
+	end := endDay.Add(24 * time.Hour)
+	total, count, err := s.repo.SalesSummaryBetween(start, end)
+	if err != nil {
+		return nil, err
+	}
+	return &SalesPeriodResult{
+		Total:      total,
+		OrderCount: count,
+		From:       start,
+		To:         endDay,
+	}, nil
+}
+
+func parseKarachiDate(value string) (time.Time, error) {
+	loc := karachiLoc
+	if loc == nil {
+		loc = time.FixedZone("PKT", 5*3600)
+	}
+	t, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(value), loc)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return t, nil
 }
 
 func (s *AnalyticsService) WeeklySales() (int, error) {

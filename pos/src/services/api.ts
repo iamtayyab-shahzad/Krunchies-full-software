@@ -929,6 +929,19 @@ export const analyticsApi = {
     apiFetch<{ total: number }>("/analytics/weekly-sales"),
   monthlySales: () =>
     apiFetch<{ total: number }>("/analytics/monthly-sales"),
+  /** Single day: { date } or range: { from, to } — Asia/Karachi calendar days. */
+  salesForPeriod: (params: { date: string } | { from: string; to: string }) => {
+    const q =
+      "date" in params
+        ? `date=${encodeURIComponent(params.date)}`
+        : `from=${encodeURIComponent(params.from)}&to=${encodeURIComponent(params.to)}`;
+    return apiFetch<{
+      total: number;
+      order_count: number;
+      from: string;
+      to: string;
+    }>(`/analytics/sales?${q}`);
+  },
   bestSelling: () =>
     apiFetch<Record<string, unknown>[]>("/analytics/best-selling-products"),
   cancelled: () =>
