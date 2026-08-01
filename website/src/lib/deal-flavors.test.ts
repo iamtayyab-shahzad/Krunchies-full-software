@@ -126,4 +126,25 @@ describe("flavorsForSlot", () => {
     );
     expect(result).toHaveLength(0);
   });
+
+  it("matches Regular pizzas by category_id when category name is missing", () => {
+    const bare = {
+      id: "bare-l",
+      category_id: "10000000-0000-4000-8000-000000000009",
+      name: "Chicken Tika",
+      description: "",
+      image: "",
+      featured: false,
+      available: true,
+      display_order: 1,
+      sizes: [{ id: "s1", product_id: "bare-l", size: "L", price: 1400 }],
+    } as Product;
+    const large = flavorsForSlot([bare], {
+      id: "pizza-1",
+      label: "Regular pizza flavor 1 (L)",
+      size: "L",
+      tier: "regular",
+    });
+    expect(large.map((p) => p.id)).toEqual(["bare-l"]);
+  });
 });

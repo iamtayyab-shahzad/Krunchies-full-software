@@ -76,8 +76,8 @@ export default function ProductDetailsPage() {
   };
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-2 lg:px-8">
-      <div className="relative aspect-square overflow-hidden rounded-2xl">
+    <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-2 lg:items-start lg:gap-12 lg:px-8 lg:py-12">
+      <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-2xl lg:max-w-none">
         <Image
           src={product.image}
           alt={product.name}
@@ -87,7 +87,7 @@ export default function ProductDetailsPage() {
           sizes="(max-width: 1024px) 100vw, 50vw"
         />
       </div>
-      <div>
+      <div className="relative z-10 rounded-xl bg-zinc-950/95 lg:bg-transparent">
         <p className="text-sm uppercase tracking-wider text-orange-500">
           {product.category?.name}
         </p>
@@ -107,10 +107,10 @@ export default function ProductDetailsPage() {
                 type="button"
                 onClick={() => setSelectedSize(size)}
                 className={cn(
-                  "rounded-md border px-4 py-3 text-sm transition-colors",
+                  "min-h-11 rounded-md border px-4 py-3 text-sm font-semibold transition-colors",
                   selectedSize?.id === size.id
-                    ? "border-orange-500 bg-orange-500/15 text-orange-300"
-                    : "border-zinc-700 text-zinc-300",
+                    ? "border-orange-500 bg-orange-500 text-black"
+                    : "border-zinc-600 bg-zinc-900 text-zinc-100 hover:border-orange-500/60",
                 )}
               >
                 {size.size} · {formatPrice(size.price)}

@@ -96,7 +96,9 @@ export function DealFlavorDialog({
                 <Label className="text-xs text-zinc-400">{slot.label}</Label>
                 {options.length === 0 ? (
                   <p className="text-sm text-zinc-500">
-                    No {slot.size} Regular Pizza flavors available
+                    No {slot.size}{" "}
+                    {slot.tier === "special" ? "Special" : "Regular"} Pizza
+                    flavors available
                   </p>
                 ) : (
                   <div className="grid max-h-44 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">

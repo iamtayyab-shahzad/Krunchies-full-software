@@ -118,7 +118,8 @@ export function ProductModal({
           </div>
         )}
 
-        <div className="relative z-0 aspect-[16/9] max-h-36 shrink-0 overflow-hidden rounded-lg sm:aspect-video sm:max-h-56">
+        {/* Compact image so size controls never sit on top of the photo (esp. laptop). */}
+        <div className="relative z-0 h-32 w-full shrink-0 overflow-hidden rounded-lg bg-zinc-900 sm:h-40">
           <Image
             src={product.image}
             alt={product.name}
@@ -139,7 +140,7 @@ export function ProductModal({
           </DialogHeader>
         )}
 
-        <div className="relative z-10 space-y-4 pb-2">
+        <div className="relative z-10 space-y-4 bg-zinc-950 pb-2">
           <div>
             <Label className="mb-2 block">Size</Label>
             <div className="flex flex-wrap gap-2">
@@ -147,24 +148,24 @@ export function ProductModal({
                 const was = Number(size.was_price || 0);
                 const save = was > size.price ? was - size.price : 0;
                 return (
-                <button
-                  key={size.id}
-                  type="button"
-                  onClick={() => setSelectedSize(size)}
-                  className={cn(
-                    "min-h-11 rounded-md border px-3 py-2 text-sm transition-colors",
-                    selectedSize?.id === size.id
-                      ? "border-orange-500 bg-orange-500/15 text-orange-300"
-                      : "border-zinc-700 text-zinc-300 hover:border-zinc-500",
-                  )}
-                >
-                  {size.size} · {formatPrice(size.price)}
-                  {save > 0 ? (
-                    <span className="ml-1 text-xs text-emerald-400">
-                      (Save {formatPrice(save)})
-                    </span>
-                  ) : null}
-                </button>
+                  <button
+                    key={size.id}
+                    type="button"
+                    onClick={() => setSelectedSize(size)}
+                    className={cn(
+                      "min-h-11 rounded-md border px-3 py-2 text-sm font-semibold transition-colors",
+                      selectedSize?.id === size.id
+                        ? "border-orange-500 bg-orange-500 text-black"
+                        : "border-zinc-600 bg-zinc-900 text-zinc-100 hover:border-orange-500/60",
+                    )}
+                  >
+                    {size.size} · {formatPrice(size.price)}
+                    {save > 0 ? (
+                      <span className="ml-1 text-xs opacity-80">
+                        (Save {formatPrice(save)})
+                      </span>
+                    ) : null}
+                  </button>
                 );
               })}
             </div>

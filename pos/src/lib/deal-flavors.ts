@@ -10,6 +10,15 @@ export type DealPizzaSlot = {
   tier: PizzaTier;
 };
 
+/** Deterministic IDs from shared/krunchies-menu.json — works even if category.name is missing. */
+const REGULAR_PIZZA_CATEGORY_IDS = new Set([
+  "10000000-0000-4000-8000-000000000009",
+]);
+const SPECIAL_PIZZA_CATEGORY_IDS = new Set([
+  "10000000-0000-4000-8000-000000000010",
+  "10000000-0000-4000-8000-000000000011",
+]);
+
 const SIZE_ALIASES: Record<string, PizzaSizeCode> = {
   small: "S",
   s: "S",
@@ -63,20 +72,37 @@ export function requiresDealFlavorChoice(product: Product) {
   );
 }
 
+function categoryIdOf(product: Product): string {
+  return (product.category_id || product.category?.id || "").toLowerCase();
+}
+
+function isRegularPizzaProduct(product: Product): boolean {
+  const id = categoryIdOf(product);
+  if (REGULAR_PIZZA_CATEGORY_IDS.has(id)) return true;
+  const cat = (product.category?.name || "").toLowerCase();
+  return cat.includes("regular") && cat.includes("pizza");
+}
+
+function isSpecialPizzaProduct(product: Product): boolean {
+  const id = categoryIdOf(product);
+  if (SPECIAL_PIZZA_CATEGORY_IDS.has(id)) return true;
+  const cat = (product.category?.name || "").toLowerCase();
+  if (cat.includes("burger") || cat.includes("regular")) return false;
+  return cat.includes("special") && cat.includes("pizza");
+}
+
 /** Flavours for a slot: Regular or Special pizza categories with matching size. */
 export function flavorsForSlot(
   products: Product[],
   slot: DealPizzaSlot,
 ): Product[] {
   return products.filter((p) => {
-    const cat = (p.category?.name || "").toLowerCase();
-    if (slot.tier === "special") {
-      // e.g. "Special Pizza", "Krunchies Special Pizza" — not burgers.
-      if (!(cat.includes("special") && cat.includes("pizza"))) return false;
-      if (cat.includes("regular")) return false;
-    } else if (!cat.includes("regular")) {
-      return false;
-    }
+    if (isDealProduct(p)) return false;
+    const tierOk =
+      slot.tier === "special"
+        ? isSpecialPizzaProduct(p)
+        : isRegularPizzaProduct(p);
+    if (!tierOk) return false;
     return (p.sizes || []).some((s) => normalizeSize(s.size) === slot.size);
   });
 }

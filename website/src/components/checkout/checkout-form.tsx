@@ -33,7 +33,10 @@ const checkoutSchema = z.object({
   phone: z
     .string()
     .trim()
-    .regex(/^[0-9+()\-\s]{7,20}$/, "Enter a valid phone number"),
+    .transform((v) => v.replace(/\D/g, ""))
+    .refine((v) => /^03\d{9}$/.test(v), {
+      message: "Enter 11-digit mobile number (03XXXXXXXXX)",
+    }),
   address: z.string().trim().min(5, "Address is required"),
   location_id: z.string().min(1, "Select a delivery location"),
   payment_method: z.enum(["easypaisa", "jazzcash", "bank", "cod"]),
@@ -215,8 +218,18 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                 <Input
                   id="phone"
                   className="min-h-11"
-                  inputMode="tel"
-                  {...register("phone")}
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  placeholder="03XXXXXXXXX"
+                  maxLength={11}
+                  {...register("phone", {
+                    onChange: (e) => {
+                      const digits = String(e.target.value || "")
+                        .replace(/\D/g, "")
+                        .slice(0, 11);
+                      e.target.value = digits;
+                    },
+                  })}
                 />
                 {errors.phone && (
                   <p className="text-xs text-red-400">{errors.phone.message}</p>

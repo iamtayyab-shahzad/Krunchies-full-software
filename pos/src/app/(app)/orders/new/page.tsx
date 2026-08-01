@@ -34,6 +34,7 @@ import {
   WALKIN_LOCATION_ID,
 } from "@/lib/utils";
 import { printCustomerReceipt, printKitchenReceipt, encodeKitchenInstructions } from "@/lib/receipt";
+import { weekendPromoLabel } from "@/lib/weekend-promo";
 import { deleteDraft } from "@/lib/offline-db";
 import {
   categoriesApi,
@@ -807,6 +808,14 @@ export default function NewOrderPage() {
           </div>
 
           <div className="space-y-1 rounded-lg border border-zinc-800 p-3 text-sm">
+            {weekendPromoLabel() ? (
+              <p className="mb-2 rounded-md bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400">
+                {weekendPromoLabel()}
+                {bill.discount <= 0
+                  ? " — add Rs 1,000+ of non-deal items to apply"
+                  : null}
+              </p>
+            ) : null}
             <div className="flex justify-between text-zinc-400">
               <span>Subtotal</span>
               <span>{formatPrice(bill.subtotal, currency)}</span>
