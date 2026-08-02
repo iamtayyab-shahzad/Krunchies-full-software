@@ -252,12 +252,12 @@ export function buildKitchenReceiptHtml(order: Order) {
 <meta charset="utf-8" />
 <title>KITCHEN ${escapeHtml(order.order_number || order.id)}</title>
 <style>
-  @page { size: 80mm auto; margin: 3mm; }
+  @page { size: 80mm auto; margin: 2mm; }
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 16px;
-    line-height: 1.35;
+    font-size: 11px;
+    line-height: 1.2;
     color: #000;
     width: 72mm;
     margin: 0 auto;
@@ -265,54 +265,55 @@ export function buildKitchenReceiptHtml(order: Order) {
     print-color-adjust: exact;
   }
   h1 {
-    font-size: 22px;
-    font-weight: 900;
+    font-size: 13px;
+    font-weight: 800;
     text-align: center;
-    margin: 0 0 6px;
-    letter-spacing: 1px;
+    margin: 0 0 3px;
+    letter-spacing: 0.5px;
+    word-break: break-all;
   }
   .banner {
     text-align: center;
-    font-weight: 900;
-    font-size: 18px;
-    border: 2px solid #000;
-    padding: 6px 4px;
-    margin-bottom: 10px;
-    letter-spacing: 1px;
+    font-weight: 800;
+    font-size: 12px;
+    border: 1px solid #000;
+    padding: 3px 2px;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
   }
   .meta {
-    font-size: 15px;
+    font-size: 10px;
     font-weight: 700;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
   }
-  .meta div { margin: 4px 0; }
+  .meta div { margin: 1px 0; }
   .item {
-    border-top: 2px solid #000;
-    padding: 10px 0;
+    border-top: 1px solid #000;
+    padding: 4px 0;
   }
   .row {
     display: flex;
-    gap: 8px;
-    font-weight: 900;
-    font-size: 18px;
-  }
-  .qty { min-width: 2.4em; }
-  .size {
+    gap: 4px;
     font-weight: 800;
-    font-size: 16px;
-    margin-top: 4px;
+    font-size: 12px;
+  }
+  .qty { min-width: 2em; }
+  .size {
+    font-weight: 700;
+    font-size: 10px;
+    margin-top: 1px;
   }
   .mod {
-    margin-top: 3px;
-    font-size: 14px;
-    font-weight: 700;
+    margin-top: 1px;
+    font-size: 10px;
+    font-weight: 600;
   }
   .notes {
-    border-top: 2px solid #000;
-    margin-top: 10px;
-    padding-top: 8px;
-    font-weight: 800;
-    font-size: 15px;
+    border-top: 1px solid #000;
+    margin-top: 4px;
+    padding-top: 3px;
+    font-weight: 700;
+    font-size: 10px;
   }
 </style>
 </head>
@@ -387,12 +388,12 @@ export function buildCustomerReceiptHtml(
 <meta charset="utf-8" />
 <title>Receipt ${escapeHtml(order.order_number || order.id)}</title>
 <style>
-  @page { size: 80mm auto; margin: 3mm; }
+  @page { size: 80mm auto; margin: 2mm; }
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 15px;
-    line-height: 1.35;
+    font-size: 11px;
+    line-height: 1.2;
     color: #000;
     width: 72mm;
     margin: 0 auto;
@@ -400,80 +401,80 @@ export function buildCustomerReceiptHtml(
     print-color-adjust: exact;
   }
   h1 {
-    font-size: 22px;
-    font-weight: 900;
+    font-size: 14px;
+    font-weight: 800;
     text-align: center;
-    margin: 0 0 6px;
-    letter-spacing: 0.5px;
+    margin: 0 0 2px;
+    letter-spacing: 0.3px;
     text-transform: uppercase;
   }
   .meta {
     text-align: center;
-    margin-bottom: 10px;
-    font-size: 14px;
+    margin-bottom: 4px;
+    font-size: 10px;
     font-weight: 600;
   }
   .info {
-    font-size: 15px;
+    font-size: 10px;
     font-weight: 700;
-    margin: 3px 0;
+    margin: 1px 0;
   }
   hr {
     border: none;
-    border-top: 2px solid #000;
-    margin: 8px 0;
+    border-top: 1px solid #000;
+    margin: 4px 0;
   }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 15px;
+    font-size: 10px;
   }
   thead td {
-    font-weight: 900;
-    font-size: 14px;
-    border-bottom: 2px solid #000;
-    padding: 4px 0 6px;
+    font-weight: 800;
+    font-size: 9px;
+    border-bottom: 1px solid #000;
+    padding: 2px 0 3px;
   }
   tbody td {
-    padding: 6px 0;
+    padding: 3px 0;
     vertical-align: top;
-    font-weight: 700;
-    border-bottom: 1px dashed #000;
+    font-weight: 600;
+    border-bottom: 1px dashed #999;
   }
   .note {
-    font-size: 13px;
+    font-size: 9px;
     font-weight: 600;
-    margin-top: 2px;
+    margin-top: 1px;
   }
   .total {
-    border: 2px solid #000;
-    margin-top: 10px;
-    padding: 8px 6px;
-    font-size: 15px;
+    border: 1px solid #000;
+    margin-top: 4px;
+    padding: 4px 3px;
+    font-size: 10px;
     font-weight: 700;
   }
   .line {
     display: flex;
     justify-content: space-between;
-    margin: 3px 0;
+    margin: 1px 0;
   }
   .grand {
-    font-size: 18px;
-    font-weight: 900;
-    margin-top: 6px;
-    padding-top: 4px;
-    border-top: 2px solid #000;
+    font-size: 12px;
+    font-weight: 800;
+    margin-top: 3px;
+    padding-top: 2px;
+    border-top: 1px solid #000;
   }
   .notes {
-    font-size: 14px;
+    font-size: 10px;
     font-weight: 700;
-    margin-top: 8px;
+    margin-top: 4px;
   }
   .center {
     text-align: center;
-    font-size: 15px;
-    font-weight: 800;
-    margin-top: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 4px;
   }
 </style>
 </head>
