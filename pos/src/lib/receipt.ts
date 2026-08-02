@@ -366,12 +366,12 @@ export function buildCustomerReceiptHtml(
             : "";
       return `
       <tr>
-        <td>
+        <td class="col-item">
           ${escapeHtml(name)} (${escapeHtml(size)})
           ${noteHtml}
         </td>
-        <td style="text-align:center">${item.quantity}</td>
-        <td style="text-align:right">${formatPrice(item.price * item.quantity, currency)}</td>
+        <td class="col-qty">${item.quantity}</td>
+        <td class="col-amt">${formatPrice(item.price * item.quantity, currency)}</td>
       </tr>`;
     })
     .join("");
@@ -395,8 +395,12 @@ export function buildCustomerReceiptHtml(
     font-size: 11px;
     line-height: 1.2;
     color: #000;
-    width: 72mm;
+    /* Leave right gutter — thermal heads clip the far edge */
+    width: 68mm;
+    max-width: 68mm;
     margin: 0 auto;
+    padding: 0 1mm 0 0;
+    overflow: hidden;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -418,6 +422,7 @@ export function buildCustomerReceiptHtml(
     font-size: 10px;
     font-weight: 700;
     margin: 1px 0;
+    word-break: break-word;
   }
   hr {
     border: none;
@@ -426,20 +431,38 @@ export function buildCustomerReceiptHtml(
   }
   table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 10px;
   }
+  col.col-item { width: auto; }
+  col.col-qty { width: 7mm; }
+  col.col-amt { width: 20mm; }
   thead td {
     font-weight: 800;
     font-size: 9px;
     border-bottom: 1px solid #000;
-    padding: 2px 0 3px;
+    padding: 2px 1px 3px 0;
   }
   tbody td {
-    padding: 3px 0;
+    padding: 3px 1px 3px 0;
     vertical-align: top;
     font-weight: 600;
     border-bottom: 1px dashed #999;
+  }
+  .col-item {
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    padding-right: 2px !important;
+  }
+  .col-qty {
+    text-align: center;
+    white-space: nowrap;
+  }
+  .col-amt {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
   .note {
     font-size: 9px;
@@ -456,7 +479,12 @@ export function buildCustomerReceiptHtml(
   .line {
     display: flex;
     justify-content: space-between;
+    gap: 6px;
     margin: 1px 0;
+  }
+  .line span:last-child {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
   .grand {
     font-size: 12px;
@@ -493,8 +521,17 @@ export function buildCustomerReceiptHtml(
   <div class="info">Payment: ${escapeHtml((order.payment_method || "").toUpperCase())}</div>
   <hr />
   <table>
+    <colgroup>
+      <col class="col-item" />
+      <col class="col-qty" />
+      <col class="col-amt" />
+    </colgroup>
     <thead>
-      <tr><td>Item</td><td style="text-align:center">Qty</td><td style="text-align:right">Amt</td></tr>
+      <tr>
+        <td class="col-item">Item</td>
+        <td class="col-qty">Qty</td>
+        <td class="col-amt">Amt</td>
+      </tr>
     </thead>
     <tbody>${lines}</tbody>
   </table>
