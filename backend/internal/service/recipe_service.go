@@ -115,6 +115,33 @@ func (s *RecipeService) ReplaceSet(in RecipeSetInput) ([]domain.Recipe, error) {
 	if in.ProductID == uuid.Nil {
 		return nil, utils.NewAppError(http.StatusBadRequest, "product_id is required")
 	}
+
+	var product domain.Product
+	if err := s.db.First(&product, "id = ?", in.ProductID).Error; err != nil {
+		return nil, utils.NewAppError(http.StatusBadRequest, "product not found")
+	}
+	if in.ProductSizeID != nil {
+		var size domain.ProductSize
+		if err := s.db.First(&size, "id = ? AND product_id = ?", *in.ProductSizeID, in.ProductID).Error; err != nil {
+			return nil, utils.NewAppError(http.StatusBadRequest, "product size does not belong to this product")
+		}
+	}
+
+	if len(in.Lines) > 0 {
+		valid := 0
+		for _, line := range in.Lines {
+			if line.InventoryID != uuid.Nil && line.QuantityRequired > 0 {
+				valid++
+			}
+		}
+		if valid == 0 {
+			return nil, utils.NewAppError(http.StatusBadRequest, "recipe lines need a valid inventory item and quantity > 0")
+		}
+		if valid != len(in.Lines) {
+			return nil, utils.NewAppError(http.StatusBadRequest, "every recipe line needs a valid inventory item and quantity > 0")
+		}
+	}
+
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		q := tx.Where("product_id = ?", in.ProductID)
 		if in.ProductSizeID == nil {
@@ -126,9 +153,6 @@ func (s *RecipeService) ReplaceSet(in RecipeSetInput) ([]domain.Recipe, error) {
 			return err
 		}
 		for _, line := range in.Lines {
-			if line.InventoryID == uuid.Nil || line.QuantityRequired <= 0 {
-				continue
-			}
 			row := domain.Recipe{
 				ProductID:        in.ProductID,
 				ProductSizeID:    in.ProductSizeID,

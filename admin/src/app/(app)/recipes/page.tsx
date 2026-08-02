@@ -179,8 +179,16 @@ export default function RecipesPage() {
 
   const saveSet = async () => {
     if (!selectedProductId) return;
-    if (lines.some((l) => !l.inventoryId || l.quantity <= 0)) {
-      toast.error("Every line needs a valid quantity");
+    if (
+      lines.some(
+        (l) =>
+          !l.inventoryId ||
+          !Number.isFinite(l.quantity) ||
+          l.quantity <= 0 ||
+          !Number.isInteger(l.quantity),
+      )
+    ) {
+      toast.error("Every line needs a whole-number quantity in base units");
       return;
     }
     setSaving(true);
@@ -190,10 +198,14 @@ export default function RecipesPage() {
         product_size_id: sizeTab === ALL_SIZES ? null : sizeTab,
         lines: lines.map((l) => ({
           inventory_id: l.inventoryId,
-          quantity_required: Number(l.quantity),
+          quantity_required: Math.round(Number(l.quantity)),
         })),
       });
-      toast.success("Recipe saved");
+      toast.success(
+        lines.length === 0
+          ? "Recipe cleared — sales will not deduct stock for this size"
+          : "Recipe saved",
+      );
       setDirty(false);
       await loadRecipesForProduct(selectedProductId, sizeTab);
     } catch (e) {
@@ -346,8 +358,8 @@ export default function RecipesPage() {
                     </Label>
                     <Input
                       type="number"
-                      min={0}
-                      step="0.01"
+                      min={1}
+                      step={1}
                       value={addQty}
                       onChange={(e) => setAddQty(Number(e.target.value))}
                     />
@@ -398,8 +410,8 @@ export default function RecipesPage() {
                               <Input
                                 className="max-w-[140px]"
                                 type="number"
-                                min={0}
-                                step="0.01"
+                                min={1}
+                                step={1}
                                 value={line.quantity}
                                 onChange={(e) =>
                                   updateQty(line.key, Number(e.target.value))
@@ -431,6 +443,12 @@ export default function RecipesPage() {
                           className="px-4 py-10 text-center text-zinc-500"
                         >
                           No ingredients for this size yet.
+                          <span className="mt-2 block text-xs text-zinc-600">
+                            Sales still work, but stock will not deduct and
+                            product wastage / per-item COGS stay at zero until
+                            you add a recipe. Prefer &quot;All sizes&quot; for a
+                            shared BOM, or set each size if quantities differ.
+                          </span>
                         </td>
                       </tr>
                     ) : null}

@@ -6,6 +6,7 @@ import (
 	"backend/internal/domain"
 	"backend/internal/repository"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -147,63 +148,121 @@ func (s *ReportService) ProfitLossBetween(start, end time.Time) (*ProfitLoss, er
 }
 
 func (s *ReportService) productPerformance(start, end time.Time) ([]ProductPerf, error) {
-	type row struct {
-		ProductID   string
-		ProductName string
-		Quantity    int
-		Revenue     int
+	// Sales by product + size so COGS can use the same size-aware BOM as orders.
+	type saleRow struct {
+		ProductID     string
+		ProductName   string
+		ProductSizeID *string
+		Quantity      int
+		Revenue       int
 	}
-	var rows []row
+	var sales []saleRow
 	err := s.db.Table("order_items").
-		Select(`order_items.product_id,
+		Select(`order_items.product_id::text as product_id,
 			COALESCE(products.name, '') as product_name,
+			order_items.product_size_id::text as product_size_id,
 			COALESCE(SUM(order_items.quantity), 0) as quantity,
 			COALESCE(SUM(order_items.price * order_items.quantity), 0) as revenue`).
 		Joins("JOIN orders ON orders.id = order_items.order_id").
 		Joins("LEFT JOIN products ON products.id = order_items.product_id").
 		Where("orders.order_status = ? AND orders.created_at >= ? AND orders.created_at < ?",
 			"COMPLETED", start, end).
-		Group("order_items.product_id, products.name").
-		Scan(&rows).Error
+		Group("order_items.product_id, products.name, order_items.product_size_id").
+		Scan(&sales).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(sales) == 0 {
+		return []ProductPerf{}, nil
+	}
+
+	productIDs := make([]uuid.UUID, 0, len(sales))
+	seen := map[string]bool{}
+	for _, r := range sales {
+		if seen[r.ProductID] {
+			continue
+		}
+		seen[r.ProductID] = true
+		if id, err := uuid.Parse(r.ProductID); err == nil {
+			productIDs = append(productIDs, id)
+		}
+	}
+
+	recipesByProduct, err := s.inventory.RecipeLinesForProducts(s.db, productIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	// Approximate COGS per product from its recipe lines × avg cost × qty sold.
-	// Size-agnostic: uses any recipe line for the product (sized lines preferred
-	// later; for reporting an average of all lines is acceptable).
-	type costRow struct {
-		ProductID string
-		UnitCost  int64
+	// Ingredient avg costs for recipe valuation.
+	invIDs := map[uuid.UUID]struct{}{}
+	for _, lines := range recipesByProduct {
+		for _, line := range lines {
+			invIDs[line.InventoryID] = struct{}{}
+		}
 	}
-	var costs []costRow
-	_ = s.db.Raw(`
-		SELECT r.product_id::text as product_id,
-			COALESCE(SUM(r.quantity_required * i.avg_cost_micros), 0) as unit_cost
-		FROM recipes r
-		JOIN inventories i ON i.id = r.inventory_id
-		GROUP BY r.product_id
-	`).Scan(&costs).Error
-	costByProduct := map[string]int64{}
-	for _, c := range costs {
-		costByProduct[c.ProductID] = c.UnitCost
+	costByInv := map[uuid.UUID]int64{}
+	if len(invIDs) > 0 {
+		ids := make([]uuid.UUID, 0, len(invIDs))
+		for id := range invIDs {
+			ids = append(ids, id)
+		}
+		var invs []domain.Inventory
+		if err := s.db.Select("id", "avg_cost_micros").Where("id IN ?", ids).Find(&invs).Error; err != nil {
+			return nil, err
+		}
+		for _, inv := range invs {
+			costByInv[inv.ID] = inv.AvgCostMicros
+		}
 	}
 
-	out := make([]ProductPerf, 0, len(rows))
-	for _, r := range rows {
-		unitCost := costByProduct[r.ProductID]
-		cost := domain.ValueFromMicros(unitCost, int64(r.Quantity))
-		profit := r.Revenue - cost
+	type agg struct {
+		name     string
+		quantity int
+		revenue  int
+		cost     int
+	}
+	byProduct := map[string]*agg{}
+	for _, sale := range sales {
+		pid, err := uuid.Parse(sale.ProductID)
+		if err != nil {
+			continue
+		}
+		sizeID := uuid.Nil
+		if sale.ProductSizeID != nil && *sale.ProductSizeID != "" {
+			if parsed, err := uuid.Parse(*sale.ProductSizeID); err == nil {
+				sizeID = parsed
+			}
+		}
+		recipes := pickRecipeLines(recipesByProduct[pid], sizeID)
+		var unitMicros int64
+		for _, recipe := range recipes {
+			unitMicros += recipe.QuantityRequired * costByInv[recipe.InventoryID]
+		}
+		lineCost := domain.ValueFromMicros(unitMicros, int64(sale.Quantity))
+
+		a := byProduct[sale.ProductID]
+		if a == nil {
+			a = &agg{name: sale.ProductName}
+			byProduct[sale.ProductID] = a
+		}
+		a.quantity += sale.Quantity
+		a.revenue += sale.Revenue
+		a.cost += lineCost
+	}
+
+	out := make([]ProductPerf, 0, len(byProduct))
+	for id, a := range byProduct {
+		profit := a.revenue - a.cost
 		margin := 0.0
-		if r.Revenue > 0 {
-			margin = (float64(profit) / float64(r.Revenue)) * 100
+		if a.revenue > 0 {
+			margin = (float64(profit) / float64(a.revenue)) * 100
 		}
 		out = append(out, ProductPerf{
-			ProductID:   r.ProductID,
-			ProductName: r.ProductName,
-			Quantity:    r.Quantity,
-			Revenue:     r.Revenue,
-			Cost:        cost,
+			ProductID:   id,
+			ProductName: a.name,
+			Quantity:    a.quantity,
+			Revenue:     a.revenue,
+			Cost:        a.cost,
 			Profit:      profit,
 			MarginPct:   margin,
 		})
