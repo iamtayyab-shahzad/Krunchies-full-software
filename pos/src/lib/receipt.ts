@@ -109,6 +109,7 @@ export type KitchenLineMeta = {
   crust?: string;
   toppings?: string;
   extras?: string;
+  flavor?: string;
   notes?: string;
 };
 
@@ -118,7 +119,16 @@ export function encodeKitchenInstructions(meta: KitchenLineMeta): string {
   if (meta.crust?.trim()) parts.push(`Crust: ${meta.crust.trim()}`);
   if (meta.toppings?.trim()) parts.push(`Toppings: ${meta.toppings.trim()}`);
   if (meta.extras?.trim()) parts.push(`Extras: ${meta.extras.trim()}`);
-  if (meta.notes?.trim()) parts.push(meta.notes.trim());
+  if (meta.flavor?.trim()) parts.push(`Flavor: ${meta.flavor.trim()}`);
+  if (meta.notes?.trim()) {
+    const notes = meta.notes.trim();
+    // Avoid duplicating Flavor: if already passed as notes (drink picker).
+    if (!/^Flavor:\s*/i.test(notes)) {
+      parts.push(notes);
+    } else if (!meta.flavor?.trim()) {
+      parts.push(notes);
+    }
+  }
   return parts.join(" | ");
 }
 
@@ -129,6 +139,7 @@ export function decodeKitchenInstructions(
   const crust = text.match(/Crust:\s*([^|]+)/i)?.[1]?.trim();
   const toppings = text.match(/Toppings:\s*([^|]+)/i)?.[1]?.trim();
   const extras = text.match(/Extras:\s*([^|]+)/i)?.[1]?.trim();
+  const flavor = text.match(/Flavor:\s*([^|]+)/i)?.[1]?.trim();
   const notes = text
     .split("|")
     .map((p) => p.trim())
@@ -137,10 +148,11 @@ export function decodeKitchenInstructions(
         p &&
         !/^Crust:/i.test(p) &&
         !/^Toppings:/i.test(p) &&
-        !/^Extras:/i.test(p),
+        !/^Extras:/i.test(p) &&
+        !/^Flavor:/i.test(p),
     )
     .join(" | ");
-  return { crust, toppings, extras, notes: notes || undefined };
+  return { crust, toppings, extras, flavor, notes: notes || undefined };
 }
 
 function itemName(item: OrderItem) {
@@ -229,6 +241,7 @@ export function buildKitchenReceiptHtml(order: Order) {
         meta.crust ? `Crust: ${meta.crust}` : "",
         meta.toppings ? `Toppings: ${meta.toppings}` : "",
         meta.extras ? `Extras: ${meta.extras}` : "",
+        meta.flavor ? `Flavor: ${meta.flavor}` : "",
         meta.notes || "",
       ]
         .filter(Boolean)

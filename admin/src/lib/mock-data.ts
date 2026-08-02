@@ -76,6 +76,7 @@ export type RestaurantSettings = {
   closingHours: string;
   currency: string;
   cashOnDeliveryFee: number;
+  drinkFlavors: string[];
 };
 
 export type Customer = {
@@ -401,6 +402,7 @@ export const mockRestaurantSettings: RestaurantSettings = {
   closingHours: "11:00 PM",
   currency: "Rs",
   cashOnDeliveryFee: 50,
+  drinkFlavors: ["Coke", "Sprite", "Fanta"],
 };
 
 export const mockInventory: InventoryItem[] = [

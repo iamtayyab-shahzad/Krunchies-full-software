@@ -20,6 +20,7 @@ import {
 import { useBill } from "@/context/bill-context";
 import { useMenuSearch } from "@/context/menu-search-context";
 import { requiresDealFlavorChoice } from "@/lib/deal-flavors";
+import { requiresDrinkFlavor } from "@/lib/drink-flavors";
 import {
   calcCodFee,
   calcGrandTotal,
@@ -51,6 +52,12 @@ const DealFlavorDialog = dynamic(
   { ssr: false },
 );
 
+const DrinkFlavorDialog = dynamic(
+  () =>
+    import("@/components/drink-flavor-dialog").then((m) => m.DrinkFlavorDialog),
+  { ssr: false },
+);
+
 export default function NewOrderPage() {
   const qc = useQueryClient();
   const bill = useBill();
@@ -58,6 +65,7 @@ export default function NewOrderPage() {
   const [categoryId, setCategoryId] = useState("all");
   const [busy, setBusy] = useState(false);
   const [dealProduct, setDealProduct] = useState<Product | null>(null);
+  const [drinkProduct, setDrinkProduct] = useState<Product | null>(null);
   const isWalkin = bill.orderType === "walkin";
   const paymentOptions = paymentsForOrderType(bill.orderType);
 
@@ -147,6 +155,10 @@ export default function NewOrderPage() {
         setDealProduct(product);
         return;
       }
+      if (requiresDrinkFlavor(product)) {
+        setDrinkProduct(product);
+        return;
+      }
       bill.addProduct(product, sizes[0]);
       if (sizes.length > 1) {
         toast.message(`${product.name} added (${sizes[0].size})`);
@@ -162,6 +174,15 @@ export default function NewOrderPage() {
   ) => {
     bill.addProduct(product, size, { special_instructions: flavorNote });
     toast.success(`${product.name} added with pizza flavors`);
+  };
+
+  const onDrinkConfirm = (
+    product: Product,
+    size: ProductSize,
+    flavorNote: string,
+  ) => {
+    bill.addProduct(product, size, { special_instructions: flavorNote });
+    toast.success(`${product.name} added (${flavorNote.replace(/^Flavor:\s*/i, "")})`);
   };
 
   const buildPayload = () => {
@@ -880,6 +901,15 @@ export default function NewOrderPage() {
           if (!open) setDealProduct(null);
         }}
         onConfirm={onDealConfirm}
+      />
+      <DrinkFlavorDialog
+        open={Boolean(drinkProduct)}
+        product={drinkProduct}
+        flavorsRaw={settings?.drink_flavors}
+        onOpenChange={(open) => {
+          if (!open) setDrinkProduct(null);
+        }}
+        onConfirm={onDrinkConfirm}
       />
     </div>
   );

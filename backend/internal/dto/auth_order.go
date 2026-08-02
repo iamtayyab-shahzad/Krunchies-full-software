@@ -78,6 +78,7 @@ type UpdateSettingsRequest struct {
 	GoogleMaps        *string `json:"google_maps" binding:"omitempty,max=500"`
 	Facebook          *string `json:"facebook" binding:"omitempty,max=500"`
 	Instagram         *string `json:"instagram" binding:"omitempty,max=500"`
+	DrinkFlavors      *string `json:"drink_flavors" binding:"omitempty,max=2000"`
 }
 
 type TokenResponse struct {

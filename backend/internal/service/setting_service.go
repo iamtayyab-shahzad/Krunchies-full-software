@@ -2,6 +2,7 @@ package service
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,6 +56,7 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 			CashOnDeliveryFee: 0,
 			OpeningTime:       "11:00 AM",
 			ClosingTime:       "11:00 PM",
+			DrinkFlavors:      `["Coke","Sprite","Fanta"]`,
 		}
 		if createErr := s.db.Create(&setting).Error; createErr != nil {
 			return nil, createErr
@@ -68,6 +70,10 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(setting.DrinkFlavors) == "" {
+		setting.DrinkFlavors = `["Coke","Sprite","Fanta"]`
+		_ = s.db.Model(&setting).Update("drink_flavors", setting.DrinkFlavors).Error
 	}
 
 	s.mu.Lock()
@@ -135,6 +141,10 @@ func (s *SettingService) UpdateFromDTO(input dto.UpdateSettingsRequest) (*domain
 	if input.Instagram != nil {
 		patch.Instagram = *input.Instagram
 		cols = append(cols, "Instagram")
+	}
+	if input.DrinkFlavors != nil {
+		patch.DrinkFlavors = *input.DrinkFlavors
+		cols = append(cols, "DrinkFlavors")
 	}
 	if len(cols) == 0 {
 		return nil, utils.NewAppError(http.StatusBadRequest, "no fields to update")

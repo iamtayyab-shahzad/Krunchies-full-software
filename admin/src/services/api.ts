@@ -69,6 +69,7 @@ type BackendSetting = {
   google_maps: string;
   facebook: string;
   instagram: string;
+  drink_flavors?: string;
 };
 
 type BackendInventory = {
@@ -462,6 +463,7 @@ export type SettingsUpdatePayload = {
   google_maps?: string;
   facebook?: string;
   instagram?: string;
+  drink_flavors?: string;
 };
 
 export const settingsApi = {

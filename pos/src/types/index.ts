@@ -135,6 +135,8 @@ export interface Settings extends BaseEntity {
   google_maps: string;
   facebook: string;
   instagram: string;
+  /** JSON string array of soft-drink flavors available in shop. */
+  drink_flavors?: string;
 }
 
 export type PaymentMethod =

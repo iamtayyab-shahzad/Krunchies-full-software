@@ -7,11 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  parseDrinkFlavors,
+  serializeDrinkFlavors,
+} from "@/lib/drink-flavors";
 import { mockRestaurantSettings, type RestaurantSettings } from "@/lib/mock-data";
 import { settingsApi } from "@/services/api";
 
 export default function RestaurantSettingsPage() {
   const [form, setForm] = useState<RestaurantSettings>(mockRestaurantSettings);
+  const [newFlavor, setNewFlavor] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -30,6 +35,7 @@ export default function RestaurantSettingsPage() {
           closingHours: s.closing_time || "",
           currency: s.currency || "Rs",
           cashOnDeliveryFee: s.cash_on_delivery_fee ?? 0,
+          drinkFlavors: parseDrinkFlavors(s.drink_flavors),
         });
       })
       .catch((e) =>
@@ -45,6 +51,17 @@ export default function RestaurantSettingsPage() {
     };
   }, []);
 
+  const addFlavor = () => {
+    const name = newFlavor.trim();
+    if (!name) return;
+    if (form.drinkFlavors.some((f) => f.toLowerCase() === name.toLowerCase())) {
+      toast.error("Flavor already in the list");
+      return;
+    }
+    setForm({ ...form, drinkFlavors: [...form.drinkFlavors, name] });
+    setNewFlavor("");
+  };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -57,6 +74,7 @@ export default function RestaurantSettingsPage() {
         closing_time: form.closingHours,
         currency: form.currency,
         cash_on_delivery_fee: Number(form.cashOnDeliveryFee || 0),
+        drink_flavors: serializeDrinkFlavors(form.drinkFlavors),
       });
       toast.success("Restaurant settings saved");
     } catch (e) {
@@ -80,7 +98,7 @@ export default function RestaurantSettingsPage() {
     <div>
       <PageHeader
         title="Restaurant Settings"
-        description="Core restaurant identity, hours, currency, and COD fee"
+        description="Core restaurant identity, hours, currency, COD fee, and drink flavors"
         action={
           <Button onClick={save} disabled={saving}>
             {saving ? "Saving..." : "Save Settings"}
@@ -168,6 +186,58 @@ export default function RestaurantSettingsPage() {
                 })
               }
             />
+          </div>
+        </div>
+
+        <div className="space-y-3 border-t border-zinc-800 pt-4">
+          <div>
+            <Label>Cold Drink Flavors</Label>
+            <p className="mt-1 text-sm text-zinc-500">
+              Shown when ordering 500 ml / 1 L / 1.5 L / 2.25 L drinks. Remove a
+              brand if it is not in stock.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {form.drinkFlavors.map((flavor) => (
+              <span
+                key={flavor}
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-bold"
+              >
+                {flavor}
+                <button
+                  type="button"
+                  className="text-red-400 hover:text-red-300"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      drinkFlavors: form.drinkFlavors.filter((f) => f !== flavor),
+                    })
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {!form.drinkFlavors.length ? (
+              <span className="text-sm text-zinc-500">No flavors yet</span>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              className="max-w-xs"
+              placeholder="e.g. Pepsi"
+              value={newFlavor}
+              onChange={(e) => setNewFlavor(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addFlavor();
+                }
+              }}
+            />
+            <Button type="button" variant="secondary" onClick={addFlavor}>
+              Add Flavor
+            </Button>
           </div>
         </div>
       </Card>

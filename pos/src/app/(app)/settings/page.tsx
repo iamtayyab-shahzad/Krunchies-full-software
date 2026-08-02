@@ -15,6 +15,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatPrice } from "@/lib/utils";
+import {
+  parseDrinkFlavors,
+  serializeDrinkFlavors,
+} from "@/lib/drink-flavors";
 import { locationsApi, offersApi, settingsApi } from "@/services/api";
 import type { Location, Offer } from "@/types";
 
@@ -33,6 +37,8 @@ export default function SettingsPage() {
     facebook: "",
     instagram: "",
   });
+  const [drinkFlavors, setDrinkFlavors] = useState<string[]>([]);
+  const [newFlavor, setNewFlavor] = useState("");
   const [locOpen, setLocOpen] = useState(false);
   const [offerOpen, setOfferOpen] = useState(false);
   const [locForm, setLocForm] = useState({ name: "", delivery_charge: 0 });
@@ -72,13 +78,26 @@ export default function SettingsPage() {
       facebook: settings.facebook || "",
       instagram: settings.instagram || "",
     });
+    setDrinkFlavors(parseDrinkFlavors(settings.drink_flavors));
   }, [settings]);
+
+  const addDrinkFlavor = () => {
+    const name = newFlavor.trim();
+    if (!name) return;
+    if (drinkFlavors.some((f) => f.toLowerCase() === name.toLowerCase())) {
+      toast.error("Flavor already in the list");
+      return;
+    }
+    setDrinkFlavors((prev) => [...prev, name]);
+    setNewFlavor("");
+  };
 
   const saveSettings = async () => {
     try {
       const res = await settingsApi.update({
         ...form,
         cash_on_delivery_fee: Number(form.cash_on_delivery_fee),
+        drink_flavors: serializeDrinkFlavors(drinkFlavors),
       });
       toast.success(
         res.offline ? res.message || "Settings saved offline" : "Settings saved",
@@ -157,6 +176,56 @@ export default function SettingsPage() {
         </div>
         <Button className="mt-4" size="lg" onClick={saveSettings}>
           Save Settings
+        </Button>
+      </section>
+
+      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+        <h2 className="mb-2 text-xl font-bold">Cold Drink Flavors</h2>
+        <p className="mb-4 text-sm text-zinc-400">
+          Brands available for 500 ml / 1 L / 1.5 L / 2.25 L drinks. Remove a
+          flavor if it is out of stock; add it back when it returns.
+        </p>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {drinkFlavors.map((flavor) => (
+            <span
+              key={flavor}
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-black/40 px-3 py-2 text-sm font-bold"
+            >
+              {flavor}
+              <button
+                type="button"
+                className="text-red-400 hover:text-red-300"
+                onClick={() =>
+                  setDrinkFlavors((prev) => prev.filter((f) => f !== flavor))
+                }
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {!drinkFlavors.length ? (
+            <span className="text-sm text-zinc-500">No flavors — add one below</span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            className="max-w-xs"
+            placeholder="e.g. Coke, Sprite, Fanta, Pepsi"
+            value={newFlavor}
+            onChange={(e) => setNewFlavor(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addDrinkFlavor();
+              }
+            }}
+          />
+          <Button type="button" variant="secondary" onClick={addDrinkFlavor}>
+            Add Flavor
+          </Button>
+        </div>
+        <Button className="mt-4" size="lg" onClick={saveSettings}>
+          Save Flavors
         </Button>
       </section>
 

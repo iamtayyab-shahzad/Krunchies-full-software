@@ -132,6 +132,13 @@
       "name": "Deals",
       "slug": "deals",
       "image": "/products/deals/birthday.webp",
+      "displayOrder": 13
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000013",
+      "name": "Cold Drinks",
+      "slug": "cold-drinks",
+      "image": "/products/cold-drinks/soft-drink.webp",
       "displayOrder": 12
     }
   ],
@@ -1453,6 +1460,141 @@
           "name": "Deal",
           "price": 4750,
           "wasPrice": 5200
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000081",
+      "category": "cold-drinks",
+      "name": "Regular Drink",
+      "description": "Regular soft drink. Choose flavor when ordering where required.",
+      "image": "/products/cold-drinks/soft-drink.webp",
+      "featured": false,
+      "requiresDrinkFlavor": false,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 90
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000082",
+      "category": "cold-drinks",
+      "name": "500 ml Drink",
+      "description": "500 ml soft drink bottle. Choose Coke, Sprite, Fanta or another available flavor.",
+      "image": "/products/cold-drinks/soft-drink.webp",
+      "featured": false,
+      "requiresDrinkFlavor": true,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 120
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000083",
+      "category": "cold-drinks",
+      "name": "1 Liter Drink",
+      "description": "1 liter soft drink bottle. Choose Coke, Sprite, Fanta or another available flavor.",
+      "image": "/products/cold-drinks/soft-drink.webp",
+      "featured": false,
+      "requiresDrinkFlavor": true,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 180
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000084",
+      "category": "cold-drinks",
+      "name": "1.5 Liter Drink",
+      "description": "1.5 liter soft drink bottle. Choose Coke, Sprite, Fanta or another available flavor.",
+      "image": "/products/cold-drinks/soft-drink.webp",
+      "featured": false,
+      "requiresDrinkFlavor": true,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 200
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000085",
+      "category": "cold-drinks",
+      "name": "2.25 Liter Drink",
+      "description": "2.25 liter soft drink bottle. Choose Coke, Sprite, Fanta or another available flavor.",
+      "image": "/products/cold-drinks/soft-drink.webp",
+      "featured": false,
+      "requiresDrinkFlavor": true,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 250
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000086",
+      "category": "cold-drinks",
+      "name": "Tin",
+      "description": "Soft drink tin / can.",
+      "image": "/products/cold-drinks/soft-drink.webp",
+      "featured": false,
+      "requiresDrinkFlavor": false,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 120
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000087",
+      "category": "cold-drinks",
+      "name": "Regular Sting",
+      "description": "Regular Sting energy drink.",
+      "image": "/products/cold-drinks/soft-drink.webp",
+      "featured": false,
+      "requiresDrinkFlavor": false,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 140
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000088",
+      "category": "cold-drinks",
+      "name": "Mineral Water Small",
+      "description": "Small mineral water bottle.",
+      "image": "/products/cold-drinks/mineral-water.webp",
+      "featured": false,
+      "requiresDrinkFlavor": false,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 60
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000089",
+      "category": "cold-drinks",
+      "name": "Mineral Water Large",
+      "description": "Large mineral water bottle.",
+      "image": "/products/cold-drinks/mineral-water.webp",
+      "featured": false,
+      "requiresDrinkFlavor": false,
+      "sizes": [
+        {
+          "name": "Regular",
+          "price": 120
         }
       ]
     }

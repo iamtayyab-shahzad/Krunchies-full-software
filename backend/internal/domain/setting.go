@@ -14,4 +14,7 @@ type Setting struct {
 	GoogleMaps        string `gorm:"size:500" json:"google_maps"`
 	Facebook          string `gorm:"size:500" json:"facebook"`
 	Instagram         string `gorm:"size:500" json:"instagram"`
+	// DrinkFlavors is a JSON string array of soft-drink brands in stock
+	// (e.g. ["Coke","Sprite","Fanta"]). Shop owners add/remove flavors here.
+	DrinkFlavors string `gorm:"type:text" json:"drink_flavors"`
 }

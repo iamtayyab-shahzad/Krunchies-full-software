@@ -13,6 +13,11 @@ import {
   DealFlavorSelector,
   type DealFlavorState,
 } from "@/components/menu/deal-flavor-selector";
+import {
+  DrinkFlavorSelector,
+  type DrinkFlavorState,
+} from "@/components/menu/drink-flavor-selector";
+import { useSettings } from "@/hooks/use-settings";
 import { cn, formatPrice } from "@/lib/utils";
 import { getProductById } from "@/services/api";
 import type { Product, ProductSize } from "@/types";
@@ -20,6 +25,7 @@ import type { Product, ProductSize } from "@/types";
 export default function ProductDetailsPage() {
   const params = useParams<{ id: string }>();
   const { addItem } = useCart();
+  const { settings } = useSettings();
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -30,9 +36,18 @@ export default function ProductDetailsPage() {
     complete: true,
     hasSlots: false,
   });
+  const [drinkFlavors, setDrinkFlavors] = useState<DrinkFlavorState>({
+    note: "",
+    complete: true,
+    needed: false,
+  });
 
   const handleFlavorChange = useCallback(
     (state: DealFlavorState) => setDealFlavors(state),
+    [],
+  );
+  const handleDrinkFlavorChange = useCallback(
+    (state: DrinkFlavorState) => setDrinkFlavors(state),
     [],
   );
 
@@ -68,7 +83,15 @@ export default function ProductDetailsPage() {
       toast.error("Please select a flavor for each pizza in this deal");
       return;
     }
-    const combinedInstructions = [dealFlavors.note, instructions.trim()]
+    if (drinkFlavors.needed && !drinkFlavors.complete) {
+      toast.error("Please choose a drink flavor");
+      return;
+    }
+    const combinedInstructions = [
+      dealFlavors.note,
+      drinkFlavors.note,
+      instructions.trim(),
+    ]
       .filter(Boolean)
       .join(" | ");
     addItem(product, selectedSize, quantity, combinedInstructions || undefined);
@@ -94,8 +117,19 @@ export default function ProductDetailsPage() {
         <h1 className="mt-2 font-display text-5xl text-white">{product.name}</h1>
         <p className="mt-4 text-zinc-400">{product.description}</p>
 
-        <div className={dealFlavors.hasSlots ? "relative z-20 mt-8" : ""}>
+        <div
+          className={
+            dealFlavors.hasSlots || drinkFlavors.needed
+              ? "relative z-20 mt-8 space-y-4"
+              : "mt-8 space-y-4"
+          }
+        >
           <DealFlavorSelector product={product} onChange={handleFlavorChange} />
+          <DrinkFlavorSelector
+            product={product}
+            flavorsRaw={settings?.drink_flavors}
+            onChange={handleDrinkFlavorChange}
+          />
         </div>
 
         <div className="mt-8">

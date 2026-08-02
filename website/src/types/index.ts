@@ -58,6 +58,8 @@ export interface Settings {
   instagram: string;
   address: string;
   email: string;
+  /** JSON string array of soft-drink flavors available in shop. */
+  drink_flavors?: string;
 }
 
 export type PaymentMethod = "easypaisa" | "jazzcash" | "bank" | "cod";

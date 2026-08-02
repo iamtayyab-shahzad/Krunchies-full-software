@@ -18,7 +18,13 @@ import {
   DealFlavorSelector,
   type DealFlavorState,
 } from "@/components/menu/deal-flavor-selector";
+import {
+  DrinkFlavorSelector,
+  type DrinkFlavorState,
+} from "@/components/menu/drink-flavor-selector";
 import { isDealProduct, parseDealPizzaSlots } from "@/lib/deal-flavors";
+import { requiresDrinkFlavor } from "@/lib/drink-flavors";
+import { useSettings } from "@/hooks/use-settings";
 import { cn, formatPrice } from "@/lib/utils";
 import type { Product, ProductSize } from "@/types";
 
@@ -39,12 +45,18 @@ function initialDealFlavorState(product: Product): DealFlavorState {
   };
 }
 
+function initialDrinkFlavorState(product: Product): DrinkFlavorState {
+  const needed = requiresDrinkFlavor(product);
+  return { note: "", complete: !needed, needed };
+}
+
 export function ProductModal({
   product,
   open,
   onOpenChange,
 }: ProductModalProps) {
   const { addItem } = useCart();
+  const { settings } = useSettings();
   const [selectedSize, setSelectedSize] = useState<ProductSize>(
     product.sizes[0],
   );
@@ -53,9 +65,16 @@ export function ProductModal({
   const [dealFlavors, setDealFlavors] = useState<DealFlavorState>(() =>
     initialDealFlavorState(product),
   );
+  const [drinkFlavors, setDrinkFlavors] = useState<DrinkFlavorState>(() =>
+    initialDrinkFlavorState(product),
+  );
 
   const handleFlavorChange = useCallback(
     (state: DealFlavorState) => setDealFlavors(state),
+    [],
+  );
+  const handleDrinkFlavorChange = useCallback(
+    (state: DrinkFlavorState) => setDrinkFlavors(state),
     [],
   );
 
@@ -65,6 +84,7 @@ export function ProductModal({
     setQuantity(1);
     setInstructions("");
     setDealFlavors(initialDealFlavorState(product));
+    setDrinkFlavors(initialDrinkFlavorState(product));
   }, [open, product]);
 
   const handleAdd = () => {
@@ -74,8 +94,16 @@ export function ProductModal({
       toast.error("Please select a flavor for each pizza in this deal");
       return;
     }
+    if (drinkFlavors.needed && !drinkFlavors.complete) {
+      toast.error("Please choose a drink flavor");
+      return;
+    }
 
-    const combinedInstructions = [dealFlavors.note, instructions.trim()]
+    const combinedInstructions = [
+      dealFlavors.note,
+      drinkFlavors.note,
+      instructions.trim(),
+    ]
       .filter(Boolean)
       .join(" | ");
 
@@ -91,7 +119,7 @@ export function ProductModal({
     setInstructions("");
   };
 
-  const showFlavorsFirst = dealFlavors.hasSlots;
+  const showFlavorsFirst = dealFlavors.hasSlots || drinkFlavors.needed;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -114,6 +142,11 @@ export function ProductModal({
             <DealFlavorSelector
               product={product}
               onChange={handleFlavorChange}
+            />
+            <DrinkFlavorSelector
+              product={product}
+              flavorsRaw={settings?.drink_flavors}
+              onChange={handleDrinkFlavorChange}
             />
           </div>
         )}
@@ -172,10 +205,17 @@ export function ProductModal({
           </div>
 
           {!showFlavorsFirst && (
-            <DealFlavorSelector
-              product={product}
-              onChange={handleFlavorChange}
-            />
+            <>
+              <DealFlavorSelector
+                product={product}
+                onChange={handleFlavorChange}
+              />
+              <DrinkFlavorSelector
+                product={product}
+                flavorsRaw={settings?.drink_flavors}
+                onChange={handleDrinkFlavorChange}
+              />
+            </>
           )}
 
           <div>
