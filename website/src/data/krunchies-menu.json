@@ -138,7 +138,7 @@
       "id": "10000000-0000-4000-8000-000000000013",
       "name": "Cold Drinks",
       "slug": "cold-drinks",
-      "image": "/products/cold-drinks/soft-drink.webp",
+      "image": "/products/cold-drinks/category.webp",
       "displayOrder": 12
     }
   ],
@@ -1468,7 +1468,7 @@
       "category": "cold-drinks",
       "name": "Regular Drink",
       "description": "Regular soft drink. Choose flavor when ordering where required.",
-      "image": "/products/cold-drinks/soft-drink.webp",
+      "image": "/products/cold-drinks/regular-drink.webp",
       "featured": false,
       "requiresDrinkFlavor": false,
       "sizes": [
@@ -1483,7 +1483,7 @@
       "category": "cold-drinks",
       "name": "500 ml Drink",
       "description": "500 ml soft drink bottle. Choose Coke, Sprite, Fanta or another available flavor.",
-      "image": "/products/cold-drinks/soft-drink.webp",
+      "image": "/products/cold-drinks/500ml-drink.webp",
       "featured": false,
       "requiresDrinkFlavor": true,
       "sizes": [
@@ -1498,7 +1498,7 @@
       "category": "cold-drinks",
       "name": "1 Liter Drink",
       "description": "1 liter soft drink bottle. Choose Coke, Sprite, Fanta or another available flavor.",
-      "image": "/products/cold-drinks/soft-drink.webp",
+      "image": "/products/cold-drinks/1-liter-drink.webp",
       "featured": false,
       "requiresDrinkFlavor": true,
       "sizes": [
@@ -1513,7 +1513,7 @@
       "category": "cold-drinks",
       "name": "1.5 Liter Drink",
       "description": "1.5 liter soft drink bottle. Choose Coke, Sprite, Fanta or another available flavor.",
-      "image": "/products/cold-drinks/soft-drink.webp",
+      "image": "/products/cold-drinks/1.5-liter-drink.webp",
       "featured": false,
       "requiresDrinkFlavor": true,
       "sizes": [
@@ -1528,7 +1528,7 @@
       "category": "cold-drinks",
       "name": "2.25 Liter Drink",
       "description": "2.25 liter soft drink bottle. Choose Coke, Sprite, Fanta or another available flavor.",
-      "image": "/products/cold-drinks/soft-drink.webp",
+      "image": "/products/cold-drinks/2.25-liter-drink.webp",
       "featured": false,
       "requiresDrinkFlavor": true,
       "sizes": [
@@ -1543,7 +1543,7 @@
       "category": "cold-drinks",
       "name": "Tin",
       "description": "Soft drink tin / can.",
-      "image": "/products/cold-drinks/soft-drink.webp",
+      "image": "/products/cold-drinks/tin.webp",
       "featured": false,
       "requiresDrinkFlavor": false,
       "sizes": [
@@ -1558,7 +1558,7 @@
       "category": "cold-drinks",
       "name": "Regular Sting",
       "description": "Regular Sting energy drink.",
-      "image": "/products/cold-drinks/soft-drink.webp",
+      "image": "/products/cold-drinks/sting.webp",
       "featured": false,
       "requiresDrinkFlavor": false,
       "sizes": [

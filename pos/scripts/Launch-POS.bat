@@ -16,7 +16,7 @@ REM Tip: If the printer errors after many tickets, restart Chrome and the
 REM Windows Print Spooler. POS queues prints one-at-a-time to reduce that.
 REM ============================================================
 
-set "POS_URL=http://localhost:3001"
+set "POS_URL=https://krunchies-pos-deploy.vercel.app/orders/new"
 
 set "CHROME="
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
