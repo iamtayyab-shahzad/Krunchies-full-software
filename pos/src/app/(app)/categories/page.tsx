@@ -14,6 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { categoriesApi } from "@/services/api";
+import {
+  assertImageFieldSafe,
+  prepareProductImage,
+} from "@/lib/image-upload";
 import type { Category } from "@/types";
 
 export default function CategoriesPage() {
@@ -55,6 +59,7 @@ export default function CategoriesPage() {
       return;
     }
     try {
+      assertImageFieldSafe(form.image || "");
       if (editing) {
         const res = await categoriesApi.update(editing.id, form);
         toast.success(
@@ -158,11 +163,40 @@ export default function CategoriesPage() {
               />
             </div>
             <div className="space-y-1">
-              <Label>Image URL</Label>
+              <Label>Image URL / Upload</Label>
               <Input
-                value={form.image}
+                value={form.image.startsWith("data:") ? "" : form.image}
                 onChange={(e) => setForm({ ...form, image: e.target.value })}
+                placeholder="https://... or /products/..."
               />
+              <Input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  void (async () => {
+                    try {
+                      toast.message("Optimizing image…");
+                      const prepared = await prepareProductImage(file);
+                      setForm((f) => ({ ...f, image: prepared.dataUrl }));
+                      toast.success(
+                        `Image ready (~${Math.round(prepared.bytesApprox / 1024)}KB)`,
+                      );
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : "Image upload failed",
+                      );
+                    }
+                  })();
+                }}
+              />
+              <p className="text-xs text-zinc-500">
+                Max ~400KB after auto-resize (up to 1200px).
+              </p>
             </div>
             <div className="space-y-1">
               <Label>Display Order</Label>

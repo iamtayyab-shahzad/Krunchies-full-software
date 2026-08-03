@@ -21,6 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  assertImageFieldSafe,
+  prepareProductImage,
+} from "@/lib/image-upload";
 import { formatPrice } from "@/lib/utils";
 import { categoriesApi, productsApi } from "@/services/api";
 import type { Product } from "@/types";
@@ -116,16 +120,31 @@ export default function ProductsPage() {
 
   const onImage = (file?: File | null) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setForm((f) => ({ ...f, image: String(reader.result || "") }));
-    };
-    reader.readAsDataURL(file);
+    void (async () => {
+      try {
+        toast.message("Optimizing image…");
+        const prepared = await prepareProductImage(file);
+        setForm((f) => ({ ...f, image: prepared.dataUrl }));
+        toast.success(
+          `Image ready (~${Math.round(prepared.bytesApprox / 1024)}KB)`,
+        );
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Image upload failed",
+        );
+      }
+    })();
   };
 
   const save = async () => {
     if (!form.name.trim() || !form.category_id) {
       toast.error("Name and category required");
+      return;
+    }
+    try {
+      assertImageFieldSafe(form.image);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Image too large");
       return;
     }
     const pizzaSizes: SizeRow[] = useSizes
@@ -311,14 +330,25 @@ export default function ProductsPage() {
               <Label>Image URL or Upload</Label>
               <Input
                 value={form.image.startsWith("data:") ? "" : form.image}
-                placeholder="https://..."
+                placeholder="https://... or /products/..."
                 onChange={(e) => setForm({ ...form, image: e.target.value })}
               />
               <Input
                 type="file"
-                accept="image/*"
-                onChange={(e) => onImage(e.target.files?.[0])}
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  onImage(file);
+                }}
               />
+              <p className="text-xs text-zinc-500">
+                Max ~400KB after auto-resize (up to 1200px). Large phone photos
+                are compressed automatically.
+              </p>
+              {form.image.startsWith("data:") ? (
+                <p className="text-xs text-emerald-500">Optimized image ready</p>
+              ) : null}
             </div>
 
             <label className="flex items-center gap-2 text-sm">

@@ -1573,7 +1573,7 @@
       "category": "cold-drinks",
       "name": "Mineral Water Small",
       "description": "Small mineral water bottle.",
-      "image": "/products/cold-drinks/mineral-water.webp",
+      "image": "/products/cold-drinks/mineral-water-small.webp",
       "featured": false,
       "requiresDrinkFlavor": false,
       "sizes": [
@@ -1588,7 +1588,7 @@
       "category": "cold-drinks",
       "name": "Mineral Water Large",
       "description": "Large mineral water bottle.",
-      "image": "/products/cold-drinks/mineral-water.webp",
+      "image": "/products/cold-drinks/mineral-water-large.webp",
       "featured": false,
       "requiresDrinkFlavor": false,
       "sizes": [

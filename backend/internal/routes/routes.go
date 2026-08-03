@@ -17,6 +17,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 		middleware.RequestID(),
 		middleware.CORS(),
 		middleware.Gzip(),
+		middleware.MaxBodyBytes(middleware.DefaultMaxBodyBytes),
 		middleware.RequestLogger(),
 		middleware.ErrorRecovery(),
 	)

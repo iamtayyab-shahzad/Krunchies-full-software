@@ -19,6 +19,7 @@ import {
   parseDrinkFlavors,
   serializeDrinkFlavors,
 } from "@/lib/drink-flavors";
+import { assertImageFieldSafe } from "@/lib/image-upload";
 import { locationsApi, offersApi, settingsApi } from "@/services/api";
 import type { Location, Offer } from "@/types";
 
@@ -94,6 +95,7 @@ export default function SettingsPage() {
 
   const saveSettings = async () => {
     try {
+      assertImageFieldSafe(String(form.logo || ""));
       const res = await settingsApi.update({
         ...form,
         cash_on_delivery_fee: Number(form.cash_on_delivery_fee),
@@ -125,6 +127,7 @@ export default function SettingsPage() {
 
   const saveOffer = async () => {
     try {
+      assertImageFieldSafe(offerForm.image || "");
       await offersApi.create(offerForm);
       toast.success("Offer created");
       setOfferOpen(false);

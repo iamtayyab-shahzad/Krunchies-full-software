@@ -8,6 +8,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  assertImageFieldSafe,
+  prepareProductImage,
+} from "@/lib/image-upload";
 import { mockWebsiteSettings, type WebsiteSettings } from "@/lib/mock-data";
 import { settingsApi } from "@/services/api";
 
@@ -63,6 +67,12 @@ export default function WebsiteSettingsPage() {
   }, []);
 
   const save = async () => {
+    try {
+      assertImageFieldSafe(form.logo);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Logo image too large");
+      return;
+    }
     setSaving(true);
     try {
       await settingsApi.update({
@@ -124,16 +134,42 @@ export default function WebsiteSettingsPage() {
           <div className="space-y-2">
             <Label>Logo URL</Label>
             <Input
-              value={form.logo}
+              value={form.logo.startsWith("data:") ? "" : form.logo}
               onChange={(e) => setForm({ ...form, logo: e.target.value })}
+              placeholder="https://... or upload below"
             />
             <Input
               type="file"
-              accept="image/*"
-              onChange={() =>
-                toast.message("Mock logo upload — will use backend later")
-              }
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                void (async () => {
+                  try {
+                    toast.message("Optimizing logo…");
+                    const prepared = await prepareProductImage(file);
+                    setForm((f) => ({ ...f, logo: prepared.dataUrl }));
+                    toast.success(
+                      `Logo ready (~${Math.round(prepared.bytesApprox / 1024)}KB)`,
+                    );
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error
+                        ? err.message
+                        : "Logo upload failed",
+                    );
+                  }
+                })();
+              }}
             />
+            <p className="text-xs text-zinc-500">
+              Max ~400KB after auto-resize. Large photos are compressed
+              automatically.
+            </p>
+            {form.logo.startsWith("data:") ? (
+              <p className="text-xs text-emerald-600">Optimized logo ready</p>
+            ) : null}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

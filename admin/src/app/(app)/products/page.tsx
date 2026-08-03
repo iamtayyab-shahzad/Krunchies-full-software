@@ -31,7 +31,10 @@ import {
   type Product,
 } from "@/lib/mock-data";
 import { formatPrice } from "@/lib/utils";
-import { prepareProductImage } from "@/lib/image-upload";
+import {
+  assertImageFieldSafe,
+  prepareProductImage,
+} from "@/lib/image-upload";
 import { categoriesApi, productsApi } from "@/services/api";
 
 const FALLBACK_PRODUCT_IMAGE =
@@ -172,6 +175,12 @@ export default function ProductsPage() {
       toast.error(
         "Use a local path like /products/pizzas/name.webp, or a direct image URL (jpg/png/webp)",
       );
+      return;
+    }
+    try {
+      assertImageFieldSafe(form.image);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Image too large");
       return;
     }
     try {
