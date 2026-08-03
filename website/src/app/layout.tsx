@@ -161,7 +161,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var l=localStorage.getItem("krunchies_locale");if(l==="ur"){document.documentElement.lang="ur";document.documentElement.dir="rtl";document.documentElement.dataset.locale="ur";}}catch(e){}})();`,
+            __html: `(function(){try{var l=localStorage.getItem("krunchies_locale");if(l==="ur"){document.documentElement.lang="ur";document.documentElement.dir="rtl";document.documentElement.dataset.locale="ur";}var t=localStorage.getItem("krunchies_site_theme");if(t==="dim"||t==="light"||t==="warm"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}})();`,
           }}
         />
       </head>

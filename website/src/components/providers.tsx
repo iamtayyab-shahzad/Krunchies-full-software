@@ -6,6 +6,7 @@ import { useState } from "react";
 import { AuthProvider } from "@/context/auth-context";
 import { CartProvider, useCart } from "@/context/cart-context";
 import { LocaleProvider } from "@/i18n/locale-context";
+import { SiteThemeProvider } from "@/context/theme-context";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { MobileCartBar } from "@/components/layout/mobile-cart-bar";
@@ -63,13 +64,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <LocaleProvider>
-        <AuthProvider>
-          <CartProvider>
-            <Shell>{children}</Shell>
-          </CartProvider>
-        </AuthProvider>
-      </LocaleProvider>
+      <SiteThemeProvider>
+        <LocaleProvider>
+          <AuthProvider>
+            <CartProvider>
+              <Shell>{children}</Shell>
+            </CartProvider>
+          </AuthProvider>
+        </LocaleProvider>
+      </SiteThemeProvider>
     </QueryClientProvider>
   );
 }

@@ -10,6 +10,7 @@ import { useAuth } from "@/context/auth-context";
 import { useCart } from "@/context/cart-context";
 import { useLocale } from "@/i18n/locale-context";
 import type { MessageKey } from "@/i18n/messages";
+import { ThemePicker } from "@/components/layout/theme-picker";
 import { SITE_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +103,9 @@ export function Header() {
 
         <div className="flex items-center gap-1 sm:gap-2">
           <div className="hidden sm:block">{langToggle}</div>
+          <div className="hidden sm:block">
+            <ThemePicker compact />
+          </div>
 
           <Button asChild variant="ghost" size="icon" className="relative h-11 w-11">
             <Link href="/cart" aria-label={t("nav_cart")}>
@@ -151,7 +155,10 @@ export function Header() {
 
       {open && (
         <div className="border-t border-white/10 bg-black px-4 py-4 md:hidden">
-          <div className="mb-3">{langToggle}</div>
+          <div className="mb-3 flex items-center gap-2">
+            {langToggle}
+            <ThemePicker compact />
+          </div>
           <nav className="flex flex-col gap-1">
             {NAV.map((link) => (
               <Link

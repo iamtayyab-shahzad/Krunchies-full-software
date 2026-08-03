@@ -122,7 +122,7 @@ export function PhoneSuggest({
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-zinc-700 bg-zinc-950 py-1 shadow-lg"
+          className="phone-suggest-panel absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border py-1 shadow-lg"
         >
           {suggestions.map((c, idx) => {
             const phone = formatPkPhone(c.phone);
@@ -134,15 +134,15 @@ export function PhoneSuggest({
                   aria-selected={idx === active}
                   className={cn(
                     "flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm",
-                    idx === active
-                      ? "bg-orange-500/20 text-orange-100"
-                      : "text-zinc-100 hover:bg-zinc-900",
+                    idx === active ? "row-active" : "row-idle",
                   )}
                   onMouseEnter={() => setActive(idx)}
                   onClick={() => pick(c)}
                 >
-                  <span className="font-semibold tabular-nums">{phone}</span>
-                  <span className="truncate text-xs text-zinc-300">
+                  <span className="phone-line font-semibold tabular-nums">
+                    {phone}
+                  </span>
+                  <span className="meta-line truncate text-xs">
                     {c.name || "Customer"}
                     {c.address ? ` · ${c.address}` : ""}
                   </span>

@@ -87,3 +87,51 @@ html[data-theme="light"] .text-zinc-600 {
 html[data-theme="light"] .bg-black\/80 {
   background-color: rgb(0 0 0 / 0.45) !important;
 }
+
+/* Phone suggestions — high contrast in both themes (avoid white-on-white) */
+.phone-suggest-panel {
+  background: #09090b;
+  border-color: #3f3f46;
+}
+.phone-suggest-panel .phone-line {
+  color: #fafafa;
+}
+.phone-suggest-panel .meta-line {
+  color: #a1a1aa;
+}
+.phone-suggest-panel .row-idle:hover {
+  background: #18181b;
+}
+.phone-suggest-panel .row-active {
+  background: rgba(249, 115, 22, 0.28);
+}
+.phone-suggest-panel .row-active .phone-line {
+  color: #fff7ed;
+}
+.phone-suggest-panel .row-active .meta-line {
+  color: #fed7aa;
+}
+
+html[data-theme="light"] .phone-suggest-panel {
+  background: #ffffff;
+  border-color: #d4d4d8;
+}
+html[data-theme="light"] .phone-suggest-panel .phone-line {
+  color: #18181b;
+}
+html[data-theme="light"] .phone-suggest-panel .meta-line {
+  color: #52525b;
+}
+html[data-theme="light"] .phone-suggest-panel .row-idle:hover {
+  background: #f4f4f5;
+}
+html[data-theme="light"] .phone-suggest-panel .row-active {
+  background: #ffedd5;
+}
+html[data-theme="light"] .phone-suggest-panel .row-active .phone-line {
+  color: #9a3412;
+}
+html[data-theme="light"] .phone-suggest-panel .row-active .meta-line {
+  color: #c2410c;
+}
+

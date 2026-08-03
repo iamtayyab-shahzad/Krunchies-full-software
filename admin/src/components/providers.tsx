@@ -3,7 +3,20 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { AuthProvider } from "@/context/auth-context";
+import { ThemeProvider, useAdminTheme } from "@/context/theme-context";
 import { Toaster } from "sonner";
+
+function ThemedToaster() {
+  const { theme } = useAdminTheme();
+  const light = theme === "light";
+  return (
+    <Toaster
+      theme={light ? "light" : "dark"}
+      position="top-right"
+      richColors
+    />
+  );
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -21,10 +34,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <AuthProvider>
-        {children}
-        <Toaster theme="dark" position="top-right" richColors />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          {children}
+          <ThemedToaster />
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

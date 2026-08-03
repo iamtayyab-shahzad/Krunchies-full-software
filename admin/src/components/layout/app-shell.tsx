@@ -20,10 +20,13 @@ import {
   Globe,
   Wallet,
   X,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
+import { useAdminTheme } from "@/context/theme-context";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -73,6 +76,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, ready, logout } = useAuth();
+  const { theme, toggleTheme } = useAdminTheme();
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -175,6 +179,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Krunchies Pizza
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            title={theme === "light" ? "Switch to dark" : "Light background"}
+            aria-label="Toggle appearance"
+          >
+            {theme === "light" ? (
+              <Moon className="h-5 w-5" />
+            ) : (
+              <Sun className="h-5 w-5" />
+            )}
+          </Button>
         </header>
         <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
           {children}

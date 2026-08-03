@@ -29,6 +29,13 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${geist.variable} h-full`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("admin-theme");if(t==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="h-full bg-black font-sans text-white antialiased" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
