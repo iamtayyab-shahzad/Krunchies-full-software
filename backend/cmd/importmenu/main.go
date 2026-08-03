@@ -234,9 +234,50 @@ func main() {
 	fmt.Printf("Imported catalog: %d locations, %d categories, %d products, %d sizes, %d offers\n",
 		len(locations), len(categories), len(products), len(sizes), len(offers))
 
+	// Per-category breakdown so missing products are obvious in the log.
+	type catCount struct {
+		Name  string
+		Count int64
+	}
+	var counts []catCount
+	_ = db.Raw(`
+		SELECT c.name as name, COUNT(p.id) as count
+		FROM categories c
+		LEFT JOIN products p ON p.category_id = c.id
+		GROUP BY c.id, c.name
+		ORDER BY c.display_order, c.name
+	`).Scan(&counts).Error
+	for _, row := range counts {
+		fmt.Printf("  category %-24s → %d product(s)\n", row.Name, row.Count)
+	}
+
+	var coldCount int64
+	_ = db.Raw(`
+		SELECT COUNT(*) FROM products p
+		JOIN categories c ON c.id = p.category_id
+		WHERE c.id = ? OR lower(c.name) = 'cold drinks'
+	`, uuid.MustParse("10000000-0000-4000-8000-000000000013")).Scan(&coldCount)
+	menuCold := 0
+	for _, p := range menu.Products {
+		if p.Category == "cold-drinks" {
+			menuCold++
+		}
+	}
+	if menuCold > 0 && coldCount < int64(menuCold) {
+		log.Fatalf(
+			"Cold Drinks incomplete: menu file has %d products but database only has %d under that category. Re-check MENU_FILE path / redeploy backend so shared/krunchies-menu.json includes the drink products.",
+			menuCold, coldCount,
+		)
+	}
+	if menuCold > 0 {
+		fmt.Printf("Cold Drinks OK: %d product(s) in database\n", coldCount)
+	}
+
 	if *prune {
 		pruneNonMenuRows(db, catIDs, prodIDs, sizeIDs, offerIDs, locationIDs)
 	}
+	// Always safe: only removes empty categories that duplicate a filled menu category name.
+	pruneEmptyDuplicateCategories(db)
 	fmt.Println("Menu import complete.")
 }
 
@@ -297,6 +338,29 @@ func pruneNonMenuRows(db *gorm.DB, catIDs, prodIDs, sizeIDs, offerIDs, locationI
 		} else if res.RowsAffected > 0 {
 			fmt.Printf("Pruned %d stale location(s)\n", res.RowsAffected)
 		}
+	}
+}
+
+// pruneEmptyDuplicateCategories removes Admin-created empty categories that
+// share a name with a menu category that already has products (e.g. a blank
+// "Cold Drinks" left behind while importmenu owns the real UUID).
+func pruneEmptyDuplicateCategories(db *gorm.DB) {
+	res := db.Exec(`
+		DELETE FROM categories c
+		WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.category_id = c.id)
+		  AND EXISTS (
+		    SELECT 1 FROM categories keep
+		    WHERE keep.id <> c.id
+		      AND lower(keep.name) = lower(c.name)
+		      AND EXISTS (SELECT 1 FROM products p2 WHERE p2.category_id = keep.id)
+		  )
+	`)
+	if res.Error != nil {
+		log.Printf("prune empty duplicate categories: %v", res.Error)
+		return
+	}
+	if res.RowsAffected > 0 {
+		fmt.Printf("Pruned %d empty duplicate category(ies)\n", res.RowsAffected)
 	}
 }
 
