@@ -9,77 +9,192 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+function stripPrintScripts(html: string) {
+  return html.replace(/<script>[\s\S]*?<\/script>/gi, "");
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+type PrintJob = {
+  html: string;
+  title: string;
+  resolve: (ok: boolean) => void;
+};
+
+/** One thermal job at a time — overlapping window.print() kills cheap USB drivers. */
+const printQueue: PrintJob[] = [];
+let printPumpRunning = false;
+
 /**
  * Print silently when Chrome was launched with --kiosk-printing
  * (use pos/scripts/Launch-POS.bat). Otherwise the system print dialog appears.
- * Prefer hidden iframe so installed PWAs are not popup-blocked.
+ * Jobs are queued so Complete / Reprint / Kitchen never overlap.
  */
 function openPrintWindow(html: string, title: string) {
   if (typeof document === "undefined") return false;
 
-  const cleanHtml = html.replace(/<script>[\s\S]*?<\/script>/gi, "");
+  // Accept immediately; actual print runs on the queue.
+  void new Promise<boolean>((resolve) => {
+    printQueue.push({ html, title, resolve });
+    void pumpPrintQueue();
+  });
+  return true;
+}
 
+async function pumpPrintQueue() {
+  if (printPumpRunning) return;
+  printPumpRunning = true;
   try {
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("title", title);
-    iframe.setAttribute("aria-hidden", "true");
-    // Must have a tiny non-zero box — some printers skip 0×0 iframes.
-    iframe.style.cssText =
-      "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;z-index:-1";
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    const win = iframe.contentWindow;
-    if (!doc || !win) {
-      iframe.remove();
-      throw new Error("iframe unavailable");
+    while (printQueue.length > 0) {
+      const job = printQueue.shift();
+      if (!job) break;
+      const ok = await runOnePrintJob(job.html, job.title);
+      job.resolve(ok);
+      // Brief gap so the USB thermal / Windows spooler can finish the prior job.
+      await sleep(500);
     }
-
-    doc.open();
-    doc.write(cleanHtml);
-    doc.title = title;
-    doc.close();
-
-    const cleanup = () => {
-      try {
-        iframe.remove();
-      } catch {
-        /* ignore */
-      }
-    };
-
-    const doPrint = () => {
-      try {
-        win.focus();
-        win.print();
-      } catch {
-        /* ignore */
-      } finally {
-        // Keep iframe briefly so the print spooler can read the document.
-        setTimeout(cleanup, 60_000);
-        win.addEventListener?.("afterprint", cleanup, { once: true });
-      }
-    };
-
-    // Layout thermal HTML before printing.
-    setTimeout(doPrint, 120);
-    return true;
-  } catch {
-    const w = window.open("", "_blank", "width=320,height=600");
-    if (!w) return false;
-    w.document.write(html);
-    w.document.title = title;
-    w.document.close();
-    w.focus();
-    setTimeout(() => {
-      try {
-        w.print();
-      } catch {
-        /* ignore */
-      }
-    }, 120);
-    return true;
+  } finally {
+    printPumpRunning = false;
+    if (printQueue.length > 0) void pumpPrintQueue();
   }
+}
+
+/**
+ * Runs a single print and waits until afterprint (or a short timeout) before
+ * tearing down the iframe/popup so the next job cannot collide.
+ */
+function runOnePrintJob(html: string, title: string): Promise<boolean> {
+  const cleanHtml = stripPrintScripts(html);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+
+    try {
+      const iframe = document.createElement("iframe");
+      iframe.setAttribute("title", title);
+      iframe.setAttribute("aria-hidden", "true");
+      // Must have a tiny non-zero box — some printers skip 0×0 iframes.
+      iframe.style.cssText =
+        "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;z-index:-1";
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      const win = iframe.contentWindow;
+      if (!doc || !win) {
+        iframe.remove();
+        throw new Error("iframe unavailable");
+      }
+
+      doc.open();
+      doc.write(cleanHtml);
+      doc.title = title;
+      doc.close();
+
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        try {
+          iframe.remove();
+        } catch {
+          /* ignore */
+        }
+      };
+
+      const doPrint = () => {
+        try {
+          win.focus();
+          win.print();
+        } catch {
+          cleanup();
+          finish(false);
+          return;
+        }
+
+        // Spooler only needs the document briefly; 60s iframes stacked under load.
+        const safety = window.setTimeout(() => {
+          cleanup();
+          finish(true);
+        }, 3500);
+
+        const onAfter = () => {
+          window.clearTimeout(safety);
+          // Tiny delay after afterprint so GDI can flush to USB.
+          window.setTimeout(() => {
+            cleanup();
+            finish(true);
+          }, 300);
+        };
+        win.addEventListener?.("afterprint", onAfter, { once: true });
+      };
+
+      window.setTimeout(doPrint, 150);
+    } catch {
+      // Popup fallback — still strip scripts so we only print once.
+      const w = window.open("", "_blank", "width=320,height=600");
+      if (!w) {
+        finish(false);
+        return;
+      }
+      try {
+        w.document.write(cleanHtml);
+        w.document.title = title;
+        w.document.close();
+      } catch {
+        try {
+          w.close();
+        } catch {
+          /* ignore */
+        }
+        finish(false);
+        return;
+      }
+
+      window.setTimeout(() => {
+        try {
+          w.focus();
+          w.print();
+        } catch {
+          try {
+            w.close();
+          } catch {
+            /* ignore */
+          }
+          finish(false);
+          return;
+        }
+
+        const safety = window.setTimeout(() => {
+          try {
+            w.close();
+          } catch {
+            /* ignore */
+          }
+          finish(true);
+        }, 3500);
+
+        const onAfter = () => {
+          window.clearTimeout(safety);
+          window.setTimeout(() => {
+            try {
+              w.close();
+            } catch {
+              /* ignore */
+            }
+            finish(true);
+          }, 300);
+        };
+        w.addEventListener?.("afterprint", onAfter, { once: true });
+      }, 150);
+    }
+  });
 }
 
 export function kitchenOrderTypeLabel(orderType: string): string {
@@ -346,7 +461,6 @@ export function buildKitchenReceiptHtml(order: Order) {
       ? `<div class="notes">Order notes: ${escapeHtml(orderNotes)}</div>`
       : ""
   }
-  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 400); };</script>
 </body>
 </html>`;
 }
@@ -558,7 +672,6 @@ export function buildCustomerReceiptHtml(
   </div>
   ${notes ? `<p class="notes">Notes: ${escapeHtml(notes)}</p>` : ""}
   <p class="center">Thank you!</p>
-  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 400); };</script>
 </body>
 </html>`;
 }

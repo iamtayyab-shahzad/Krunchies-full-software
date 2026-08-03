@@ -11,6 +11,9 @@ REM   1. Install Chrome
 REM   2. Set your iTech receipt printer as Windows DEFAULT printer
 REM   3. Edit POS_URL below to your live POS URL
 REM   4. Put this shortcut on the cashier desktop
+REM
+REM Tip: If the printer errors after many tickets, restart Chrome and the
+REM Windows Print Spooler. POS queues prints one-at-a-time to reduce that.
 REM ============================================================
 
 set "POS_URL=http://localhost:3001"
