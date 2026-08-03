@@ -79,6 +79,7 @@ type UpdateSettingsRequest struct {
 	Facebook          *string `json:"facebook" binding:"omitempty,max=500"`
 	Instagram         *string `json:"instagram" binding:"omitempty,max=500"`
 	DrinkFlavors      *string `json:"drink_flavors" binding:"omitempty,max=2000"`
+	DefaultSiteTheme  *string `json:"default_site_theme" binding:"omitempty,oneof=dark dim light warm"`
 }
 
 type TokenResponse struct {

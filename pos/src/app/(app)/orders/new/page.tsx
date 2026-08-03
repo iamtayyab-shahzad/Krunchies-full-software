@@ -765,40 +765,6 @@ export default function NewOrderPage() {
                       {formatPrice(item.price * item.quantity, currency)}
                     </span>
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <Input
-                      className="h-9 text-xs"
-                      placeholder="Crust"
-                      value={item.crust || ""}
-                      onChange={(e) =>
-                        bill.setLineMeta(item.key, { crust: e.target.value })
-                      }
-                    />
-                    <Input
-                      className="h-9 text-xs"
-                      placeholder="Toppings"
-                      value={item.toppings || ""}
-                      onChange={(e) =>
-                        bill.setLineMeta(item.key, { toppings: e.target.value })
-                      }
-                    />
-                    <Input
-                      className="h-9 text-xs"
-                      placeholder="Extras"
-                      value={item.extras || ""}
-                      onChange={(e) =>
-                        bill.setLineMeta(item.key, { extras: e.target.value })
-                      }
-                    />
-                    <Input
-                      className="h-9 text-xs"
-                      placeholder="Special notes"
-                      value={item.special_instructions || ""}
-                      onChange={(e) =>
-                        bill.setInstructions(item.key, e.target.value)
-                      }
-                    />
-                  </div>
                 </div>
               );
             })}

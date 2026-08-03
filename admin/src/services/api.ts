@@ -70,6 +70,8 @@ type BackendSetting = {
   facebook: string;
   instagram: string;
   drink_flavors?: string;
+  /** First-visit website appearance: dark | dim | light | warm */
+  default_site_theme?: string;
 };
 
 type BackendInventory = {
@@ -464,6 +466,8 @@ export type SettingsUpdatePayload = {
   facebook?: string;
   instagram?: string;
   drink_flavors?: string;
+  /** First-visit website appearance: dark | dim | light | warm */
+  default_site_theme?: string;
 };
 
 export const settingsApi = {

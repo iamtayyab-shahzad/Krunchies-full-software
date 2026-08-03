@@ -11,6 +11,11 @@ html[data-theme="dark"] {
   --border: #27272a;
   --surface: #09090b;
   --surface-2: #18181b;
+  --btn-secondary-bg: #3f3f46;
+  --btn-secondary-fg: #fafafa;
+  --btn-secondary-border: #52525b;
+  --btn-ghost-fg: #fafafa;
+  --btn-ghost-hover: rgb(255 255 255 / 0.1);
 }
 
 /* Softer dark — easier on bright shop screens at night */
@@ -22,6 +27,11 @@ html[data-theme="dim"] {
   --border: #3f3f46;
   --surface: #1c1c1f;
   --surface-2: #27272a;
+  --btn-secondary-bg: #3f3f46;
+  --btn-secondary-fg: #fafafa;
+  --btn-secondary-border: #52525b;
+  --btn-ghost-fg: #f4f4f5;
+  --btn-ghost-hover: rgb(255 255 255 / 0.1);
 }
 
 /* Bright day mode */
@@ -33,6 +43,11 @@ html[data-theme="light"] {
   --border: #d4d4d8;
   --surface: #ffffff;
   --surface-2: #e4e4e7;
+  --btn-secondary-bg: #e4e4e7;
+  --btn-secondary-fg: #18181b;
+  --btn-secondary-border: #a1a1aa;
+  --btn-ghost-fg: #18181b;
+  --btn-ghost-hover: rgb(0 0 0 / 0.06);
 }
 
 /* Warm cream — softer light */
@@ -44,6 +59,11 @@ html[data-theme="warm"] {
   --border: #e5d5c3;
   --surface: #fffaf3;
   --surface-2: #efe4d4;
+  --btn-secondary-bg: #efe4d4;
+  --btn-secondary-fg: #1c1410;
+  --btn-secondary-border: #d4bfa8;
+  --btn-ghost-fg: #1c1410;
+  --btn-ghost-hover: rgb(0 0 0 / 0.06);
 }
 
 @theme inline {

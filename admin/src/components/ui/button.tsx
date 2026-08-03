@@ -10,10 +10,11 @@ const buttonVariants = cva(
       variant: {
         default: "bg-orange-500 text-black hover:bg-orange-400",
         secondary:
-          "bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700",
+          "border border-[var(--btn-secondary-border)] bg-[var(--btn-secondary-bg)] text-[var(--btn-secondary-fg)] hover:opacity-90",
         outline:
-          "border-2 border-orange-500 text-orange-400 hover:bg-orange-500/10",
-        ghost: "text-white hover:bg-white/10",
+          "border-2 border-orange-500 text-orange-500 hover:bg-orange-500/10",
+        ghost:
+          "text-[var(--btn-ghost-fg)] hover:bg-[var(--btn-ghost-hover)]",
         danger: "bg-red-600 text-white hover:bg-red-500",
         success: "bg-emerald-600 text-white hover:bg-emerald-500",
       },

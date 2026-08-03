@@ -60,6 +60,8 @@ export interface Settings {
   email: string;
   /** JSON string array of soft-drink flavors available in shop. */
   drink_flavors?: string;
+  /** First-visit website appearance: dark | dim | light | warm */
+  default_site_theme?: string;
 }
 
 export type PaymentMethod = "easypaisa" | "jazzcash" | "bank" | "cod";

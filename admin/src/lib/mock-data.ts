@@ -52,6 +52,8 @@ export type DeliveryLocation = {
   active: boolean;
 };
 
+export type SiteThemeOption = "dark" | "dim" | "light" | "warm";
+
 export type WebsiteSettings = {
   restaurantName: string;
   logo: string;
@@ -65,6 +67,8 @@ export type WebsiteSettings = {
   aboutSection: string;
   contactSection: string;
   footerInfo: string;
+  /** First-visit theme on the customer website */
+  defaultSiteTheme: SiteThemeOption;
 };
 
 export type RestaurantSettings = {
@@ -391,6 +395,7 @@ export const mockWebsiteSettings: WebsiteSettings = {
     "Krunchies Pizza brings bold flavors and crunchy happiness to every bite.",
   contactSection: "Call us or WhatsApp for orders and catering.",
   footerInfo: "THANK YOU FOR CHOOSING KRUNCHI PIZZA!",
+  defaultSiteTheme: "dark",
 };
 
 export const mockRestaurantSettings: RestaurantSettings = {

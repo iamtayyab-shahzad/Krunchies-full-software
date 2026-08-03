@@ -12,7 +12,11 @@ import {
   assertImageFieldSafe,
   prepareProductImage,
 } from "@/lib/image-upload";
-import { mockWebsiteSettings, type WebsiteSettings } from "@/lib/mock-data";
+import {
+  mockWebsiteSettings,
+  type SiteThemeOption,
+  type WebsiteSettings,
+} from "@/lib/mock-data";
 import { settingsApi } from "@/services/api";
 
 type WebsiteForm = WebsiteSettings & {
@@ -20,6 +24,30 @@ type WebsiteForm = WebsiteSettings & {
   facebook: string;
   instagram: string;
 };
+
+const SITE_THEME_OPTIONS: {
+  id: SiteThemeOption;
+  label: string;
+  hint: string;
+  swatch: string;
+}[] = [
+  { id: "dark", label: "Night", hint: "Dark", swatch: "#050505" },
+  { id: "dim", label: "Soft", hint: "Soft dark", swatch: "#1c1c1f" },
+  { id: "light", label: "Day", hint: "Light", swatch: "#f4f4f5" },
+  { id: "warm", label: "Warm", hint: "Cream", swatch: "#f7f1e8" },
+];
+
+function parseSiteTheme(value: string | undefined): SiteThemeOption {
+  if (
+    value === "dark" ||
+    value === "dim" ||
+    value === "light" ||
+    value === "warm"
+  ) {
+    return value;
+  }
+  return "dark";
+}
 
 const emptyForm = (): WebsiteForm => ({
   ...mockWebsiteSettings,
@@ -51,6 +79,7 @@ export default function WebsiteSettingsPage() {
           googleMaps: s.google_maps || "",
           facebook: s.facebook || "",
           instagram: s.instagram || "",
+          defaultSiteTheme: parseSiteTheme(s.default_site_theme),
         }));
       })
       .catch((e) =>
@@ -86,9 +115,10 @@ export default function WebsiteSettingsPage() {
         google_maps: form.googleMaps,
         facebook: form.facebook,
         instagram: form.instagram,
+        default_site_theme: form.defaultSiteTheme,
       });
       toast.success(
-        "Website settings saved (brand/contact/social). Content blocks below are not stored yet.",
+        "Website settings saved (brand/contact/social/theme). Content blocks below are not stored yet.",
       );
     } catch (e) {
       toast.error(
@@ -254,6 +284,43 @@ export default function WebsiteSettingsPage() {
                 }
               />
             </div>
+          </div>
+        </Card>
+
+        <Card className="space-y-4">
+          <h2 className="text-lg font-bold">Default appearance</h2>
+          <p className="text-sm text-[var(--muted)]">
+            Theme shown the first time a visitor opens the website. After they
+            pick a theme themselves, their choice is remembered on that device.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {SITE_THEME_OPTIONS.map((opt) => {
+              const selected = form.defaultSiteTheme === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() =>
+                    setForm({ ...form, defaultSiteTheme: opt.id })
+                  }
+                  className={`rounded-lg border p-3 text-left transition ${
+                    selected
+                      ? "border-orange-500 ring-2 ring-orange-500/40"
+                      : "border-[var(--border)] hover:border-orange-500/50"
+                  }`}
+                >
+                  <span
+                    className="mb-2 block h-10 w-full rounded-md border border-black/10"
+                    style={{ background: opt.swatch }}
+                    aria-hidden
+                  />
+                  <span className="block text-sm font-bold">{opt.label}</span>
+                  <span className="text-xs text-[var(--muted)]">
+                    {opt.hint}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </Card>
 

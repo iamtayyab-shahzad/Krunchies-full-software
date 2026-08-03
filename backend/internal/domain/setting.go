@@ -17,4 +17,7 @@ type Setting struct {
 	// DrinkFlavors is a JSON string array of soft-drink brands in stock
 	// (e.g. ["Coke","Sprite","Fanta"]). Shop owners add/remove flavors here.
 	DrinkFlavors string `gorm:"type:text" json:"drink_flavors"`
+	// DefaultSiteTheme is the first-visit website appearance:
+	// dark | dim | light | warm
+	DefaultSiteTheme string `gorm:"size:20;not null;default:'dark'" json:"default_site_theme"`
 }

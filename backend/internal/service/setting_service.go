@@ -57,6 +57,7 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 			OpeningTime:       "11:00 AM",
 			ClosingTime:       "11:00 PM",
 			DrinkFlavors:      `["Coke","Sprite","Fanta"]`,
+			DefaultSiteTheme:  "dark",
 		}
 		if createErr := s.db.Create(&setting).Error; createErr != nil {
 			return nil, createErr
@@ -74,6 +75,10 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 	if strings.TrimSpace(setting.DrinkFlavors) == "" {
 		setting.DrinkFlavors = `["Coke","Sprite","Fanta"]`
 		_ = s.db.Model(&setting).Update("drink_flavors", setting.DrinkFlavors).Error
+	}
+	if strings.TrimSpace(setting.DefaultSiteTheme) == "" {
+		setting.DefaultSiteTheme = "dark"
+		_ = s.db.Model(&setting).Update("default_site_theme", setting.DefaultSiteTheme).Error
 	}
 
 	s.mu.Lock()
@@ -145,6 +150,16 @@ func (s *SettingService) UpdateFromDTO(input dto.UpdateSettingsRequest) (*domain
 	if input.DrinkFlavors != nil {
 		patch.DrinkFlavors = *input.DrinkFlavors
 		cols = append(cols, "DrinkFlavors")
+	}
+	if input.DefaultSiteTheme != nil {
+		theme := strings.TrimSpace(strings.ToLower(*input.DefaultSiteTheme))
+		switch theme {
+		case "dark", "dim", "light", "warm":
+			patch.DefaultSiteTheme = theme
+			cols = append(cols, "DefaultSiteTheme")
+		default:
+			return nil, utils.NewAppError(http.StatusBadRequest, "invalid default_site_theme")
+		}
 	}
 	if len(cols) == 0 {
 		return nil, utils.NewAppError(http.StatusBadRequest, "no fields to update")
