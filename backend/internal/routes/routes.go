@@ -162,6 +162,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			staff.GET("/orders/pending", orderHandler.ListPending)
 			staff.GET("/orders/phone", orderHandler.ListPhone)
 			staff.GET("/orders/walkin", orderHandler.ListWalkin)
+			staff.GET("/orders/customers/lookup", orderHandler.LookupCustomers)
 			staff.GET("/orders/:id", orderHandler.GetByID)
 			staff.PUT("/orders/:id", orderHandler.Update)
 			staff.DELETE("/orders/:id", orderHandler.Delete)

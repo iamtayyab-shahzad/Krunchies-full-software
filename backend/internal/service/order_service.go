@@ -503,6 +503,97 @@ func (s *OrderService) ListOrdersByType(orderType string) ([]domain.Order, error
 	return s.orderRepo.ListByType(normalizeOrderType(orderType))
 }
 
+func (s *OrderService) LookupCustomersByPhone(q string) ([]dto.CustomerLookupResult, error) {
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, q)
+	if strings.HasPrefix(digits, "92") && len(digits) >= 12 {
+		digits = "0" + digits[2:]
+	} else if len(digits) == 10 && strings.HasPrefix(digits, "3") {
+		digits = "0" + digits
+	}
+	if len(digits) > 11 {
+		digits = digits[:11]
+	}
+	if len(digits) < 4 {
+		return []dto.CustomerLookupResult{}, nil
+	}
+
+	rows, err := s.orderRepo.ListForCustomerLookup(digits, 250)
+	if err != nil {
+		return nil, err
+	}
+
+	type agg struct {
+		result dto.CustomerLookupResult
+		count  int
+	}
+	byPhone := make(map[string]*agg)
+	orderKeys := make([]string, 0)
+
+	for _, row := range rows {
+		phone := strings.Map(func(r rune) rune {
+			if r >= '0' && r <= '9' {
+				return r
+			}
+			return -1
+		}, row.Phone)
+		if strings.HasPrefix(phone, "92") && len(phone) >= 12 {
+			phone = "0" + phone[2:]
+		} else if len(phone) == 10 && strings.HasPrefix(phone, "3") {
+			phone = "0" + phone
+		}
+		if len(phone) > 11 {
+			phone = phone[:11]
+		}
+		if phone == "" || phone == "0000000000" || !strings.HasPrefix(phone, digits) {
+			continue
+		}
+
+		existing, ok := byPhone[phone]
+		if !ok {
+			var locID *string
+			if row.LocationID != nil {
+				s := row.LocationID.String()
+				locID = &s
+			}
+			byPhone[phone] = &agg{
+				result: dto.CustomerLookupResult{
+					Phone:       phone,
+					Name:        strings.TrimSpace(row.CustomerName),
+					Address:     strings.TrimSpace(row.Address),
+					LocationID:  locID,
+					LastOrderAt: row.CreatedAt.UTC().Format(time.RFC3339),
+					OrderCount:  1,
+				},
+				count: 1,
+			}
+			orderKeys = append(orderKeys, phone)
+			continue
+		}
+		existing.count++
+		existing.result.OrderCount = existing.count
+		// rows are newest-first; first entry already has latest name/address
+	}
+
+	out := make([]dto.CustomerLookupResult, 0, len(orderKeys))
+	for _, phone := range orderKeys {
+		if a := byPhone[phone]; a != nil {
+			if a.result.Name == "" {
+				a.result.Name = "Customer"
+			}
+			out = append(out, a.result)
+		}
+		if len(out) >= 15 {
+			break
+		}
+	}
+	return out, nil
+}
+
 func (s *OrderService) GetOrderByID(id uuid.UUID) (*domain.Order, error) {
 	return s.orderRepo.GetByID(id)
 }

@@ -484,8 +484,11 @@ export async function listLocalCustomers() {
 
 async function upsertCustomerFromOrder(order: Order, isNewOrder: boolean) {
   if (!order.phone || order.phone === "0000000000") return;
+  const { normalizePkPhone } = await import("@/lib/utils");
+  const phone = normalizePkPhone(order.phone);
+  if (!phone || phone === "0000000000") return;
   const db = await getDb();
-  const id = order.customer_id || `phone:${order.phone}`;
+  const id = order.customer_id || `phone:${phone}`;
   const existing = await db.get("customers", id);
   const newer =
     !existing || order.created_at >= existing.last_order_at;
@@ -494,7 +497,7 @@ async function upsertCustomerFromOrder(order: Order, isNewOrder: boolean) {
     name: newer
       ? order.customer_name || existing?.name || "Customer"
       : existing.name,
-    phone: order.phone,
+    phone,
     address: newer
       ? order.address || existing?.address || ""
       : existing.address,
@@ -502,6 +505,9 @@ async function upsertCustomerFromOrder(order: Order, isNewOrder: boolean) {
     order_count: isNewOrder
       ? (existing?.order_count || 0) + 1
       : existing?.order_count || 1,
+    last_location_id: newer
+      ? order.location_id || existing?.last_location_id
+      : existing?.last_location_id,
   };
   await db.put("customers", customer);
   const all = await db.getAll("customers");
@@ -509,19 +515,23 @@ async function upsertCustomerFromOrder(order: Order, isNewOrder: boolean) {
 }
 
 async function rebuildCustomersFromOrders(orders: Order[]) {
+  const { normalizePkPhone } = await import("@/lib/utils");
   const map = new Map<string, Customer>();
   for (const order of orders) {
     if (!order.phone || order.phone === "0000000000") continue;
-    const id = order.customer_id || `phone:${order.phone}`;
+    const phone = normalizePkPhone(order.phone);
+    if (!phone || phone === "0000000000") continue;
+    const id = order.customer_id || `phone:${phone}`;
     const prev = map.get(id);
     if (!prev) {
       map.set(id, {
         id,
         name: order.customer_name || "Customer",
-        phone: order.phone,
+        phone,
         address: order.address || "",
         last_order_at: order.created_at,
         order_count: 1,
+        last_location_id: order.location_id || undefined,
       });
     } else {
       prev.order_count += 1;
@@ -529,8 +539,80 @@ async function rebuildCustomersFromOrders(orders: Order[]) {
         prev.last_order_at = order.created_at;
         prev.name = order.customer_name || prev.name;
         prev.address = order.address || prev.address;
+        if (order.location_id) prev.last_location_id = order.location_id;
       }
     }
   }
   await replaceCustomers(Array.from(map.values()));
+}
+
+/** Prefix search on cached customers (normalized PK digits). */
+export async function searchLocalCustomersByPhone(
+  query: string,
+  limit = 12,
+): Promise<Customer[]> {
+  const { normalizePkPhone } = await import("@/lib/utils");
+  const digits = normalizePkPhone(query);
+  if (digits.length < 4 || digits === "0000000000") return [];
+
+  const all = await listLocalCustomers();
+  const matches = all
+    .filter((c) => {
+      const phone = normalizePkPhone(c.phone || "");
+      return (
+        phone.length >= 4 &&
+        phone !== "0000000000" &&
+        phone.startsWith(digits)
+      );
+    })
+    .sort((a, b) =>
+      (b.last_order_at || "").localeCompare(a.last_order_at || ""),
+    );
+
+  return matches.slice(0, limit);
+}
+
+/** Upsert remote lookup rows into the local customers store. */
+export async function upsertCustomersFromLookup(
+  rows: Array<{
+    phone: string;
+    name: string;
+    address: string;
+    location_id?: string | null;
+    last_order_at: string;
+    order_count: number;
+  }>,
+) {
+  if (!rows.length) return;
+  const { normalizePkPhone } = await import("@/lib/utils");
+  const db = await getDb();
+  for (const row of rows) {
+    const phone = normalizePkPhone(row.phone);
+    if (!phone || phone === "0000000000") continue;
+    const id = `phone:${phone}`;
+    const existing = await db.get("customers", id);
+    const newer =
+      !existing ||
+      (row.last_order_at || "") >= (existing.last_order_at || "");
+    const customer: Customer = {
+      id,
+      name: newer
+        ? row.name || existing?.name || "Customer"
+        : existing.name,
+      phone,
+      address: newer
+        ? row.address || existing?.address || ""
+        : existing.address,
+      last_order_at: newer
+        ? row.last_order_at || existing?.last_order_at || new Date().toISOString()
+        : existing.last_order_at,
+      order_count: Math.max(row.order_count || 1, existing?.order_count || 1),
+      last_location_id: newer
+        ? row.location_id || existing?.last_location_id
+        : existing?.last_location_id,
+    };
+    await db.put("customers", customer);
+  }
+  const all = await db.getAll("customers");
+  await cacheSet("customers", all);
 }

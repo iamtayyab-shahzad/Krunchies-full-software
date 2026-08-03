@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"strings"
+	"time"
+
 	"backend/internal/domain"
 
 	"github.com/google/uuid"
@@ -146,4 +149,59 @@ func (r *OrderRepository) ReplaceItems(tx *gorm.DB, orderID uuid.UUID, items []d
 
 func (r *OrderRepository) Delete(tx *gorm.DB, id uuid.UUID) error {
 	return tx.Delete(&domain.Order{}, "id = ?", id).Error
+}
+
+// CustomerLookupRow is a lightweight order projection for phone autocomplete.
+type CustomerLookupRow struct {
+	Phone        string     `json:"phone"`
+	CustomerName string     `json:"customer_name"`
+	Address      string     `json:"address"`
+	LocationID   *uuid.UUID `json:"location_id"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
+// ListForCustomerLookup returns recent non-walk-in orders whose phone may match q.
+// Matching is loose in SQL (LIKE); callers should normalize digits in Go.
+func (r *OrderRepository) ListForCustomerLookup(q string, limit int) ([]CustomerLookupRow, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 400 {
+		limit = 400
+	}
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, q)
+	if len(digits) < 4 {
+		return nil, nil
+	}
+
+	var rows []CustomerLookupRow
+	// Match stored phones with or without dashes: 03001234567 / 0300-1234567
+	patternDigits := digits + "%"
+	patternDashed := digits
+	if len(digits) > 4 {
+		patternDashed = digits[:4] + "-" + digits[4:] + "%"
+	} else {
+		patternDashed = digits + "%"
+	}
+
+	err := r.db.Model(&domain.Order{}).
+		Select("phone, customer_name, address, location_id, created_at").
+		Where("phone <> ? AND phone <> ?", "0000000000", "0000-0000000").
+		Where(
+			"phone LIKE ? OR REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ?",
+			patternDashed,
+			patternDigits,
+		).
+		Order("created_at desc").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
 }

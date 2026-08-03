@@ -231,6 +231,47 @@ export const customersRepo = {
       [],
     );
   },
+
+  /**
+   * Phone prefix search for POS autofill.
+   * Returns local matches immediately; when online, merges API results.
+   */
+  async search(query: string): Promise<Customer[]> {
+    const { normalizePkPhone } = await import("@/lib/utils");
+    const {
+      searchLocalCustomersByPhone,
+      upsertCustomersFromLookup,
+    } = await import("@/lib/offline-db");
+
+    const digits = normalizePkPhone(query);
+    if (digits.length < 4) return [];
+
+    const local = await searchLocalCustomersByPhone(digits);
+
+    if (!isOnline()) return local;
+
+    try {
+      const remote = await apiFetch<
+        Array<{
+          phone: string;
+          name: string;
+          address: string;
+          location_id?: string | null;
+          last_order_at: string;
+          order_count: number;
+        }>
+      >(`/orders/customers/lookup?q=${encodeURIComponent(digits)}`);
+
+      if (Array.isArray(remote) && remote.length) {
+        await upsertCustomersFromLookup(remote);
+        return searchLocalCustomersByPhone(digits);
+      }
+    } catch {
+      /* keep local results */
+    }
+
+    return local;
+  },
 };
 
 export const sessionRepo = {

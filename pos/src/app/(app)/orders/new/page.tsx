@@ -37,6 +37,7 @@ import {
 import { printCustomerReceipt, printKitchenReceipt, encodeKitchenInstructions } from "@/lib/receipt";
 import { weekendPromoLabel } from "@/lib/weekend-promo";
 import { deleteDraft } from "@/lib/offline-db";
+import { PhoneSuggest } from "@/components/phone-suggest";
 import {
   categoriesApi,
   locationsApi,
@@ -44,7 +45,7 @@ import {
   productsApi,
   settingsApi,
 } from "@/services/api";
-import type { Order, OrderItem, Product, ProductSize } from "@/types";
+import type { Customer, Order, OrderItem, Product, ProductSize } from "@/types";
 
 const DealFlavorDialog = dynamic(
   () =>
@@ -631,14 +632,23 @@ export default function NewOrderPage() {
                 </div>
                 <div className="space-y-1">
                   <Label>Phone</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0300-1234567"
-                    maxLength={12}
+                  <PhoneSuggest
                     value={bill.phone}
-                    onChange={(e) =>
-                      bill.setPhone(formatPkPhone(e.target.value))
-                    }
+                    onChange={(v) => bill.setPhone(v)}
+                    onSelectCustomer={(c: Customer) => {
+                      bill.setPhone(formatPkPhone(c.phone));
+                      if (c.name) bill.setCustomerName(c.name);
+                      if (c.address) bill.setAddress(c.address);
+                      if (c.last_location_id) {
+                        const loc = deliveryLocations.find(
+                          (l) => l.id === c.last_location_id,
+                        );
+                        if (loc) {
+                          bill.setLocation(loc.id, loc.delivery_charge || 0);
+                        }
+                      }
+                      toast.success("Customer loaded");
+                    }}
                   />
                   {bill.phone.trim() && !isValidPkPhone(bill.phone) ? (
                     <p className="text-xs text-red-400">

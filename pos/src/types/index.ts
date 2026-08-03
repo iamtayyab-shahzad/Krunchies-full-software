@@ -157,6 +157,8 @@ export interface Customer {
   address: string;
   last_order_at: string;
   order_count: number;
+  /** Last delivery location used for this phone (for autofill). */
+  last_location_id?: string;
 }
 
 export interface CreateOrderItemInput {

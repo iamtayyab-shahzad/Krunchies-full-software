@@ -167,6 +167,20 @@ func (h *OrderHandler) ListWalkin(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "walk-in orders", orders)
 }
 
+func (h *OrderHandler) LookupCustomers(c *gin.Context) {
+	q := strings.TrimSpace(c.Query("q"))
+	if q == "" {
+		utils.Success(c, http.StatusOK, "customer lookup", []any{})
+		return
+	}
+	rows, err := h.service.LookupCustomersByPhone(q)
+	if err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "customer lookup", rows)
+}
+
 func (h *OrderHandler) GetByID(c *gin.Context) {
 	id, err := service.ParseOrderID(c.Param("id"))
 	if err != nil {
