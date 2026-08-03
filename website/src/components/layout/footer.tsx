@@ -4,7 +4,9 @@ import Link from "next/link";
 import { MapPin, Phone } from "lucide-react";
 import { restaurant } from "@/data/krunchies";
 import { useSettings } from "@/hooks/use-settings";
-import { NAV_LINKS } from "@/lib/constants";
+import { useLocale } from "@/i18n/locale-context";
+import type { MessageKey } from "@/i18n/messages";
+import { cn } from "@/lib/utils";
 
 function FacebookIcon({ className }: { className?: string }) {
   return (
@@ -24,8 +26,16 @@ function InstagramIcon({ className }: { className?: string }) {
   );
 }
 
+const FOOTER_NAV: { href: string; key: MessageKey }[] = [
+  { href: "/", key: "nav_home" },
+  { href: "/menu", key: "nav_menu" },
+  { href: "/about", key: "nav_about" },
+  { href: "/contact", key: "nav_contact" },
+];
+
 export function Footer() {
   const { settings } = useSettings();
+  const { t, locale } = useLocale();
   const name = settings?.restaurant_name || "Krunchies Pizza";
   const phone = settings?.phone || "";
   const address = settings?.address || "";
@@ -33,6 +43,7 @@ export function Footer() {
   const closing = settings?.closing_time || "11:00 PM";
   const facebook = settings?.facebook || "#";
   const instagram = settings?.instagram || "#";
+  const urdu = locale === "ur";
 
   return (
     <footer className="mt-auto border-t border-white/10 bg-zinc-950">
@@ -47,40 +58,61 @@ export function Footer() {
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-orange-400">
             {restaurant.tagline}
           </p>
-          <p className="mt-3 max-w-sm text-sm leading-relaxed text-zinc-400">
-            {restaurant.deliveryNote}. Open daily {opening}–{closing}.
+          <p
+            className={cn(
+              "mt-3 max-w-sm text-sm leading-relaxed text-zinc-400",
+              urdu && "font-urdu text-base leading-loose",
+            )}
+          >
+            {restaurant.deliveryNote}. {t("footer_hours")} {opening}–{closing}.
           </p>
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-orange-400">
-            Explore
+          <h3
+            className={cn(
+              "text-sm font-semibold uppercase tracking-wider text-orange-400",
+              urdu && "font-urdu text-base tracking-normal",
+            )}
+          >
+            {t("footer_explore")}
           </h3>
           <ul className="mt-4 space-y-2">
-            {NAV_LINKS.map((link) => (
+            {FOOTER_NAV.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className="text-sm text-zinc-400 transition-colors hover:text-white"
+                  className={cn(
+                    "text-sm text-zinc-400 transition-colors hover:text-white",
+                    urdu && "font-urdu text-base",
+                  )}
                 >
-                  {link.label}
+                  {t(link.key)}
                 </Link>
               </li>
             ))}
             <li>
               <Link
                 href="/menu"
-                className="text-sm text-zinc-400 transition-colors hover:text-white"
+                className={cn(
+                  "text-sm text-zinc-400 transition-colors hover:text-white",
+                  urdu && "font-urdu text-base",
+                )}
               >
-                Order Online
+                {t("nav_order_online")}
               </Link>
             </li>
           </ul>
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-orange-400">
-            Contact
+          <h3
+            className={cn(
+              "text-sm font-semibold uppercase tracking-wider text-orange-400",
+              urdu && "font-urdu text-base tracking-normal",
+            )}
+          >
+            {t("footer_contact")}
           </h3>
           <ul className="mt-4 space-y-3 text-sm text-zinc-400">
             {address ? (
@@ -108,8 +140,8 @@ export function Footer() {
                 </a>
               </li>
             ) : null}
-            <li>
-              Open daily {opening} – {closing}
+            <li className={urdu ? "font-urdu text-base" : undefined}>
+              {t("footer_hours")} {opening} – {closing}
             </li>
           </ul>
           <div className="mt-4 flex gap-3">

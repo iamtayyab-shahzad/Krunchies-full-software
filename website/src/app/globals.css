@@ -16,6 +16,7 @@
   --color-accent: var(--accent);
   --font-sans: var(--font-body);
   --font-display: var(--font-display);
+  --font-urdu: var(--font-urdu);
 }
 
 body {
@@ -27,6 +28,22 @@ body {
 
 .font-display {
   font-family: var(--font-display), Georgia, serif;
+}
+
+/* Readable Urdu — larger size + loose line-height for Nastaliq */
+.font-urdu {
+  font-family: var(--font-urdu), "Noto Nastaliq Urdu", "Segoe UI", Tahoma, sans-serif;
+  line-height: 1.85;
+  letter-spacing: 0;
+  font-feature-settings: "kern" 1;
+}
+
+html[data-locale="ur"] body {
+  line-height: 1.7;
+}
+
+html[dir="rtl"] .font-display {
+  letter-spacing: 0;
 }
 
 ::selection {

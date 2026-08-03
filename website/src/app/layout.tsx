@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bebas_Neue, Outfit } from "next/font/google";
+import { Bebas_Neue, Noto_Nastaliq_Urdu, Outfit } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -30,6 +30,15 @@ const body = Outfit({
   variable: "--font-body",
   display: "swap",
   preload: true,
+});
+
+/** Clear, high-legibility Urdu for menu chrome / labels. */
+const urdu = Noto_Nastaliq_Urdu({
+  weight: ["400", "700"],
+  subsets: ["arabic"],
+  variable: "--font-urdu",
+  display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -146,9 +155,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} h-full`}
+      className={`${display.variable} ${body.variable} ${urdu.variable} h-full`}
       suppressHydrationWarning
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var l=localStorage.getItem("krunchies_locale");if(l==="ur"){document.documentElement.lang="ur";document.documentElement.dir="rtl";document.documentElement.dataset.locale="ur";}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body
         className="flex min-h-full flex-col bg-background font-sans text-foreground antialiased"
         suppressHydrationWarning
