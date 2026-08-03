@@ -384,8 +384,8 @@ export function buildKitchenReceiptHtml(order: Order) {
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 11px;
-    line-height: 1.2;
+    font-size: 12px;
+    line-height: 1.25;
     color: #000;
     width: 72mm;
     margin: 0 auto;
@@ -393,7 +393,7 @@ export function buildKitchenReceiptHtml(order: Order) {
     print-color-adjust: exact;
   }
   h1 {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 800;
     text-align: center;
     margin: 0 0 3px;
@@ -403,14 +403,14 @@ export function buildKitchenReceiptHtml(order: Order) {
   .banner {
     text-align: center;
     font-weight: 800;
-    font-size: 12px;
+    font-size: 13px;
     border: 1px solid #000;
     padding: 3px 2px;
     margin-bottom: 4px;
     letter-spacing: 0.5px;
   }
   .meta {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     margin-bottom: 4px;
   }
@@ -423,17 +423,17 @@ export function buildKitchenReceiptHtml(order: Order) {
     display: flex;
     gap: 4px;
     font-weight: 800;
-    font-size: 12px;
+    font-size: 13px;
   }
   .qty { min-width: 2em; }
   .size {
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     margin-top: 1px;
   }
   .mod {
     margin-top: 1px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
   }
   .notes {
@@ -441,7 +441,7 @@ export function buildKitchenReceiptHtml(order: Order) {
     margin-top: 4px;
     padding-top: 3px;
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
   }
 </style>
 </head>
@@ -519,8 +519,8 @@ export function buildCustomerReceiptHtml(
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 11px;
-    line-height: 1.2;
+    font-size: 12px;
+    line-height: 1.28;
     color: #000;
     /* Leave right gutter — thermal heads clip the far edge */
     width: 68mm;
@@ -532,7 +532,7 @@ export function buildCustomerReceiptHtml(
     print-color-adjust: exact;
   }
   h1 {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 800;
     text-align: center;
     margin: 0 0 2px;
@@ -542,11 +542,11 @@ export function buildCustomerReceiptHtml(
   .meta {
     text-align: center;
     margin-bottom: 4px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
   }
   .info {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     margin: 1px 0;
     word-break: break-word;
@@ -560,14 +560,14 @@ export function buildCustomerReceiptHtml(
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
-    font-size: 10px;
+    font-size: 11px;
   }
   col.col-item { width: auto; }
   col.col-qty { width: 7mm; }
   col.col-amt { width: 20mm; }
   thead td {
     font-weight: 800;
-    font-size: 9px;
+    font-size: 10px;
     border-bottom: 1px solid #000;
     padding: 2px 1px 3px 0;
   }
@@ -592,7 +592,7 @@ export function buildCustomerReceiptHtml(
     font-variant-numeric: tabular-nums;
   }
   .note {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
     margin-top: 1px;
   }
@@ -600,7 +600,7 @@ export function buildCustomerReceiptHtml(
     border: 1px solid #000;
     margin-top: 4px;
     padding: 4px 3px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
   }
   .line {
@@ -614,22 +614,39 @@ export function buildCustomerReceiptHtml(
     font-variant-numeric: tabular-nums;
   }
   .grand {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 800;
     margin-top: 3px;
     padding-top: 2px;
     border-top: 1px solid #000;
   }
   .notes {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     margin-top: 4px;
   }
   .center {
     text-align: center;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     margin-top: 4px;
+  }
+  /* Small blank area so staff can write by hand */
+  .write-area {
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px dashed #000;
+    min-height: 18mm;
+  }
+  .write-area .label {
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .write-line {
+    border-bottom: 1px solid #bbb;
+    height: 5mm;
+    margin: 0;
   }
 </style>
 </head>
@@ -672,6 +689,12 @@ export function buildCustomerReceiptHtml(
   </div>
   ${notes ? `<p class="notes">Notes: ${escapeHtml(notes)}</p>` : ""}
   <p class="center">Thank you!</p>
+  <div class="write-area">
+    <div class="label">Staff notes</div>
+    <div class="write-line"></div>
+    <div class="write-line"></div>
+    <div class="write-line"></div>
+  </div>
 </body>
 </html>`;
 }
