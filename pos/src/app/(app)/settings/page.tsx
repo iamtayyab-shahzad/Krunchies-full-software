@@ -20,11 +20,13 @@ import {
   serializeDrinkFlavors,
 } from "@/lib/drink-flavors";
 import { assertImageFieldSafe } from "@/lib/image-upload";
+import { usePosTheme } from "@/context/theme-context";
 import { locationsApi, offersApi, settingsApi } from "@/services/api";
 import type { Location, Offer } from "@/types";
 
 export default function SettingsPage() {
   const qc = useQueryClient();
+  const { theme, setTheme } = usePosTheme();
   const [form, setForm] = useState({
     restaurant_name: "",
     phone: "",
@@ -140,6 +142,26 @@ export default function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto p-6">
       <h1 className="mb-6 text-3xl font-black">Settings</h1>
+
+      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+        <h2 className="mb-2 text-xl font-bold">Display</h2>
+        <p className="mb-4 text-sm text-zinc-400">
+          Use a white background if the shop screen is hard to read in dark
+          mode. Orange buttons and layout stay the same.
+        </p>
+        <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-3">
+          <div>
+            <Label>Light background</Label>
+            <p className="text-xs text-zinc-500">
+              Saved on this computer only
+            </p>
+          </div>
+          <Switch
+            checked={theme === "light"}
+            onCheckedChange={(on) => setTheme(on ? "light" : "dark")}
+          />
+        </div>
+      </section>
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="mb-4 text-xl font-bold">Restaurant</h2>

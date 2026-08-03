@@ -57,6 +57,11 @@ export default function RootLayout({
           name="apple-mobile-web-app-status-bar-style"
           content="black-translucent"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("pos-theme");if(t==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className="h-full bg-black font-sans text-white antialiased" suppressHydrationWarning>
         <Providers>

@@ -5,11 +5,31 @@ import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { BillProvider } from "@/context/bill-context";
 import { MenuSearchProvider } from "@/context/menu-search-context";
+import { ThemeProvider, usePosTheme } from "@/context/theme-context";
 import {
   POS_SYNC_COMPLETE_EVENT,
   startSyncEngine,
 } from "@/lib/sync-engine";
 import { POS_ORDERS_CHANGED_EVENT } from "@/lib/offline-events";
+
+function ThemedToaster() {
+  const { theme } = usePosTheme();
+  const light = theme === "light";
+  return (
+    <Toaster
+      theme={light ? "light" : "dark"}
+      position="top-center"
+      toastOptions={{
+        style: {
+          background: light ? "#ffffff" : "#18181b",
+          border: light ? "1px solid #d4d4d8" : "1px solid #3f3f46",
+          color: light ? "#18181b" : "#fff",
+          fontSize: "16px",
+        },
+      }}
+    />
+  );
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -52,23 +72,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <MenuSearchProvider>
-        <BillProvider>
-          {children}
-          <Toaster
-            theme="dark"
-            position="top-center"
-            toastOptions={{
-              style: {
-                background: "#18181b",
-                border: "1px solid #3f3f46",
-                color: "#fff",
-                fontSize: "16px",
-              },
-            }}
-          />
-        </BillProvider>
-      </MenuSearchProvider>
+      <ThemeProvider>
+        <MenuSearchProvider>
+          <BillProvider>
+            {children}
+            <ThemedToaster />
+          </BillProvider>
+        </MenuSearchProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

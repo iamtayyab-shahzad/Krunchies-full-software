@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { BillLine, OrderType, PaymentMethod } from "@/types";
+import type { BillLine, Order, OrderItem, OrderType, PaymentMethod } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -181,4 +181,75 @@ export function formatPkPhone(raw: string): string {
   const digits = normalizePkPhone(raw);
   if (digits.length <= 4) return digits;
   return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+}
+
+function resolveItemLabel(
+  item: OrderItem,
+  productNameById?: Map<string, string>,
+): string {
+  const name =
+    item.product?.name?.trim() ||
+    item.product_name?.trim() ||
+    productNameById?.get(item.product_id)?.trim() ||
+    "Item";
+  const size =
+    item.product_size?.size?.trim() ||
+    item.size?.trim() ||
+    "";
+  const base = size ? `${name} (${size})` : name;
+  return item.quantity > 1 ? `${item.quantity}× ${base}` : base;
+}
+
+/**
+ * Short product list for history rows. Caps length so long orders stay readable
+ * without heavy DOM (first few names + “+N more”).
+ */
+export function formatOrderItemsSummary(
+  order: Order,
+  productNameById?: Map<string, string>,
+  maxNames = 4,
+): string {
+  const items = order.items || [];
+  if (!items.length) return "No items";
+  const labels = items.map((item) => resolveItemLabel(item, productNameById));
+  if (labels.length <= maxNames) return labels.join(", ");
+  const shown = labels.slice(0, maxNames).join(", ");
+  return `${shown} +${labels.length - maxNames} more`;
+}
+
+function orderItemDisplayName(
+  item: OrderItem,
+  nameById?: Map<string, string>,
+): string {
+  const nested = item.product?.name?.trim();
+  const flat = item.product_name?.trim();
+  const mapped = nameById?.get(item.product_id);
+  const name = nested || flat || mapped || "Item";
+  const size =
+    item.product_size?.size?.trim() ||
+    item.size?.trim() ||
+    "";
+  return size ? `${name} (${size})` : name;
+}
+
+/**
+ * Short human-readable line of products on an order for History / lists.
+ * Caps length so long carts stay readable without heavy UI.
+ */
+export function formatOrderItemsSummary(
+  order: Order,
+  nameById?: Map<string, string>,
+  maxParts = 5,
+): string {
+  const items = order.items || [];
+  if (!items.length) return "No items";
+
+  const parts = items.map((item) => {
+    const label = orderItemDisplayName(item, nameById);
+    return item.quantity > 1 ? `${item.quantity}× ${label}` : label;
+  });
+
+  if (parts.length <= maxParts) return parts.join(", ");
+  const shown = parts.slice(0, maxParts).join(", ");
+  return `${shown} +${parts.length - maxParts} more`;
 }

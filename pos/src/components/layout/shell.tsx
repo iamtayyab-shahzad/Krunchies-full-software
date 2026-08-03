@@ -15,6 +15,8 @@ import {
   Warehouse,
   Wifi,
   WifiOff,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -29,6 +31,7 @@ import {
 } from "@/lib/sync-engine";
 import { POS_ORDERS_CHANGED_EVENT } from "@/lib/offline-events";
 import { setToken } from "@/lib/api-client";
+import { usePosTheme } from "@/context/theme-context";
 
 const LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -199,6 +202,7 @@ export function TopBar({
   onSearch?: (v: string) => void;
 }) {
   const router = useRouter();
+  const { theme, toggleTheme } = usePosTheme();
   const [now, setNow] = useState<Date | null>(null);
   const [online, setOnline] = useState(true);
 
@@ -250,6 +254,18 @@ export function TopBar({
         />
       )}
       <div className={cn("flex gap-2", !onSearch && "ml-auto")}>
+        <button
+          type="button"
+          title={theme === "light" ? "Switch to dark" : "Switch to light background"}
+          onClick={toggleTheme}
+          className="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-900"
+        >
+          {theme === "light" ? (
+            <Moon className="h-5 w-5" />
+          ) : (
+            <Sun className="h-5 w-5" />
+          )}
+        </button>
         <button
           type="button"
           onClick={() => router.push("/orders/new")}

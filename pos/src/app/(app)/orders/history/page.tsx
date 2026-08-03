@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { printCustomerReceipt, ensureReceiptItemNames } from "@/lib/receipt";
-import { cn, formatPrice, LAST_RECEIPT_KEY } from "@/lib/utils";
+import { cn, formatOrderItemsSummary, formatPrice, LAST_RECEIPT_KEY } from "@/lib/utils";
 import { ordersApi, productsApi, settingsApi } from "@/services/api";
 import type { Order } from "@/types";
 
@@ -44,18 +44,27 @@ export default function OrderHistoryPage() {
       .filter((o) => {
         if (!q) return true;
         const s = q.toLowerCase();
+        const itemHit = (o.items || []).some((item) => {
+          const name =
+            item.product?.name ||
+            item.product_name ||
+            productNameById.get(item.product_id) ||
+            "";
+          return name.toLowerCase().includes(s);
+        });
         return (
           o.customer_name.toLowerCase().includes(s) ||
           o.phone.includes(s) ||
           o.order_number.toLowerCase().includes(s) ||
-          o.id.toLowerCase().includes(s)
+          o.id.toLowerCase().includes(s) ||
+          itemHit
         );
       })
       .sort(
         (a, b) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       );
-  }, [orders, q, status]);
+  }, [orders, q, status, productNameById]);
 
   const complete = async (order: Order) => {
     try {
@@ -89,7 +98,7 @@ export default function OrderHistoryPage() {
       <div className="mb-4 flex flex-wrap gap-3">
         <Input
           className="max-w-sm"
-          placeholder="Search name, phone, id..."
+          placeholder="Search name, phone, id, product..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -142,7 +151,11 @@ export default function OrderHistoryPage() {
                   </p>
                   <p className="text-xs text-zinc-600">
                     {order.order_number} ·{" "}
-                    {(order.items || []).length} items
+                    {(order.items || []).length} item
+                    {(order.items || []).length === 1 ? "" : "s"}
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-zinc-300">
+                    {formatOrderItemsSummary(order, productNameById)}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
