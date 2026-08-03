@@ -183,40 +183,6 @@ export function formatPkPhone(raw: string): string {
   return `${digits.slice(0, 4)}-${digits.slice(4)}`;
 }
 
-function resolveItemLabel(
-  item: OrderItem,
-  productNameById?: Map<string, string>,
-): string {
-  const name =
-    item.product?.name?.trim() ||
-    item.product_name?.trim() ||
-    productNameById?.get(item.product_id)?.trim() ||
-    "Item";
-  const size =
-    item.product_size?.size?.trim() ||
-    item.size?.trim() ||
-    "";
-  const base = size ? `${name} (${size})` : name;
-  return item.quantity > 1 ? `${item.quantity}× ${base}` : base;
-}
-
-/**
- * Short product list for history rows. Caps length so long orders stay readable
- * without heavy DOM (first few names + “+N more”).
- */
-export function formatOrderItemsSummary(
-  order: Order,
-  productNameById?: Map<string, string>,
-  maxNames = 4,
-): string {
-  const items = order.items || [];
-  if (!items.length) return "No items";
-  const labels = items.map((item) => resolveItemLabel(item, productNameById));
-  if (labels.length <= maxNames) return labels.join(", ");
-  const shown = labels.slice(0, maxNames).join(", ");
-  return `${shown} +${labels.length - maxNames} more`;
-}
-
 function orderItemDisplayName(
   item: OrderItem,
   nameById?: Map<string, string>,
@@ -233,7 +199,7 @@ function orderItemDisplayName(
 }
 
 /**
- * Short human-readable line of products on an order for History / lists.
+ * Short product list for History / lists.
  * Caps length so long carts stay readable without heavy UI.
  */
 export function formatOrderItemsSummary(
@@ -246,7 +212,7 @@ export function formatOrderItemsSummary(
 
   const parts = items.map((item) => {
     const label = orderItemDisplayName(item, nameById);
-    return item.quantity > 1 ? `${item.quantity}× ${label}` : label;
+    return item.quantity > 1 ? `${item.quantity}x ${label}` : label;
   });
 
   if (parts.length <= maxParts) return parts.join(", ");
