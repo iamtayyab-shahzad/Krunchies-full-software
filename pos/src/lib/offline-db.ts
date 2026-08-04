@@ -361,6 +361,61 @@ export async function replaceOrders(orders: Order[]) {
   await rebuildCustomersFromOrders(capped);
 }
 
+/**
+ * Replace IDB orders from a server snapshot while keeping unsynced local
+ * rows (offline creates / pending status changes) so a refresh never wipes them.
+ */
+export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
+  const existing = await listLocalOrders();
+  const serverIds = new Set(serverOrders.map((r) => r.id));
+  const serverClientIds = new Set(
+    serverOrders
+      .map((r) => r.client_order_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+
+  const unsynced = existing.filter((o) => {
+    const pendingLocal =
+      o.sync_status === "pending_sync" || o.sync_status === "local";
+    if (!pendingLocal) return false;
+    // Drop LOCAL-* once server already has the same client_order_id.
+    if (o.client_order_id && serverClientIds.has(o.client_order_id)) {
+      return false;
+    }
+    if (serverIds.has(o.id) && o.order_status === "PENDING") {
+      // Server row wins for still-pending synced ids; keep local if status diverged.
+      return false;
+    }
+    return !serverIds.has(o.id) || o.order_status !== "PENDING";
+  });
+
+  const byId = new Map<string, Order>();
+  for (const s of serverOrders) {
+    const loc = existing.find(
+      (l) =>
+        l.id === s.id ||
+        (l.client_order_id &&
+          s.client_order_id &&
+          l.client_order_id === s.client_order_id),
+    );
+    if (
+      loc &&
+      loc.sync_status === "pending_sync" &&
+      (loc.order_status === "COMPLETED" || loc.order_status === "CANCELLED")
+    ) {
+      byId.set(s.id, {
+        ...s,
+        order_status: loc.order_status,
+        sync_status: "pending_sync",
+      });
+    } else {
+      byId.set(s.id, { ...s, sync_status: "synced" as const });
+    }
+  }
+  for (const o of unsynced) byId.set(o.id, o);
+  await replaceOrders(Array.from(byId.values()));
+}
+
 /** Upsert without wiping history — used by pending polls. */
 export async function mergeOrders(orders: Order[]) {
   const db = await getDb();

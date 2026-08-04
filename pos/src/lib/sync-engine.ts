@@ -11,7 +11,7 @@ import {
   markActionSynced,
   pruneSyncedActions,
   replaceInventory,
-  replaceOrders,
+  replaceOrdersPreservingUnsynced,
   resolveServerOrderId,
   upsertLocalOrder,
   listLocalOrders,
@@ -29,6 +29,7 @@ import {
   isQueueableError,
   POS_CONNECTIVITY_EVENT,
 } from "@/lib/network";
+import { notifyOrdersChanged } from "@/lib/offline-events";
 import type {
   CreateOrderInput,
   InventoryItem,
@@ -162,6 +163,14 @@ async function resolveOrderId(id: string) {
   return resolveServerOrderId(id);
 }
 
+/** CREATE before COMPLETE/CANCEL so follow-ups rarely skip in the same pass. */
+function syncActionPriority(type: string): number {
+  if (type === "CREATE_ORDER") return 0;
+  if (type === "UPDATE_ORDER") return 1;
+  if (type === "COMPLETE_ORDER" || type === "CANCEL_ORDER") return 2;
+  return 3;
+}
+
 async function processAction(
   action: OfflineAction,
 ): Promise<"ok" | "retry" | "skip" | "dead"> {
@@ -254,6 +263,7 @@ async function processAction(
           }
         }
       }
+      notifyOrdersChanged();
       return "ok";
     }
     case "COMPLETE_ORDER": {
@@ -267,19 +277,36 @@ async function processAction(
       const serverId = await resolveOrderId(localId);
       try {
         await apiFetch(`/orders/${serverId}/complete`, { method: "PATCH" });
-        return "ok";
       } catch (err) {
         if (isQueueableError(err)) throw err;
-        // Already completed on server is OK
         if (
-          err instanceof ApiError &&
-          (err.status === 409 ||
-            /already|completed|not pending/i.test(err.message))
+          !(
+            err instanceof ApiError &&
+            (err.status === 409 ||
+              /already|completed|not pending/i.test(err.message))
+          )
         ) {
-          return "ok";
+          throw err;
         }
-        throw err;
       }
+      {
+        const locals = await listLocalOrders();
+        const local =
+          locals.find((o) => o.id === serverId) ||
+          locals.find((o) => o.id === localId);
+        if (local) {
+          await upsertLocalOrder({
+            ...local,
+            id: serverId,
+            order_status: "COMPLETED",
+            sync_status: "synced",
+            updated_at: new Date().toISOString(),
+          });
+          if (localId !== serverId) await deleteLocalOrder(localId);
+        }
+      }
+      notifyOrdersChanged();
+      return "ok";
     }
     case "CANCEL_ORDER": {
       const localId = (action.payload as { id: string }).id;
@@ -292,18 +319,36 @@ async function processAction(
       const serverId = await resolveOrderId(localId);
       try {
         await apiFetch(`/orders/${serverId}/cancel`, { method: "PATCH" });
-        return "ok";
       } catch (err) {
         if (isQueueableError(err)) throw err;
         if (
-          err instanceof ApiError &&
-          (err.status === 409 ||
-            /already|cancelled|not pending/i.test(err.message))
+          !(
+            err instanceof ApiError &&
+            (err.status === 409 ||
+              /already|cancelled|not pending/i.test(err.message))
+          )
         ) {
-          return "ok";
+          throw err;
         }
-        throw err;
       }
+      {
+        const locals = await listLocalOrders();
+        const local =
+          locals.find((o) => o.id === serverId) ||
+          locals.find((o) => o.id === localId);
+        if (local) {
+          await upsertLocalOrder({
+            ...local,
+            id: serverId,
+            order_status: "CANCELLED",
+            sync_status: "synced",
+            updated_at: new Date().toISOString(),
+          });
+          if (localId !== serverId) await deleteLocalOrder(localId);
+        }
+      }
+      notifyOrdersChanged();
+      return "ok";
     }
     case "CREATE_PRODUCT": {
       const p = action.payload as {
@@ -522,20 +567,24 @@ export async function runSync(reason: string = "manual"): Promise<void> {
     try {
       const pending = await listPendingActions();
       const now = Date.now();
-      const due = pending.filter((a) => {
-        if (!a.next_retry_at) return true;
-        return new Date(a.next_retry_at).getTime() <= now;
-      });
+      const due = pending
+        .filter((a) => {
+          if (!a.next_retry_at) return true;
+          return new Date(a.next_retry_at).getTime() <= now;
+        })
+        .slice()
+        .sort((a, b) => syncActionPriority(a.type) - syncActionPriority(b.type));
       setState({ total: due.length, pending_count: pending.length });
 
       let hadFailure = false;
       let lastError: string | null = null;
+      const skipped: OfflineAction[] = [];
 
-      for (const action of due) {
+      const runOne = async (action: OfflineAction, collectSkips: boolean) => {
         const stillOpen = (await listPendingActions()).some(
           (a) => a.id === action.id,
         );
-        if (!stillOpen) continue;
+        if (!stillOpen) return;
 
         setState({ current_action: action.type });
         try {
@@ -543,6 +592,8 @@ export async function runSync(reason: string = "manual"): Promise<void> {
           if (result === "ok") {
             await markActionSynced(action.id);
             setState({ completed: state.completed + 1 });
+          } else if (result === "skip" && collectSkips) {
+            skipped.push(action);
           }
         } catch (err) {
           hadFailure = true;
@@ -564,7 +615,7 @@ export async function runSync(reason: string = "manual"): Promise<void> {
               message: `Dead-letter after ${attempts} attempts: ${action.type} — ${message}`,
               local: action.payload,
             });
-            continue;
+            return;
           }
 
           const delay = Math.min(1000 * 2 ** Math.min(attempts, 6), 60_000);
@@ -574,9 +625,21 @@ export async function runSync(reason: string = "manual"): Promise<void> {
           });
           if (isNetworkError(err) || isQueueableError(err)) {
             bumpBackoff();
-            break;
+            throw err;
           }
         }
+      };
+
+      try {
+        for (const action of due) {
+          await runOne(action, true);
+        }
+        // Second pass: COMPLETE/CANCEL that waited on CREATE in this same run.
+        for (const action of skipped) {
+          await runOne(action, false);
+        }
+      } catch {
+        /* network break already recorded */
       }
 
       await pruneSyncedActions(50);
@@ -585,10 +648,9 @@ export async function runSync(reason: string = "manual"): Promise<void> {
       // Interval ticks only drain the queue — skip full catalog refresh unless
       // something actually synced (or user/startup/online forced a pull).
       // "skip" (e.g. COMPLETE waiting on CREATE) must not trigger a full pull.
-      let syncedSomething = false;
       const stillPending = await listPendingActions();
       const stillIds = new Set(stillPending.map((a) => a.id));
-      syncedSomething = due.some((a) => !stillIds.has(a.id));
+      const syncedSomething = due.some((a) => !stillIds.has(a.id));
 
       const shouldRefreshCatalog =
         reason === "manual" ||
@@ -602,58 +664,7 @@ export async function runSync(reason: string = "manual"): Promise<void> {
             apiFetch<Order[]>("/orders?limit=100"),
             apiFetch<InventoryItem[]>("/inventory"),
           ]);
-          const local = await listLocalOrders();
-          const serverByClientId = new Set(
-            orders
-              .map((s) => s.client_order_id)
-              .filter((id): id is string => Boolean(id)),
-          );
-          const serverIds = new Set(orders.map((s) => s.id));
-
-          // Keep truly local-only rows. Drop LOCAL-* once the server already
-          // has the same client_order_id (avoids duplicate history tickets).
-          const localOnly = local.filter((o) => {
-            if (o.client_order_id && serverByClientId.has(o.client_order_id)) {
-              return false;
-            }
-            if (serverIds.has(o.id)) return false;
-            if (o.order_number?.startsWith("LOCAL-")) return true;
-            if (
-              o.client_order_id &&
-              !serverByClientId.has(o.client_order_id)
-            ) {
-              return true;
-            }
-            return false;
-          });
-
-          const byId = new Map<string, Order>();
-          for (const s of orders) {
-            const loc = local.find(
-              (l) =>
-                l.id === s.id ||
-                (l.client_order_id &&
-                  s.client_order_id &&
-                  l.client_order_id === s.client_order_id),
-            );
-            // Preserve local COMPLETED/CANCELLED while COMPLETE/CANCEL still queued.
-            if (
-              loc &&
-              loc.sync_status === "pending_sync" &&
-              (loc.order_status === "COMPLETED" ||
-                loc.order_status === "CANCELLED")
-            ) {
-              byId.set(s.id, {
-                ...s,
-                order_status: loc.order_status,
-                sync_status: "pending_sync",
-              });
-            } else {
-              byId.set(s.id, { ...s, sync_status: "synced" });
-            }
-          }
-          for (const o of localOnly) byId.set(o.id, o);
-          await replaceOrders(Array.from(byId.values()));
+          await replaceOrdersPreservingUnsynced(orders);
           await replaceInventory(inventory);
         } catch {
           /* ignore refresh failures */

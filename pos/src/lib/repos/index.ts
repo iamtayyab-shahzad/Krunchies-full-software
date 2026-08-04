@@ -10,7 +10,7 @@ import {
   getLocalSettings,
   replaceCategories,
   replaceInventory,
-  replaceOrders,
+  replaceOrdersPreservingUnsynced,
   mergeOrders,
   replaceProducts,
   saveLocalSettings,
@@ -117,16 +117,8 @@ async function fetchProductsRemote(): Promise<Product[]> {
 
 async function fetchOrdersRemote(): Promise<Order[]> {
   const rows = await apiFetch<Order[]>("/orders?limit=100");
-  const existing = await listLocalOrders();
-  const serverIds = new Set(rows.map((r) => r.id));
-  const unsynced = existing.filter(
-    (o) =>
-      (o.sync_status === "pending_sync" || o.sync_status === "local") &&
-      (!serverIds.has(o.id) || o.order_status !== "PENDING"),
-  );
-  const byId = new Map(rows.map((o) => [o.id, o]));
-  for (const o of unsynced) byId.set(o.id, o);
-  return Array.from(byId.values());
+  await replaceOrdersPreservingUnsynced(rows);
+  return listLocalOrders();
 }
 
 async function fetchPendingRemote(): Promise<Order[]> {
@@ -211,7 +203,9 @@ export const ordersRepo = {
       "orders",
       fetchOrdersRemote,
       listLocalOrders,
-      replaceOrders,
+      async () => {
+        /* write handled inside fetchOrdersRemote */
+      },
       [],
       ["orders"],
     );
@@ -305,21 +299,12 @@ export const customersRepo = {
       "customers",
       async () => {
         const orders = await apiFetch<Order[]>("/orders?limit=100");
-        const existing = await listLocalOrders();
-        const serverIds = new Set(orders.map((r) => r.id));
-        const unsynced = existing.filter(
-          (o) =>
-            (o.sync_status === "pending_sync" || o.sync_status === "local") &&
-            (!serverIds.has(o.id) || o.order_status !== "PENDING"),
-        );
-        const byId = new Map(orders.map((o) => [o.id, o]));
-        for (const o of unsynced) byId.set(o.id, o);
-        await replaceOrders(Array.from(byId.values()));
+        await replaceOrdersPreservingUnsynced(orders);
         return listLocalCustomers();
       },
       listLocalCustomers,
       async () => {
-        /* rebuilt via replaceOrders */
+        /* rebuilt via replaceOrdersPreservingUnsynced */
       },
       [],
       ["orders"],

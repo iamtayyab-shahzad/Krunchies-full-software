@@ -17,6 +17,7 @@ import {
 import { printCustomerReceipt, printKitchenReceipt, decodeKitchenInstructions, parseTableNumber, ensureReceiptItemNames } from "@/lib/receipt";
 import { ordersApi, productsApi, settingsApi } from "@/services/api";
 import { isOnline } from "@/lib/network";
+import { getSyncState } from "@/lib/sync-engine";
 import type { Order, OrderType, PaymentMethod } from "@/types";
 
 type FilterType = "all" | "website" | "phone" | "walkin";
@@ -80,6 +81,7 @@ export default function PendingOrdersPage() {
       if (typeof document !== "undefined" && document.hidden) return false;
       // Offline / unreachable: rely on IndexedDB + POS_ORDERS_CHANGED_EVENT.
       if (!isOnline()) return false;
+      if (getSyncState().syncing) return false;
       return 5_000;
     },
     refetchOnWindowFocus: true,

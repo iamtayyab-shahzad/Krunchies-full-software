@@ -69,6 +69,8 @@ export function Sidebar() {
     refetchInterval: () => {
       if (typeof document !== "undefined" && document.hidden) return false;
       if (!isOnline()) return false;
+      // Avoid fighting the sync engine mid-flight.
+      if (getSyncState().syncing) return false;
       return 5_000;
     },
     refetchOnWindowFocus: true,
