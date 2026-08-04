@@ -516,18 +516,21 @@ export function buildCustomerReceiptHtml(
 <meta charset="utf-8" />
 <title>Receipt ${escapeHtml(order.order_number || order.id)}</title>
 <style>
-  @page { size: 80mm auto; margin: 3mm 2mm; }
+  @page { size: 80mm auto; margin: 2mm 5mm 2mm 2mm; }
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 14px;
     line-height: 1.32;
     color: #000;
-    /* Leave right gutter — thermal heads clip the far edge */
-    width: 70mm;
-    max-width: 70mm;
-    margin: 0 auto;
-    padding: 0 1mm 0 0;
+    /*
+      iTech / 80mm heads clip the far right ~3–5mm.
+      Keep content inside a safe width so Amt / 4-digit prices stay visible.
+    */
+    width: 62mm;
+    max-width: 62mm;
+    margin: 0;
+    padding: 0 4mm 0 0;
     overflow: hidden;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -564,8 +567,9 @@ export function buildCustomerReceiptHtml(
     font-size: 13px;
   }
   col.col-item { width: auto; }
-  col.col-qty { width: 8mm; }
-  col.col-amt { width: 22mm; }
+  col.col-qty { width: 7mm; }
+  /* Wide enough for "Rs 9,999" without spilling into the clip zone */
+  col.col-amt { width: 24mm; }
   thead td {
     font-weight: 800;
     font-size: 12px;
@@ -591,6 +595,8 @@ export function buildCustomerReceiptHtml(
     text-align: right;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+    overflow: visible;
+    padding-right: 0 !important;
   }
   .note {
     font-size: 12px;
