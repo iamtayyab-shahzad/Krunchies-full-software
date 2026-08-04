@@ -18,7 +18,7 @@ export default function OrderHistoryPage() {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: ordersApi.list,
-    staleTime: 60_000,
+    staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
   const { data: settings } = useQuery({
@@ -31,6 +31,8 @@ export default function OrderHistoryPage() {
     queryFn: productsApi.list,
     staleTime: 5 * 60_000,
   });
+
+  const showHistoryLoading = isLoading && orders.length === 0;
 
   const productNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -125,7 +127,7 @@ export default function OrderHistoryPage() {
         ))}
       </div>
 
-      {isLoading ? (
+      {showHistoryLoading ? (
         <p className="text-zinc-500">Loading...</p>
       ) : (
         <div className="space-y-3">

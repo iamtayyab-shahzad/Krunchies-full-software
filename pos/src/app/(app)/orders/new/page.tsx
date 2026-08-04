@@ -104,6 +104,9 @@ export default function NewOrderPage() {
     staleTime: 5 * 60_000,
   });
 
+  // Only block the menu when we have nothing cached yet.
+  const showMenuLoading = productsLoading && products.length === 0;
+
   const deliveryLocations = useMemo(
     () => locations.filter((l) => l.id !== WALKIN_LOCATION_ID),
     [locations],
@@ -528,7 +531,7 @@ export default function NewOrderPage() {
   return (
     <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[1fr_380px]">
       <div className="flex min-h-0 flex-col overflow-hidden border-r border-zinc-800">
-        {productsLoading ? (
+        {showMenuLoading ? (
           <div className="flex flex-1 items-center justify-center p-8 text-zinc-400">
             Loading menu…
           </div>

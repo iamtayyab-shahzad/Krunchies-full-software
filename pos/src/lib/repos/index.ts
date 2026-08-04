@@ -20,7 +20,10 @@ import {
   upsertLocalOrder,
   type CachedSession,
 } from "@/lib/offline-db";
-import { notifyOrdersChanged } from "@/lib/offline-events";
+import {
+  notifyOrdersChanged,
+  notifyCacheUpdated,
+} from "@/lib/offline-events";
 import type {
   Category,
   Customer,
@@ -31,222 +34,287 @@ import type {
   Settings,
 } from "@/types";
 
-async function onlineFirst<T>(
+const revalidating = new Set<string>();
+const lastRevalidateAt = new Map<string, number>();
+/** Avoid invalidate → localFirst → notify → invalidate loops. */
+const REVALIDATE_COOLDOWN_MS = 4_000;
+
+function isEmptyCache<T>(local: T | null | undefined): boolean {
+  if (local == null) return true;
+  if (Array.isArray(local)) return local.length === 0;
+  return false;
+}
+
+/**
+ * Counter-speed reads: return IndexedDB immediately when present, refresh
+ * from the API in the background. Only blocks on network when cache is empty.
+ */
+async function localFirst<T>(
+  cacheKey: string,
   fetchRemote: () => Promise<T>,
   readLocal: () => Promise<T | null | undefined>,
   writeLocal: (data: T) => Promise<void>,
   empty: T,
+  notifyKeys?: string[],
 ): Promise<T> {
+  const local = await readLocal();
+  const emptyLocal = isEmptyCache(local);
+
+  const revalidate = async () => {
+    if (!isOnline()) return;
+    if (revalidating.has(cacheKey)) return;
+    const last = lastRevalidateAt.get(cacheKey) || 0;
+    if (Date.now() - last < REVALIDATE_COOLDOWN_MS) return;
+    revalidating.add(cacheKey);
+    lastRevalidateAt.set(cacheKey, Date.now());
+    try {
+      const data = await fetchRemote();
+      await writeLocal(data);
+      if (notifyKeys?.length) notifyCacheUpdated(notifyKeys);
+    } catch {
+      /* background refresh failures are non-fatal */
+    } finally {
+      revalidating.delete(cacheKey);
+    }
+  };
+
+  if (!emptyLocal) {
+    void revalidate();
+    return local as T;
+  }
+
   if (isOnline()) {
     try {
       const data = await fetchRemote();
       await writeLocal(data);
+      lastRevalidateAt.set(cacheKey, Date.now());
       return data;
     } catch (err) {
       if (!isNetworkError(err)) throw err;
-      const local = await readLocal();
-      if (local != null) return local;
-      throw err;
+      return empty;
     }
   }
-  const local = await readLocal();
-  if (local != null) return local;
+
   return empty;
+}
+
+async function fetchProductsRemote(): Promise<Product[]> {
+  const [remoteProducts, remoteSizes] = await Promise.all([
+    apiFetch<Product[]>("/products"),
+    apiFetch<ProductSize[]>("/product-sizes"),
+  ]);
+  const sizesByProduct = new Map<string, ProductSize[]>();
+  for (const s of remoteSizes) {
+    const arr = sizesByProduct.get(s.product_id) || [];
+    arr.push(s);
+    sizesByProduct.set(s.product_id, arr);
+  }
+  return remoteProducts.map((p) => ({
+    ...p,
+    sizes: sizesByProduct.get(p.id) || [],
+  }));
+}
+
+async function fetchOrdersRemote(): Promise<Order[]> {
+  const rows = await apiFetch<Order[]>("/orders?limit=100");
+  const existing = await listLocalOrders();
+  const serverIds = new Set(rows.map((r) => r.id));
+  const unsynced = existing.filter(
+    (o) =>
+      (o.sync_status === "pending_sync" || o.sync_status === "local") &&
+      (!serverIds.has(o.id) || o.order_status !== "PENDING"),
+  );
+  const byId = new Map(rows.map((o) => [o.id, o]));
+  for (const o of unsynced) byId.set(o.id, o);
+  return Array.from(byId.values());
+}
+
+async function fetchPendingRemote(): Promise<Order[]> {
+  const rows = await apiFetch<Order[]>("/orders/pending");
+  const existing = await listLocalOrders();
+  const localById = new Map(existing.map((o) => [o.id, o]));
+  const byId = new Map<string, Order>();
+  for (const row of rows) {
+    const local = localById.get(row.id);
+    if (
+      local &&
+      local.sync_status === "pending_sync" &&
+      local.order_status !== "PENDING"
+    ) {
+      continue;
+    }
+    byId.set(row.id, row);
+  }
+  for (const o of existing) {
+    if (
+      o.order_status === "PENDING" &&
+      (o.order_number.startsWith("LOCAL-") ||
+        o.sync_status === "pending_sync")
+    ) {
+      byId.set(o.id, o);
+    }
+  }
+  const pending = Array.from(byId.values()).filter(
+    (o) => o.order_status === "PENDING",
+  );
+  const pendingIds = new Set(pending.map((o) => o.id));
+
+  let reconciled = 0;
+  for (const o of existing) {
+    if (o.order_status !== "PENDING") continue;
+    if (pendingIds.has(o.id)) continue;
+    if (o.sync_status === "pending_sync" || o.sync_status === "local") {
+      continue;
+    }
+    if (o.order_number?.startsWith("LOCAL-")) continue;
+    await upsertLocalOrder({
+      ...o,
+      order_status: "COMPLETED",
+      sync_status: "synced",
+      updated_at: new Date().toISOString(),
+    });
+    reconciled += 1;
+  }
+
+  await mergeOrders(pending);
+  if (reconciled > 0) notifyOrdersChanged();
+  return pending;
 }
 
 export const catalogRepo = {
   async listProducts(): Promise<Product[]> {
-    return onlineFirst(
-      async () => {
-        const [remoteProducts, remoteSizes] = await Promise.all([
-          apiFetch<Product[]>("/products"),
-          apiFetch<ProductSize[]>("/product-sizes"),
-        ]);
-        const sizesByProduct = new Map<string, ProductSize[]>();
-        for (const s of remoteSizes) {
-          const arr = sizesByProduct.get(s.product_id) || [];
-          arr.push(s);
-          sizesByProduct.set(s.product_id, arr);
-        }
-        return remoteProducts.map((p) => ({
-          ...p,
-          sizes: sizesByProduct.get(p.id) || [],
-        }));
-      },
+    return localFirst(
+      "products",
+      fetchProductsRemote,
       listLocalProducts,
       replaceProducts,
       [],
+      ["products"],
     );
   },
 
   async listCategories(): Promise<Category[]> {
-    return onlineFirst(
+    return localFirst(
+      "categories",
       () => apiFetch<Category[]>("/categories"),
       listLocalCategories,
       replaceCategories,
       [],
+      ["categories"],
     );
   },
 };
 
 export const ordersRepo = {
   async list(): Promise<Order[]> {
-    return onlineFirst(
-      async () => {
-        const rows = await apiFetch<Order[]>("/orders?limit=100");
-        const existing = await listLocalOrders();
-        const serverIds = new Set(rows.map((r) => r.id));
-        // Preserve local orders the server doesn't know about yet (offline
-        // creates) and local status changes that haven't synced, so a refetch
-        // right after reconnect doesn't drop them before the sync completes.
-        const unsynced = existing.filter(
-          (o) =>
-            (o.sync_status === "pending_sync" || o.sync_status === "local") &&
-            (!serverIds.has(o.id) || o.order_status !== "PENDING"),
-        );
-        const byId = new Map(rows.map((o) => [o.id, o]));
-        for (const o of unsynced) byId.set(o.id, o);
-        const merged = Array.from(byId.values());
-        await replaceOrders(merged);
-        return merged;
-      },
+    return localFirst(
+      "orders",
+      fetchOrdersRemote,
       listLocalOrders,
       replaceOrders,
       [],
+      ["orders"],
     );
   },
 
   async pending(): Promise<Order[]> {
-    return onlineFirst(
-      async () => {
-        const rows = await apiFetch<Order[]>("/orders/pending");
-        const existing = await listLocalOrders();
-        const localById = new Map(existing.map((o) => [o.id, o]));
-        // Only keep server pending + local unsynced pending — do not seed with
-        // every cached order or completed rows can reappear as PENDING.
-        const byId = new Map<string, Order>();
-        for (const row of rows) {
-          const local = localById.get(row.id);
-          if (
-            local &&
-            local.sync_status === "pending_sync" &&
-            local.order_status !== "PENDING"
-          ) {
-            // Locally completed/cancelled but not synced yet — skip.
-            continue;
-          }
-          byId.set(row.id, row);
-        }
-        for (const o of existing) {
-          if (
-            o.order_status === "PENDING" &&
-            (o.order_number.startsWith("LOCAL-") ||
-              o.sync_status === "pending_sync")
-          ) {
-            byId.set(o.id, o);
-          }
-        }
-        const pending = Array.from(byId.values()).filter(
-          (o) => o.order_status === "PENDING",
-        );
-        const pendingIds = new Set(pending.map((o) => o.id));
-
-        // Reconcile zombie PENDING rows: still in IDB as PENDING but neither
-        // on the server pending list nor awaiting local sync. Keeps badge and
-        // offline pending counts aligned with the live pending list.
-        let reconciled = 0;
-        for (const o of existing) {
-          if (o.order_status !== "PENDING") continue;
-          if (pendingIds.has(o.id)) continue;
-          if (o.sync_status === "pending_sync" || o.sync_status === "local") {
-            continue;
-          }
-          if (o.order_number?.startsWith("LOCAL-")) continue;
-          await upsertLocalOrder({
-            ...o,
-            order_status: "COMPLETED",
-            sync_status: "synced",
-            updated_at: new Date().toISOString(),
-          });
-          reconciled += 1;
-        }
-
-        await mergeOrders(pending);
-        if (reconciled > 0) notifyOrdersChanged();
-        return pending;
-      },
+    return localFirst(
+      "orders-pending",
+      fetchPendingRemote,
       listLocalPendingOrders,
       async () => {
-        /* pending write handled above */
+        /* merge handled inside fetchPendingRemote */
       },
       [],
+      ["orders"],
     );
   },
 
   async get(id: string): Promise<Order> {
+    const local = (await listLocalOrders()).find((o) => o.id === id);
+    if (local) {
+      if (isOnline()) {
+        void apiFetch<Order>(`/orders/${id}`)
+          .then((remote) =>
+            upsertLocalOrder({ ...remote, sync_status: "synced" }),
+          )
+          .catch(() => undefined);
+      }
+      return local;
+    }
     if (isOnline()) {
       try {
         return await apiFetch<Order>(`/orders/${id}`);
       } catch (err) {
-        if (!isNetworkError(err)) {
-          const local = (await listLocalOrders()).find((o) => o.id === id);
-          if (local) return local;
-          throw err;
-        }
+        if (!isNetworkError(err)) throw err;
       }
     }
-    const local = (await listLocalOrders()).find((o) => o.id === id);
-    if (!local) throw new Error("Order not found offline");
-    return local;
+    throw new Error("Order not found offline");
   },
 };
 
 export const inventoryRepo = {
   async list(): Promise<InventoryItem[]> {
-    return onlineFirst(
+    return localFirst(
+      "inventory",
       () => apiFetch<InventoryItem[]>("/inventory"),
       listLocalInventory,
       replaceInventory,
       [],
+      ["inventory"],
     );
   },
 };
 
+const emptySettings = (): Settings => ({
+  id: "default",
+  created_at: "",
+  updated_at: "",
+  restaurant_name: "Krunchies Pizza",
+  phone: "",
+  whatsapp: "",
+  logo: "",
+  opening_time: "11:00 AM",
+  closing_time: "11:00 PM",
+  cash_on_delivery_fee: 0,
+  currency: "Rs",
+  google_maps: "",
+  facebook: "",
+  instagram: "",
+});
+
 export const settingsRepo = {
   async get(): Promise<Settings> {
-    return onlineFirst(
+    return localFirst(
+      "settings",
       () => apiFetch<Settings>("/settings/public"),
       getLocalSettings,
       async (data) => {
         if (data) await saveLocalSettings(data);
       },
-      {
-        id: "default",
-        created_at: "",
-        updated_at: "",
-        restaurant_name: "Krunchies Pizza",
-        phone: "",
-        whatsapp: "",
-        logo: "",
-        opening_time: "11:00 AM",
-        closing_time: "11:00 PM",
-        cash_on_delivery_fee: 0,
-        currency: "Rs",
-        google_maps: "",
-        facebook: "",
-        instagram: "",
-      },
+      emptySettings(),
+      ["settings"],
     );
   },
 };
 
 export const customersRepo = {
   async list(): Promise<Customer[]> {
-    return onlineFirst(
+    // Never wipe unsynced local tickets when rebuilding customers from orders.
+    return localFirst(
+      "customers",
       async () => {
-        // Derive from orders (no dedicated customers API on POS).
         const orders = await apiFetch<Order[]>("/orders?limit=100");
-        await replaceOrders(orders);
+        const existing = await listLocalOrders();
+        const serverIds = new Set(orders.map((r) => r.id));
+        const unsynced = existing.filter(
+          (o) =>
+            (o.sync_status === "pending_sync" || o.sync_status === "local") &&
+            (!serverIds.has(o.id) || o.order_status !== "PENDING"),
+        );
+        const byId = new Map(orders.map((o) => [o.id, o]));
+        for (const o of unsynced) byId.set(o.id, o);
+        await replaceOrders(Array.from(byId.values()));
         return listLocalCustomers();
       },
       listLocalCustomers,
@@ -254,6 +322,7 @@ export const customersRepo = {
         /* rebuilt via replaceOrders */
       },
       [],
+      ["orders"],
     );
   },
 
@@ -327,35 +396,32 @@ export const sessionRepo = {
 export const locationsRepo = {
   async list() {
     const { cacheGet, cacheSet } = await import("@/lib/offline-db");
-    if (isOnline()) {
-      try {
-        const data = await apiFetch<
-          import("@/types").Location[]
-        >("/locations");
+    type Location = import("@/types").Location;
+    return localFirst(
+      "locations",
+      () => apiFetch<Location[]>("/locations"),
+      async () => cacheGet<Location[]>("locations"),
+      async (data) => {
         await cacheSet("locations", data);
-        return data;
-      } catch (err) {
-        if (!isNetworkError(err)) throw err;
-        return (await cacheGet<import("@/types").Location[]>("locations")) || [];
-      }
-    }
-    return (await cacheGet<import("@/types").Location[]>("locations")) || [];
+      },
+      [],
+      ["locations"],
+    );
   },
 };
 
-/** Prefetch core datasets into IndexedDB while online. */
+/**
+ * Prefetch catalog + settings into IndexedDB (not orders/inventory —
+ * sync engine owns those to avoid a startup thundering herd).
+ */
 export async function warmOfflineCache() {
   if (!isOnline()) return;
   await Promise.allSettled([
     catalogRepo.listProducts(),
     catalogRepo.listCategories(),
-    ordersRepo.list(),
-    inventoryRepo.list(),
     settingsRepo.get(),
     locationsRepo.list(),
   ]);
-  // Also ask the service worker to warm HTML shells (SW does the fetches).
-  // Avoid duplicate page fetches here — pwa-register / SW handle that.
   if (typeof window !== "undefined" && "serviceWorker" in navigator) {
     const reg = await navigator.serviceWorker.getRegistration();
     reg?.active?.postMessage({ type: "WARM_SHELL" });

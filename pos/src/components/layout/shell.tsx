@@ -69,10 +69,10 @@ export function Sidebar() {
     refetchInterval: () => {
       if (typeof document !== "undefined" && document.hidden) return false;
       if (!isOnline()) return false;
-      return 15_000;
+      return 5_000;
     },
     refetchOnWindowFocus: true,
-    staleTime: 5_000,
+    staleTime: 2_000,
   });
   const pendingCount = pendingOrders.length;
 

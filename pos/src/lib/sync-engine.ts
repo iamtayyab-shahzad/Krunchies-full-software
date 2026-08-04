@@ -584,11 +584,17 @@ export async function runSync(reason: string = "manual"): Promise<void> {
 
       // Interval ticks only drain the queue — skip full catalog refresh unless
       // something actually synced (or user/startup/online forced a pull).
+      // "skip" (e.g. COMPLETE waiting on CREATE) must not trigger a full pull.
+      let syncedSomething = false;
+      const stillPending = await listPendingActions();
+      const stillIds = new Set(stillPending.map((a) => a.id));
+      syncedSomething = due.some((a) => !stillIds.has(a.id));
+
       const shouldRefreshCatalog =
         reason === "manual" ||
         reason === "startup" ||
         reason === "online" ||
-        due.length > 0;
+        syncedSomething;
 
       if (shouldRefreshCatalog && (!hadFailure || reason === "manual")) {
         try {

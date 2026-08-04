@@ -10,7 +10,14 @@ import {
   POS_SYNC_COMPLETE_EVENT,
   startSyncEngine,
 } from "@/lib/sync-engine";
-import { POS_ORDERS_CHANGED_EVENT } from "@/lib/offline-events";
+import {
+  POS_ORDERS_CHANGED_EVENT,
+  POS_CACHE_UPDATED_EVENT,
+} from "@/lib/offline-events";
+import {
+  listLocalOrders,
+  listLocalPendingOrders,
+} from "@/lib/offline-db";
 
 function ThemedToaster() {
   const { theme } = usePosTheme();
@@ -29,6 +36,19 @@ function ThemedToaster() {
       }}
     />
   );
+}
+
+async function hydrateOrdersFromIdb(client: QueryClient) {
+  try {
+    const [pending, all] = await Promise.all([
+      listLocalPendingOrders(),
+      listLocalOrders(),
+    ]);
+    client.setQueryData(["orders", "pending"], pending);
+    client.setQueryData(["orders"], all);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -53,20 +73,30 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stop = startSyncEngine();
     const onSync = () => {
+      // Soft refresh from IDB first, then let localFirst revalidate in background.
+      void hydrateOrdersFromIdb(client);
       void client.invalidateQueries({ queryKey: ["orders"] });
       void client.invalidateQueries({ queryKey: ["inventory"] });
     };
-    // Fired immediately after any local (offline) order mutation so the
-    // Pending/History lists refresh from IndexedDB without waiting for a sync.
+    // Local cashier mutations: paint from IndexedDB immediately — never wait on API.
     const onOrdersChanged = () => {
-      void client.invalidateQueries({ queryKey: ["orders"] });
+      void hydrateOrdersFromIdb(client);
+    };
+    const onCacheUpdated = (e: Event) => {
+      const keys =
+        (e as CustomEvent<{ keys?: string[] }>).detail?.keys || [];
+      for (const key of keys) {
+        void client.invalidateQueries({ queryKey: [key] });
+      }
     };
     window.addEventListener(POS_SYNC_COMPLETE_EVENT, onSync);
     window.addEventListener(POS_ORDERS_CHANGED_EVENT, onOrdersChanged);
+    window.addEventListener(POS_CACHE_UPDATED_EVENT, onCacheUpdated);
     return () => {
       stop?.();
       window.removeEventListener(POS_SYNC_COMPLETE_EVENT, onSync);
       window.removeEventListener(POS_ORDERS_CHANGED_EVENT, onOrdersChanged);
+      window.removeEventListener(POS_CACHE_UPDATED_EVENT, onCacheUpdated);
     };
   }, [client]);
 

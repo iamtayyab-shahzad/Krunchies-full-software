@@ -2,18 +2,27 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sidebar, TopBar } from "@/components/layout/shell";
 import { useMenuSearch } from "@/context/menu-search-context";
 import { TOKEN_KEY, isTokenExpired, isOfflineSessionValid } from "@/lib/utils";
 import { isOnline } from "@/lib/network";
-import { sessionRepo, settingsApi, warmOfflineCache } from "@/services/api";
+import {
+  sessionRepo,
+  settingsApi,
+  warmOfflineCache,
+  productsApi,
+  categoriesApi,
+  locationsApi,
+  ordersApi,
+} from "@/services/api";
 
 let offlineCacheWarmed = false;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const { search, setSearch } = useMenuSearch();
   const isNewOrder = pathname.startsWith("/orders/new");
 
@@ -51,16 +60,49 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Warm IndexedDB once per session — not on every route change.
+      // Warm catalog once per session; prefetch into React Query for New Order.
       if (isOnline() && !offlineCacheWarmed) {
         offlineCacheWarmed = true;
-        void warmOfflineCache();
+        void warmOfflineCache().then(() => {
+          if (cancelled) return;
+          void queryClient.prefetchQuery({
+            queryKey: ["products"],
+            queryFn: productsApi.list,
+            staleTime: 5 * 60_000,
+          });
+          void queryClient.prefetchQuery({
+            queryKey: ["categories"],
+            queryFn: categoriesApi.list,
+            staleTime: 5 * 60_000,
+          });
+          void queryClient.prefetchQuery({
+            queryKey: ["locations"],
+            queryFn: locationsApi.list,
+            staleTime: 5 * 60_000,
+          });
+          void queryClient.prefetchQuery({
+            queryKey: ["settings"],
+            queryFn: settingsApi.get,
+            staleTime: 5 * 60_000,
+          });
+          void queryClient.prefetchQuery({
+            queryKey: ["orders", "pending"],
+            queryFn: ordersApi.pending,
+            staleTime: 2_000,
+          });
+        });
+      } else if (!isOnline()) {
+        void queryClient.prefetchQuery({
+          queryKey: ["orders", "pending"],
+          queryFn: ordersApi.pending,
+          staleTime: 2_000,
+        });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, queryClient]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-black text-white">

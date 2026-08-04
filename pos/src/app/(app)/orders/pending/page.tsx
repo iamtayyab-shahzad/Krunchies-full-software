@@ -80,10 +80,13 @@ export default function PendingOrdersPage() {
       if (typeof document !== "undefined" && document.hidden) return false;
       // Offline / unreachable: rely on IndexedDB + POS_ORDERS_CHANGED_EVENT.
       if (!isOnline()) return false;
-      return 15_000;
+      return 5_000;
     },
     refetchOnWindowFocus: true,
+    staleTime: 2_000,
   });
+
+  const showPendingLoading = isLoading && orders.length === 0;
 
   const filtered = useMemo(
     () =>
@@ -372,7 +375,7 @@ export default function PendingOrdersPage() {
             </div>
           );
         })}
-        {isLoading ? (
+        {showPendingLoading ? (
           <p className="text-zinc-500">Loading pending orders...</p>
         ) : !filtered.length ? (
           <p className="text-zinc-500">
