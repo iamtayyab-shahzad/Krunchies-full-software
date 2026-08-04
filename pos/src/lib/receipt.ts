@@ -31,16 +31,15 @@ let printPumpRunning = false;
  * Print silently when Chrome was launched with --kiosk-printing
  * (use pos/scripts/Launch-POS.bat). Otherwise the system print dialog appears.
  * Jobs are queued so Complete / Reprint / Kitchen never overlap.
+ * Resolves true only after the print job actually runs (or false on failure).
  */
-function openPrintWindow(html: string, title: string) {
-  if (typeof document === "undefined") return false;
+function openPrintWindow(html: string, title: string): Promise<boolean> {
+  if (typeof document === "undefined") return Promise.resolve(false);
 
-  // Accept immediately; actual print runs on the queue.
-  void new Promise<boolean>((resolve) => {
+  return new Promise<boolean>((resolve) => {
     printQueue.push({ html, title, resolve });
     void pumpPrintQueue();
   });
-  return true;
 }
 
 async function pumpPrintQueue() {
@@ -466,7 +465,7 @@ export function buildKitchenReceiptHtml(order: Order) {
 </html>`;
 }
 
-export function printKitchenReceipt(order: Order) {
+export function printKitchenReceipt(order: Order): Promise<boolean> {
   return openPrintWindow(
     buildKitchenReceiptHtml(ensureReceiptItemNames(order)),
     `Kitchen ${order.order_number || order.id}`,
@@ -711,7 +710,7 @@ export function printCustomerReceipt(
   order: Order,
   settings: Settings | null,
   reprint = false,
-) {
+): Promise<boolean> {
   return openPrintWindow(
     buildCustomerReceiptHtml(ensureReceiptItemNames(order), settings, reprint),
     `Receipt ${order.order_number || order.id}`,
@@ -723,7 +722,7 @@ export function printReceipt(
   order: Order,
   settings: Settings | null,
   reprint = false,
-) {
+): Promise<boolean> {
   return printCustomerReceipt(order, settings, reprint);
 }
 

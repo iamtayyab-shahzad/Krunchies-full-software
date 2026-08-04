@@ -89,7 +89,15 @@ export default function OrderHistoryPage() {
   const reprint = (order: Order) => {
     const printable = ensureReceiptItemNames(order, productNameById);
     localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
-    printCustomerReceipt(printable, settings || null, true);
+    void printCustomerReceipt(printable, settings || null, true).then(
+      (printed) => {
+        toast.message(
+          printed
+            ? "Receipt reprinted"
+            : "Allow popups to reprint receipt",
+        );
+      },
+    );
   };
 
   return (

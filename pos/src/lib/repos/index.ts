@@ -17,8 +17,10 @@ import {
   saveSession,
   getSession,
   clearSession,
+  upsertLocalOrder,
   type CachedSession,
 } from "@/lib/offline-db";
+import { notifyOrdersChanged } from "@/lib/offline-events";
 import type {
   Category,
   Customer,
@@ -147,7 +149,30 @@ export const ordersRepo = {
         const pending = Array.from(byId.values()).filter(
           (o) => o.order_status === "PENDING",
         );
+        const pendingIds = new Set(pending.map((o) => o.id));
+
+        // Reconcile zombie PENDING rows: still in IDB as PENDING but neither
+        // on the server pending list nor awaiting local sync. Keeps badge and
+        // offline pending counts aligned with the live pending list.
+        let reconciled = 0;
+        for (const o of existing) {
+          if (o.order_status !== "PENDING") continue;
+          if (pendingIds.has(o.id)) continue;
+          if (o.sync_status === "pending_sync" || o.sync_status === "local") {
+            continue;
+          }
+          if (o.order_number?.startsWith("LOCAL-")) continue;
+          await upsertLocalOrder({
+            ...o,
+            order_status: "COMPLETED",
+            sync_status: "synced",
+            updated_at: new Date().toISOString(),
+          });
+          reconciled += 1;
+        }
+
         await mergeOrders(pending);
+        if (reconciled > 0) notifyOrdersChanged();
         return pending;
       },
       listLocalPendingOrders,

@@ -80,7 +80,7 @@ export default function PendingOrdersPage() {
       if (typeof document !== "undefined" && document.hidden) return false;
       // Offline / unreachable: rely on IndexedDB + POS_ORDERS_CHANGED_EVENT.
       if (!isOnline()) return false;
-      return 30_000;
+      return 15_000;
     },
     refetchOnWindowFocus: true,
   });
@@ -120,15 +120,16 @@ export default function PendingOrdersPage() {
     queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
       (old || []).filter((o) => o.id !== order.id),
     );
-    const printed = printCustomerReceipt(
+    void printCustomerReceipt(
       { ...printableOrder(order), order_status: "COMPLETED" },
       settings || null,
-    );
-    toast.success(
-      printed
-        ? "Order completed — customer receipt printed"
-        : "Order completed — allow popups to print receipt",
-    );
+    ).then((printed) => {
+      toast.success(
+        printed
+          ? "Order completed — customer receipt printed"
+          : "Order completed — allow popups to print receipt",
+      );
+    });
     void ordersApi
       .complete(order.id)
       .then(() => {
@@ -143,12 +144,13 @@ export default function PendingOrdersPage() {
   };
 
   const reprintKitchen = (order: Order) => {
-    const printed = printKitchenReceipt(printableOrder(order));
-    toast.message(
-      printed
-        ? "Kitchen receipt sent to printer"
-        : "Allow popups to print kitchen receipt",
-    );
+    void printKitchenReceipt(printableOrder(order)).then((printed) => {
+      toast.message(
+        printed
+          ? "Kitchen receipt sent to printer"
+          : "Allow popups to print kitchen receipt",
+      );
+    });
   };
 
   const cancel = (order: Order) => {

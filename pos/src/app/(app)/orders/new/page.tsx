@@ -417,23 +417,25 @@ export default function NewOrderPage() {
     localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
 
     if (status === "COMPLETED") {
-      const printed = printCustomerReceipt(printable, settings || null);
-      toast.success(
-        !printed
-          ? "Order completed — allow popups to print customer receipt"
-          : editingOrderId
-            ? "Order updated & completed"
-            : "Order completed & customer receipt printed",
-      );
+      void printCustomerReceipt(printable, settings || null).then((printed) => {
+        toast.success(
+          !printed
+            ? "Order completed — allow popups to print customer receipt"
+            : editingOrderId
+              ? "Order updated & completed"
+              : "Order completed & customer receipt printed",
+        );
+      });
     } else {
-      const printed = printKitchenReceipt(printable);
-      toast.success(
-        !printed
-          ? "Saved to Pending — allow popups to print kitchen receipt"
-          : editingOrderId
-            ? "Pending updated — kitchen receipt printed"
-            : "Saved to Pending — kitchen receipt printed",
-      );
+      void printKitchenReceipt(printable).then((printed) => {
+        toast.success(
+          !printed
+            ? "Saved to Pending — allow popups to print kitchen receipt"
+            : editingOrderId
+              ? "Pending updated — kitchen receipt printed"
+              : "Saved to Pending — kitchen receipt printed",
+        );
+      });
     }
 
     if (status === "PENDING") {
@@ -507,7 +509,17 @@ export default function NewOrderPage() {
         toast.error("No receipt to reprint");
         return;
       }
-      printCustomerReceipt(JSON.parse(raw) as Order, settings || null, true);
+      void printCustomerReceipt(
+        JSON.parse(raw) as Order,
+        settings || null,
+        true,
+      ).then((printed) => {
+        if (!printed) {
+          toast.error("Allow popups to reprint receipt");
+        } else {
+          toast.success("Receipt reprinted");
+        }
+      });
     } catch {
       toast.error("Reprint failed");
     }

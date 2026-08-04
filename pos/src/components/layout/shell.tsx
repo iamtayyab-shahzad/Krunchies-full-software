@@ -19,17 +19,16 @@ import {
   Moon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { sessionRepo } from "@/services/api";
+import { ordersApi, sessionRepo } from "@/services/api";
 import { isOnline, POS_CONNECTIVITY_EVENT } from "@/lib/network";
 import {
   getSyncState,
   runSync,
   subscribeSync,
-  POS_SYNC_COMPLETE_EVENT,
   type SyncEngineState,
 } from "@/lib/sync-engine";
-import { POS_ORDERS_CHANGED_EVENT } from "@/lib/offline-events";
 import { setToken } from "@/lib/api-client";
 import { usePosTheme } from "@/context/theme-context";
 
@@ -60,37 +59,22 @@ function formatLastSync(iso: string | null) {
 export function Sidebar() {
   const pathname = usePathname();
   const [sync, setSync] = useState<SyncEngineState>(getSyncState());
-  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => subscribeSync(setSync), []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadPending = async () => {
-      try {
-        const { listLocalPendingOrders } = await import("@/lib/offline-db");
-        const local = await listLocalPendingOrders();
-        if (!cancelled) setPendingCount(local.length);
-      } catch {
-        // Keep last known count
-      }
-    };
-    void loadPending();
-    const onChange = () => void loadPending();
-    window.addEventListener(POS_ORDERS_CHANGED_EVENT, onChange);
-    window.addEventListener(POS_SYNC_COMPLETE_EVENT, onChange);
-    // Light fallback poll — IDB + events cover most updates.
-    const id = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      void loadPending();
-    }, 90_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      window.removeEventListener(POS_ORDERS_CHANGED_EVENT, onChange);
-      window.removeEventListener(POS_SYNC_COMPLETE_EVENT, onChange);
-    };
-  }, []);
+  // Same source of truth as Pending Orders page (React Query cache + poll).
+  const { data: pendingOrders = [] } = useQuery({
+    queryKey: ["orders", "pending"],
+    queryFn: ordersApi.pending,
+    refetchInterval: () => {
+      if (typeof document !== "undefined" && document.hidden) return false;
+      if (!isOnline()) return false;
+      return 15_000;
+    },
+    refetchOnWindowFocus: true,
+    staleTime: 5_000,
+  });
+  const pendingCount = pendingOrders.length;
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">

@@ -182,24 +182,54 @@ async function processAction(
         method: "POST",
         body: JSON.stringify(p.input),
       });
-      const syncedOrder = { ...order, sync_status: "synced" as const };
+
+      // Never flash server PENDING over a locally completed/cancelled order.
+      // Staff may have already pressed Complete before CREATE finished syncing.
+      const localExisting = p.localId
+        ? (await listLocalOrders()).find((o) => o.id === p.localId)
+        : undefined;
+      const followUps = p.localId
+        ? (await listPendingActions()).filter((follow) => {
+            if (follow.id === action.id) return false;
+            const fid = (follow.payload as { id?: string })?.id;
+            return fid === p.localId;
+          })
+        : [];
+      const willComplete =
+        followUps.some((f) => f.type === "COMPLETE_ORDER") ||
+        localExisting?.order_status === "COMPLETED";
+      const willCancel =
+        followUps.some((f) => f.type === "CANCEL_ORDER") ||
+        localExisting?.order_status === "CANCELLED";
+
+      let orderStatus = order.order_status;
+      if (willComplete) orderStatus = "COMPLETED";
+      else if (willCancel) orderStatus = "CANCELLED";
+
+      const syncedOrder: Order = {
+        ...order,
+        order_status: orderStatus,
+        // Keep pending_sync until follow-up COMPLETE/CANCEL PATCH succeeds.
+        sync_status:
+          willComplete || willCancel
+            ? ("pending_sync" as const)
+            : ("synced" as const),
+      };
       await upsertLocalOrder(syncedOrder);
+
       if (p.localId) {
         await mapLocalToServerId(p.localId, order.id);
         if (p.localId !== order.id) {
           await deleteLocalOrder(p.localId);
         }
-        const followUps = await listPendingActions();
         for (const follow of followUps) {
-          if (follow.id === action.id) continue;
-          const fid = (follow.payload as { id?: string })?.id;
-          if (fid !== p.localId) continue;
           if (follow.type === "COMPLETE_ORDER") {
             await apiFetch(`/orders/${order.id}/complete`, { method: "PATCH" });
             await markActionSynced(follow.id);
             await upsertLocalOrder({
               ...syncedOrder,
               order_status: "COMPLETED",
+              sync_status: "synced",
               updated_at: new Date().toISOString(),
             });
           }
@@ -209,6 +239,7 @@ async function processAction(
             await upsertLocalOrder({
               ...syncedOrder,
               order_status: "CANCELLED",
+              sync_status: "synced",
               updated_at: new Date().toISOString(),
             });
           }
@@ -566,16 +597,55 @@ export async function runSync(reason: string = "manual"): Promise<void> {
             apiFetch<InventoryItem[]>("/inventory"),
           ]);
           const local = await listLocalOrders();
-          const localOnly = local.filter(
-            (o) =>
-              o.order_number?.startsWith("LOCAL-") ||
-              (o.client_order_id &&
-                !orders.some(
-                  (s) =>
-                    s.client_order_id === o.client_order_id || s.id === o.id,
-                )),
+          const serverByClientId = new Set(
+            orders
+              .map((s) => s.client_order_id)
+              .filter((id): id is string => Boolean(id)),
           );
-          const byId = new Map(orders.map((o) => [o.id, o]));
+          const serverIds = new Set(orders.map((s) => s.id));
+
+          // Keep truly local-only rows. Drop LOCAL-* once the server already
+          // has the same client_order_id (avoids duplicate history tickets).
+          const localOnly = local.filter((o) => {
+            if (o.client_order_id && serverByClientId.has(o.client_order_id)) {
+              return false;
+            }
+            if (serverIds.has(o.id)) return false;
+            if (o.order_number?.startsWith("LOCAL-")) return true;
+            if (
+              o.client_order_id &&
+              !serverByClientId.has(o.client_order_id)
+            ) {
+              return true;
+            }
+            return false;
+          });
+
+          const byId = new Map<string, Order>();
+          for (const s of orders) {
+            const loc = local.find(
+              (l) =>
+                l.id === s.id ||
+                (l.client_order_id &&
+                  s.client_order_id &&
+                  l.client_order_id === s.client_order_id),
+            );
+            // Preserve local COMPLETED/CANCELLED while COMPLETE/CANCEL still queued.
+            if (
+              loc &&
+              loc.sync_status === "pending_sync" &&
+              (loc.order_status === "COMPLETED" ||
+                loc.order_status === "CANCELLED")
+            ) {
+              byId.set(s.id, {
+                ...s,
+                order_status: loc.order_status,
+                sync_status: "pending_sync",
+              });
+            } else {
+              byId.set(s.id, { ...s, sync_status: "synced" });
+            }
+          }
           for (const o of localOnly) byId.set(o.id, o);
           await replaceOrders(Array.from(byId.values()));
           await replaceInventory(inventory);
