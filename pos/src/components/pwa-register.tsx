@@ -36,6 +36,8 @@ export function RegisterSW() {
               worker.state === "installed" &&
               navigator.serviceWorker.controller
             ) {
+              // Kiosk: activate immediately so shops get SW fixes without a click.
+              worker.postMessage({ type: "SKIP_WAITING" });
               setShowUpdate(true);
             }
             if (worker.state === "activated" && navigator.onLine) {
@@ -43,6 +45,10 @@ export function RegisterSW() {
             }
           });
         });
+        // Already waiting from a prior visit — take over now.
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        }
         // Periodic update checks
         const id = setInterval(() => {
           void reg.update();
