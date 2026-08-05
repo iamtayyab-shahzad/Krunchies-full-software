@@ -54,7 +54,7 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 			WhatsApp:          "",
 			Currency:          "Rs",
 			CashOnDeliveryFee: 0,
-			OpeningTime:       "11:00 AM",
+			OpeningTime:       "10:50 AM",
 			ClosingTime:       "11:00 PM",
 			DrinkFlavors:      `["Coke","Sprite","Fanta"]`,
 			DefaultSiteTheme:  "dark",

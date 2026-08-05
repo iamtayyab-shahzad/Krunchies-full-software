@@ -12,6 +12,7 @@ import { useSettings } from "@/hooks/use-settings";
 import { getProducts } from "@/services/api";
 import { cn, formatPrice } from "@/lib/utils";
 import type { Product, ProductSize } from "@/types";
+import { AfterHoursNotice } from "@/components/checkout/after-hours-notice";
 
 export default function CartPage() {
   const {
@@ -66,6 +67,7 @@ export default function CartPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <h1 className="font-display text-4xl text-white sm:text-5xl">Your Cart</h1>
+      <AfterHoursNotice className="mt-4" />
       <div className="mt-8 grid gap-8 pb-28 lg:mt-10 lg:grid-cols-[1fr_340px] lg:gap-10 lg:pb-0">
         <div className="space-y-4 sm:space-y-6">
           {items.map((item) => {

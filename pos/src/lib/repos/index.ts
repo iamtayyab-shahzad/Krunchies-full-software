@@ -268,7 +268,7 @@ const emptySettings = (): Settings => ({
   phone: "",
   whatsapp: "",
   logo: "",
-  opening_time: "11:00 AM",
+  opening_time: "10:50 AM",
   closing_time: "11:00 PM",
   cash_on_delivery_fee: 0,
   currency: "Rs",

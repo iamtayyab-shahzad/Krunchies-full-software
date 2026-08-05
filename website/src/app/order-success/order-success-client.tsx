@@ -28,13 +28,25 @@ export default function OrderSuccessClient() {
     }
   }, [orderNumber]);
 
+  const afterHours = Boolean(
+    order?.order_notes?.includes("[AFTER HOURS"),
+  );
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-20 text-center">
       <CheckCircle2 className="mx-auto h-16 w-16 text-orange-500" />
       <h1 className="mt-6 font-display text-5xl text-white">Order Confirmed</h1>
       <p className="mt-3 text-zinc-400">
-        Thank you! Your order has been received and is being prepared.
+        {afterHours
+          ? "Thank you! Your order is saved. The shop is closed now — we will prepare and serve it when we open (10:50 AM, Pakistan time)."
+          : "Thank you! Your order has been received and is being prepared."}
       </p>
+      {afterHours ? (
+        <p className="mx-auto mt-4 max-w-md rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Closed for kitchen hours — your order will be handled after opening,
+          not right away.
+        </p>
+      ) : null}
       {(order?.order_number || orderNumber) && (
         <p className="mt-6 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-orange-300">
           Order Number:{" "}

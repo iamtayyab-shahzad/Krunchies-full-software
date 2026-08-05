@@ -12,7 +12,7 @@ export const settings: Settings = {
   phone: "03002022633",
   whatsapp: "923002022633",
   logo: "/logo.png",
-  opening_time: "11:00 AM",
+  opening_time: "10:50 AM",
   closing_time: "11:00 PM",
   cash_on_delivery_fee: 50,
   currency: "Rs",

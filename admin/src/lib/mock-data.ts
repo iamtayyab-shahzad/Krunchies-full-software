@@ -387,7 +387,7 @@ export const mockWebsiteSettings: WebsiteSettings = {
   alternatePhone: "0301-6355076",
   whatsapp: "923002022633",
   address: "Main Boulevard, Your City",
-  openingTime: "11:00 AM",
+  openingTime: "10:50 AM",
   closingTime: "11:00 PM",
   homepageBanner:
     "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1200&q=80",
@@ -403,7 +403,7 @@ export const mockRestaurantSettings: RestaurantSettings = {
   logo: "/logo.png",
   phone: "03002022633",
   whatsapp: "923002022633",
-  openingHours: "11:00 AM",
+  openingHours: "10:50 AM",
   closingHours: "11:00 PM",
   currency: "Rs",
   cashOnDeliveryFee: 50,

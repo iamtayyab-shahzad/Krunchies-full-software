@@ -27,6 +27,13 @@ import { LAST_ORDER_KEY, PAYMENT_METHODS } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import { createOrder, getLocations, getSettings } from "@/services/api";
 import type { Location, PaymentMethod, Settings } from "@/types";
+import { AfterHoursNotice } from "@/components/checkout/after-hours-notice";
+import {
+  DEFAULT_SHOP_CLOSE,
+  DEFAULT_SHOP_OPEN,
+  afterHoursOrderNote,
+  getShopHoursStatus,
+} from "@/lib/shop-hours";
 
 const checkoutSchema = z.object({
   customer_name: z.string().trim().min(2, "Name is required"),
@@ -138,8 +145,15 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
 
     setSubmitting(true);
     try {
+      const hours = getShopHoursStatus(DEFAULT_SHOP_OPEN, DEFAULT_SHOP_CLOSE);
+      const afterNote = afterHoursOrderNote(hours);
+      const notes = [afterNote, values.order_notes?.trim()]
+        .filter(Boolean)
+        .join("\n");
+
       const payload = {
         ...values,
+        order_notes: notes || undefined,
         is_guest: guestMode || !isAuthenticated,
         items: items.map((item) => ({
           product_id: item.product_id,
@@ -151,7 +165,13 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
       const order = await createOrder(payload);
       localStorage.setItem(LAST_ORDER_KEY, JSON.stringify(order));
       clearCart();
-      toast.success("Order placed successfully!");
+      toast.success(
+        hours.isOpen
+          ? "Order placed successfully!"
+          : hours.serveWhen === "today"
+            ? `Order placed! We'll prepare it when we open today at ${hours.openLabel}.`
+            : `Order placed! We'll prepare it tomorrow when we open at ${hours.openLabel}.`,
+      );
       router.push(`/order-success?order=${order.order_number}`);
     } catch (error) {
       toast.error(
@@ -187,6 +207,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             </Button>
           </div>
         )}
+        <AfterHoursNotice className="mt-4" />
       </div>
 
       <form

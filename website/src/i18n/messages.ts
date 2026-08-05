@@ -49,6 +49,18 @@ const en = {
   common_save: "Save",
   common_cancel: "Cancel",
   common_continue: "Continue",
+
+  hours_badge_open: "OPEN",
+  hours_badge_closed: "CLOSED",
+  hours_still_order: "You can still place an order",
+  hours_banner_open:
+    "We're open · Ordering until {close} (Pakistan time)",
+  hours_banner_closed:
+    "We're closed now · You can still order — we'll prepare it {when} at {open}",
+  hours_when_today: "today when we open",
+  hours_when_tomorrow: "tomorrow when we open",
+  hours_detail_closed:
+    "The shop is closed right now (open {open} – {close}, Pakistan time). You can still place your order — we will prepare and serve it {when} at {open}.",
 } as const;
 
 const ur: Record<MessageKey, string> = {
@@ -96,6 +108,18 @@ const ur: Record<MessageKey, string> = {
   common_save: "محفوظ کریں",
   common_cancel: "منسوخ",
   common_continue: "جاری رکھیں",
+
+  hours_badge_open: "کھلا",
+  hours_badge_closed: "بند",
+  hours_still_order: "آپ اب بھی آرڈر دے سکتے ہیں",
+  hours_banner_open:
+    "ہم کھلے ہیں · آرڈر {close} تک (پاکستان وقت)",
+  hours_banner_closed:
+    "ابھی بند ہے · آرڈر دے سکتے ہیں — تیاری {when} {open} پر ہوگی",
+  hours_when_today: "آج کھلنے پر",
+  hours_when_tomorrow: "کل کھلنے پر",
+  hours_detail_closed:
+    "دکان ابھی بند ہے (کھلی {open} – {close}، پاکستان وقت)۔ آپ آرڈر دے سکتے ہیں — ہم اسے {when} {open} پر تیار کر کے دیں گے۔",
 };
 
 export const messages = { en, ur } as const;

@@ -40,7 +40,7 @@ export default function ContactPage() {
 
   const phone = settings?.phone || "";
   const address = settings?.address || "";
-  const opening = settings?.opening_time || "11:00 AM";
+  const opening = settings?.opening_time || "10:50 AM";
   const closing = settings?.closing_time || "11:00 PM";
   const email = settings?.email || "hello@krunchies.local";
 
