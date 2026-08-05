@@ -187,10 +187,16 @@ export default function PendingOrdersPage() {
           meta.notes || undefined,
         ),
         product_id: item.product_id,
-        product_name: item.product?.name || "Item",
+        product_name:
+          item.product?.name ||
+          (item as { product_name?: string }).product_name ||
+          "Item",
         product_image: item.product?.image || "",
         size_id: item.product_size_id,
-        size: item.product_size?.size || "",
+        size:
+          item.product_size?.size ||
+          (item as { size?: string }).size ||
+          "",
         price: item.price,
         quantity: item.quantity,
         special_instructions: meta.notes || "",

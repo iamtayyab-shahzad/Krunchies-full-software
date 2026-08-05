@@ -28,6 +28,7 @@ import {
   formatPkPhone,
   formatPrice,
   isValidPkPhone,
+  recomputeOrderMoney,
   LAST_RECEIPT_KEY,
   normalizePkPhone,
   ORDER_TYPES,
@@ -416,7 +417,8 @@ export default function NewOrderPage() {
     };
 
     // Enrich from current bill lines before clearBill() wipes them.
-    const printable = enrichOrderForPrint(order);
+    // Recompute money from lines so print never uses a stale cached total.
+    const printable = recomputeOrderMoney(enrichOrderForPrint(order));
     localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
 
     if (status === "COMPLETED") {
@@ -469,6 +471,11 @@ export default function NewOrderPage() {
             payment_method: payload.payment_method,
             order_notes: payload.order_notes,
             items: payload.items,
+            subtotal: printable.subtotal,
+            discount: printable.discount,
+            delivery_charge: printable.delivery_charge,
+            cash_on_delivery_fee: printable.cash_on_delivery_fee,
+            grand_total: printable.grand_total,
           });
           if (status === "COMPLETED") {
             await ordersApi.complete(editingOrderId);

@@ -1,5 +1,5 @@
 import type { Order, OrderItem, Settings } from "@/types";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, recomputeOrderMoney } from "@/lib/utils";
 
 function escapeHtml(value: string) {
   return value
@@ -330,7 +330,10 @@ export function ensureReceiptItemNames(
       size,
     };
   });
-  return { ...order, items: items as Order["items"] };
+  return recomputeOrderMoney({
+    ...order,
+    items: items as Order["items"],
+  });
 }
 
 export function buildKitchenReceiptHtml(order: Order) {

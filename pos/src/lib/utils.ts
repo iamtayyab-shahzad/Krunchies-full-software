@@ -1,6 +1,8 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { BillLine, Order, OrderItem, OrderType, PaymentMethod } from "@/types";
+import { isDealProduct } from "@/lib/deal-flavors";
+import { weekendDiscount } from "@/lib/weekend-promo";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -101,6 +103,45 @@ export function calcGrandTotal(
   discount = 0,
 ) {
   return Math.max(0, subtotal - discount) + deliveryCharge + codFee;
+}
+
+/**
+ * Recalculate subtotal / discount / grand_total from line items.
+ * Prevents stale totals after edit (items updated, money fields left behind).
+ */
+export function recomputeOrderMoney(order: Order): Order {
+  const items = order.items || [];
+  const subtotal = items.reduce(
+    (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
+    0,
+  );
+  const discount = weekendDiscount(
+    items.map((i) => ({
+      product_name:
+        (i as { product_name?: string }).product_name || i.product?.name,
+      price: Number(i.price) || 0,
+      quantity: Number(i.quantity) || 0,
+      is_deal: i.product
+        ? isDealProduct(i.product)
+        : (i as { is_deal?: boolean }).is_deal,
+    })),
+  );
+  const delivery_charge = Number(order.delivery_charge) || 0;
+  const cash_on_delivery_fee = Number(order.cash_on_delivery_fee) || 0;
+  const grand_total = calcGrandTotal(
+    subtotal,
+    delivery_charge,
+    cash_on_delivery_fee,
+    discount,
+  );
+  return {
+    ...order,
+    subtotal,
+    discount,
+    delivery_charge,
+    cash_on_delivery_fee,
+    grand_total,
+  };
 }
 
 export function makeLineKey(

@@ -23,7 +23,7 @@ import {
   refreshPendingCount,
   POS_SYNC_COMPLETE_EVENT,
 } from "@/lib/sync-engine";
-import { calcCodFee, calcGrandTotal } from "@/lib/utils";
+import { calcCodFee, calcGrandTotal, recomputeOrderMoney } from "@/lib/utils";
 import { weekendDiscount } from "@/lib/weekend-promo";
 import { isDealProduct } from "@/lib/deal-flavors";
 import {
@@ -674,13 +674,60 @@ export const ordersApi = {
         (await listLocalOrders()).find((o) => o.id === id) ||
         (await ordersRepo.get(id).catch(() => null));
       if (existing) {
-        await upsertLocalOrder({
+        const { items: rawItems, ...rest } = updates;
+        let merged: Order = {
           ...existing,
-          ...updates,
+          ...rest,
           id,
           updated_at: new Date().toISOString(),
           sync_status: "pending_sync",
-        } as Order);
+        } as Order;
+
+        if (Array.isArray(rawItems)) {
+          const products = await listLocalProducts();
+          const now = new Date().toISOString();
+          const items: OrderItem[] = await Promise.all(
+            (rawItems as CreateOrderInput["items"]).map(async (item, index) => {
+              const { price, product, size } = await resolveLineDetails(
+                item,
+                products,
+              );
+              const linePrice =
+                typeof (item as { price?: number }).price === "number"
+                  ? Number((item as { price?: number }).price)
+                  : price;
+              return {
+                id: `${id}-line-${index}`,
+                created_at: now,
+                updated_at: now,
+                order_id: id,
+                product_id: item.product_id,
+                product_size_id: item.product_size_id,
+                quantity: item.quantity,
+                price: linePrice,
+                special_instructions: item.special_instructions,
+                product,
+                product_size: size,
+                product_name: product?.name || "Item",
+                size: size?.size || "-",
+              } as OrderItem;
+            }),
+          );
+          merged = { ...merged, items };
+        }
+
+        merged = recomputeOrderMoney(merged);
+        await upsertLocalOrder(merged);
+
+        // Keep queued payload money in sync with local (backend also recalculates).
+        updates = {
+          ...updates,
+          subtotal: merged.subtotal,
+          discount: merged.discount,
+          grand_total: merged.grand_total,
+          delivery_charge: merged.delivery_charge,
+          cash_on_delivery_fee: merged.cash_on_delivery_fee,
+        };
       }
     } catch {
       /* ignore */
