@@ -11,9 +11,13 @@ import {
   getLocalSettings,
   findPendingCreateByClientId,
   cacheGet,
+  cacheSet,
 } from "@/lib/offline-db";
 import { isNetworkError, isOnline, isQueueableError } from "@/lib/network";
-import { notifyOrdersChanged } from "@/lib/offline-events";
+import {
+  notifyCacheUpdated,
+  notifyOrdersChanged,
+} from "@/lib/offline-events";
 import {
   enqueueAndTrack,
   runSync,
@@ -1061,15 +1065,63 @@ export const settingsApi = {
   },
 };
 
+const analyticsRefreshAt = new Map<string, number>();
+const ANALYTICS_REFRESH_COOLDOWN_MS = 30_000;
+
+/**
+ * Analytics are informational: paint the last local snapshot immediately and
+ * refresh it in the background. Opening Dashboard/Analytics must not wait on
+ * Render/Supabase or an 8-second network timeout.
+ */
+async function cachedAnalytics<T>(
+  cacheKey: string,
+  fetchRemote: () => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  const cached = await cacheGet<T>(cacheKey);
+  const lastRefresh = analyticsRefreshAt.get(cacheKey) || 0;
+
+  if (
+    isOnline() &&
+    Date.now() - lastRefresh >= ANALYTICS_REFRESH_COOLDOWN_MS
+  ) {
+    analyticsRefreshAt.set(cacheKey, Date.now());
+    void fetchRemote()
+      .then(async (data) => {
+        await cacheSet(cacheKey, data);
+        notifyCacheUpdated(["analytics"]);
+      })
+      .catch(() => undefined);
+  }
+
+  return cached ?? fallback;
+}
+
 export const analyticsApi = {
   todaySales: () =>
-    apiFetch<{ total: number }>("/analytics/today-sales"),
+    cachedAnalytics(
+      "analytics:today",
+      () => apiFetch<{ total: number }>("/analytics/today-sales"),
+      { total: 0 },
+    ),
   yesterdaySales: () =>
-    apiFetch<{ total: number }>("/analytics/yesterday-sales"),
+    cachedAnalytics(
+      "analytics:yesterday",
+      () => apiFetch<{ total: number }>("/analytics/yesterday-sales"),
+      { total: 0 },
+    ),
   weeklySales: () =>
-    apiFetch<{ total: number }>("/analytics/weekly-sales"),
+    cachedAnalytics(
+      "analytics:weekly",
+      () => apiFetch<{ total: number }>("/analytics/weekly-sales"),
+      { total: 0 },
+    ),
   monthlySales: () =>
-    apiFetch<{ total: number }>("/analytics/monthly-sales"),
+    cachedAnalytics(
+      "analytics:monthly",
+      () => apiFetch<{ total: number }>("/analytics/monthly-sales"),
+      { total: 0 },
+    ),
   /** Single day: { date } or range: { from, to } — Asia/Karachi calendar days. */
   salesForPeriod: (params: { date: string } | { from: string; to: string }) => {
     const q =
@@ -1084,13 +1136,34 @@ export const analyticsApi = {
     }>(`/analytics/sales?${q}`);
   },
   bestSelling: () =>
-    apiFetch<Record<string, unknown>[]>("/analytics/best-selling-products"),
+    cachedAnalytics(
+      "analytics:best",
+      () =>
+        apiFetch<Record<string, unknown>[]>(
+          "/analytics/best-selling-products",
+        ),
+      [],
+    ),
   cancelled: () =>
-    apiFetch<{ count: number }>("/analytics/cancelled-orders"),
+    cachedAnalytics(
+      "analytics:cancelled",
+      () => apiFetch<{ count: number }>("/analytics/cancelled-orders"),
+      { count: 0 },
+    ),
   paymentBreakdown: () =>
-    apiFetch<Record<string, unknown>[]>("/analytics/payment-breakdown"),
+    cachedAnalytics(
+      "analytics:payments",
+      () =>
+        apiFetch<Record<string, unknown>[]>(
+          "/analytics/payment-breakdown",
+        ),
+      [],
+    ),
   remainingInventory: () =>
-    apiFetch<
+    cachedAnalytics(
+      "analytics:inventory",
+      () =>
+        apiFetch<
       {
         id: string;
         name: string;
@@ -1102,5 +1175,7 @@ export const analyticsApi = {
         category?: string;
         is_active?: boolean;
       }[]
-    >("/analytics/remaining-inventory"),
+        >("/analytics/remaining-inventory"),
+      [],
+    ),
 };

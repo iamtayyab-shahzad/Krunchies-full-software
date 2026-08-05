@@ -18,6 +18,20 @@ export function RegisterSW() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
+    const localRuntime =
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "localhost";
+    if (localRuntime) {
+      // The local production server is itself the offline app shell. A service
+      // worker here only risks serving HTML from an older local build.
+      void navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) =>
+          Promise.all(registrations.map((registration) => registration.unregister())),
+        );
+      return;
+    }
+
     let registration: ServiceWorkerRegistration | null = null;
 
     navigator.serviceWorker

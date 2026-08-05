@@ -1,16 +1,17 @@
 @echo off
 REM ============================================================
-REM Krunchies POS — silent thermal printing launcher
+REM Krunchies POS — emergency remote (Vercel) launcher
 REM ============================================================
+REM Prefer the local production launcher for shop speed:
+REM   Setup once:  scripts\Setup-Local-POS.bat
+REM   Daily use:   Desktop shortcut "Krunchies POS"
+REM                (scripts\Launch-POS-Local.vbs)
+REM
+REM Keep this bat as a cloud fallback if the local PC build is unavailable.
+REM
 REM Browsers normally show a Print / Cancel dialog. Chrome's
 REM --kiosk-printing flag sends receipts straight to the default
 REM printer with NO dialog (required for counter staff speed).
-REM
-REM Setup once:
-REM   1. Install Chrome
-REM   2. Set your iTech receipt printer as Windows DEFAULT printer
-REM   3. Edit POS_URL below to your live POS URL
-REM   4. Put this shortcut on the cashier desktop
 REM
 REM Tip: If the printer errors after many tickets, restart Chrome and the
 REM Windows Print Spooler. POS queues prints one-at-a-time to reduce that.

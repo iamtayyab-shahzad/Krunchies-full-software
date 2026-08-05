@@ -24,6 +24,10 @@ import {
   notifyOrdersChanged,
   notifyCacheUpdated,
 } from "@/lib/offline-events";
+import {
+  krunchiesCategories,
+  krunchiesProducts,
+} from "@/data/krunchies";
 import type {
   Category,
   Customer,
@@ -47,7 +51,8 @@ function isEmptyCache<T>(local: T | null | undefined): boolean {
 
 /**
  * Counter-speed reads: return IndexedDB immediately when present, refresh
- * from the API in the background. Only blocks on network when cache is empty.
+ * from the API in the background. An empty cache also returns immediately:
+ * screen navigation must never wait for a slow/dead network.
  */
 async function localFirst<T>(
   cacheKey: string,
@@ -58,8 +63,6 @@ async function localFirst<T>(
   notifyKeys?: string[],
 ): Promise<T> {
   const local = await readLocal();
-  const emptyLocal = isEmptyCache(local);
-
   const revalidate = async () => {
     if (!isOnline()) return;
     if (revalidating.has(cacheKey)) return;
@@ -78,24 +81,24 @@ async function localFirst<T>(
     }
   };
 
-  if (!emptyLocal) {
-    void revalidate();
-    return local as T;
-  }
+  void revalidate();
+  return isEmptyCache(local) ? empty : (local as T);
+}
 
-  if (isOnline()) {
-    try {
-      const data = await fetchRemote();
-      await writeLocal(data);
-      lastRevalidateAt.set(cacheKey, Date.now());
-      return data;
-    } catch (err) {
-      if (!isNetworkError(err)) throw err;
-      return empty;
-    }
-  }
+async function readLocalProductsWithSeed(): Promise<Product[]> {
+  const local = await listLocalProducts();
+  if (local.length) return local;
+  // A new localhost origin has a fresh IndexedDB. Bundle the official menu so
+  // the cashier can sell immediately, even before the first cloud sync.
+  await replaceProducts(krunchiesProducts);
+  return krunchiesProducts;
+}
 
-  return empty;
+async function readLocalCategoriesWithSeed(): Promise<Category[]> {
+  const local = await listLocalCategories();
+  if (local.length) return local;
+  await replaceCategories(krunchiesCategories);
+  return krunchiesCategories;
 }
 
 async function fetchProductsRemote(): Promise<Product[]> {
@@ -178,7 +181,7 @@ export const catalogRepo = {
     return localFirst(
       "products",
       fetchProductsRemote,
-      listLocalProducts,
+      readLocalProductsWithSeed,
       replaceProducts,
       [],
       ["products"],
@@ -189,7 +192,7 @@ export const catalogRepo = {
     return localFirst(
       "categories",
       () => apiFetch<Category[]>("/categories"),
-      listLocalCategories,
+      readLocalCategoriesWithSeed,
       replaceCategories,
       [],
       ["categories"],
@@ -292,6 +295,9 @@ export const settingsRepo = {
   },
 };
 
+const customerEnrichAt = new Map<string, number>();
+const CUSTOMER_ENRICH_COOLDOWN_MS = 8_000;
+
 export const customersRepo = {
   async list(): Promise<Customer[]> {
     // Never wipe unsynced local tickets when rebuilding customers from orders.
@@ -313,7 +319,8 @@ export const customersRepo = {
 
   /**
    * Phone prefix search for POS autofill.
-   * Returns local matches immediately; when online, merges API results.
+   * Returns local matches immediately. Cloud lookup enriches IndexedDB in the
+   * background so typing never waits on flaky Wi‑Fi.
    */
   async search(query: string): Promise<Customer[]> {
     const { normalizePkPhone } = await import("@/lib/utils");
@@ -327,26 +334,33 @@ export const customersRepo = {
 
     const local = await searchLocalCustomersByPhone(digits);
 
-    if (!isOnline()) return local;
+    const lastEnrich = customerEnrichAt.get(digits) || 0;
+    if (
+      isOnline() &&
+      Date.now() - lastEnrich >= CUSTOMER_ENRICH_COOLDOWN_MS
+    ) {
+      customerEnrichAt.set(digits, Date.now());
+      void (async () => {
+        try {
+          const remote = await apiFetch<
+            Array<{
+              phone: string;
+              name: string;
+              address: string;
+              location_id?: string | null;
+              last_order_at: string;
+              order_count: number;
+            }>
+          >(`/orders/customers/lookup?q=${encodeURIComponent(digits)}`);
 
-    try {
-      const remote = await apiFetch<
-        Array<{
-          phone: string;
-          name: string;
-          address: string;
-          location_id?: string | null;
-          last_order_at: string;
-          order_count: number;
-        }>
-      >(`/orders/customers/lookup?q=${encodeURIComponent(digits)}`);
-
-      if (Array.isArray(remote) && remote.length) {
-        await upsertCustomersFromLookup(remote);
-        return searchLocalCustomersByPhone(digits);
-      }
-    } catch {
-      /* keep local results */
+          if (Array.isArray(remote) && remote.length) {
+            await upsertCustomersFromLookup(remote);
+            notifyCacheUpdated(["customers"]);
+          }
+        } catch {
+          /* keep local results */
+        }
+      })();
     }
 
     return local;

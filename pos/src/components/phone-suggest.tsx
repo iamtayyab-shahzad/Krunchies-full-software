@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Input } from "@/components/ui/input";
 import { customersRepo } from "@/services/api";
+import { POS_CACHE_UPDATED_EVENT } from "@/lib/offline-events";
 import { cn, formatPkPhone, normalizePkPhone } from "@/lib/utils";
 import type { Customer } from "@/types";
 
@@ -70,6 +71,29 @@ export function PhoneSuggest({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
+
+  // Cloud customer lookup finishes in the background — refresh suggestions
+  // without making the initial keystroke wait on the network.
+  useEffect(() => {
+    const onCacheUpdated = (e: Event) => {
+      const keys =
+        (e as CustomEvent<{ keys?: string[] }>).detail?.keys || [];
+      if (!keys.includes("customers")) return;
+      const digits = normalizePkPhone(value);
+      if (digits.length < 4) return;
+      const seq = ++reqSeq.current;
+      void customersRepo.search(digits).then((rows) => {
+        if (seq !== reqSeq.current) return;
+        setSuggestions(rows);
+        setActive(0);
+        setOpen(rows.length > 0);
+        setLoading(false);
+      });
+    };
+    window.addEventListener(POS_CACHE_UPDATED_EVENT, onCacheUpdated);
+    return () =>
+      window.removeEventListener(POS_CACHE_UPDATED_EVENT, onCacheUpdated);
+  }, [value]);
 
   const pick = (customer: Customer) => {
     onSelectCustomer(customer);
