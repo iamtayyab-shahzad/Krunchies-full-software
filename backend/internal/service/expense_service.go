@@ -242,10 +242,18 @@ func (s *ExpenseService) Delete(id uuid.UUID) error {
 }
 
 func (s *ExpenseService) TotalBetween(start, end time.Time) (int, error) {
-	var total int
-	err := s.db.Model(&domain.Expense{}).
-		Select("COALESCE(SUM(amount), 0)").
-		Where("expense_date >= ? AND expense_date < ?", start, end).
-		Scan(&total).Error
-	return total, err
+	var rows []domain.Expense
+	// Include rows that started before the window — recurring bills still apply.
+	if err := s.db.Where("expense_date < ?", end).Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	return SumAllocatedExpenses(rows, start, end), nil
+}
+
+// ListForAllocation returns expense rows that may affect [start, end).
+func (s *ExpenseService) ListForAllocation(start, end time.Time) ([]domain.Expense, error) {
+	var rows []domain.Expense
+	err := s.db.Where("expense_date < ?", end).Order("expense_date asc").Find(&rows).Error
+	_ = start // window start used by AllocateExpense, not the SQL filter
+	return rows, err
 }

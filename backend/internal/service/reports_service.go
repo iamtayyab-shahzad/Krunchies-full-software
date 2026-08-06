@@ -26,24 +26,31 @@ func NewReportService(db *gorm.DB) *ReportService {
 
 // ProfitLoss is the owner-facing P&L for a date window.
 type ProfitLoss struct {
-	Start             time.Time `json:"start"`
-	End               time.Time `json:"end"`
-	Revenue           int       `json:"revenue"`
-	CompletedOrders   int64     `json:"completed_orders"`
-	CancelledOrders   int64     `json:"cancelled_orders"`
-	COGS              int       `json:"cogs"`
-	GrossProfit       int       `json:"gross_profit"`
-	Expenses          int       `json:"expenses"`
-	WastageCost       int       `json:"wastage_cost"`
-	NetProfit         int       `json:"net_profit"`
-	FoodCostPercent   float64   `json:"food_cost_percent"`
-	InventoryValue    int       `json:"inventory_value"`
-	PurchasesSpend    int       `json:"purchases_spend"`
-	BestSelling       []ProductPerf `json:"best_selling"`
-	LeastSelling      []ProductPerf `json:"least_selling"`
-	MostProfitable    []ProductPerf `json:"most_profitable"`
-	LeastProfitable   []ProductPerf `json:"least_profitable"`
-	ExpenseBreakdown  []ExpenseBucket `json:"expense_breakdown"`
+	Start            time.Time       `json:"start"`
+	End              time.Time       `json:"end"`
+	Revenue          int             `json:"revenue"`
+	CompletedOrders  int64           `json:"completed_orders"`
+	CancelledOrders  int64           `json:"cancelled_orders"`
+	COGS             int             `json:"cogs"`
+	GrossProfit      int             `json:"gross_profit"`
+	Expenses         int             `json:"expenses"`
+	WastageCost      int             `json:"wastage_cost"`
+	NetProfit        int             `json:"net_profit"`
+	FoodCostPercent  float64         `json:"food_cost_percent"`
+	InventoryValue   int             `json:"inventory_value"`
+	PurchasesSpend   int             `json:"purchases_spend"`
+	FoodCostSource   string          `json:"food_cost_source"` // cogs | purchases | none
+	PeriodDays       int             `json:"period_days"`
+	ElapsedDays      int             `json:"elapsed_days"`
+	PeriodComplete   bool            `json:"period_complete"`
+	AvgDailyRevenue  int             `json:"avg_daily_revenue"`
+	AvgDailyExpenses int             `json:"avg_daily_expenses"`
+	AvgDailyProfit   int             `json:"avg_daily_profit"`
+	BestSelling      []ProductPerf   `json:"best_selling"`
+	LeastSelling     []ProductPerf   `json:"least_selling"`
+	MostProfitable   []ProductPerf   `json:"most_profitable"`
+	LeastProfitable  []ProductPerf   `json:"least_profitable"`
+	ExpenseBreakdown []ExpenseBucket `json:"expense_breakdown"`
 }
 
 type ProductPerf struct {
@@ -85,11 +92,25 @@ func (s *ReportService) ProfitLossBetween(start, end time.Time) (*ProfitLoss, er
 	pl.CompletedOrders = agg.CompletedOrders
 	pl.CancelledOrders = agg.CancelledOrders
 
-	cogs, err := s.inventory.ConsumptionCostBetween(start, end)
+	recipeCOGS, err := s.inventory.ConsumptionCostBetween(start, end)
 	if err != nil {
 		return nil, err
 	}
-	pl.COGS = cogs
+	if pl.PurchasesSpend, err = s.inventory.PurchaseCostBetween(start, end); err != nil {
+		return nil, err
+	}
+
+	// Without recipe BOMs, recipe COGS stays ~0. Fall back to stock buys in the
+	// window so the owner still sees food outlay — never add both.
+	foodCost := recipeCOGS
+	pl.FoodCostSource = "cogs"
+	if recipeCOGS == 0 && pl.PurchasesSpend > 0 {
+		foodCost = pl.PurchasesSpend
+		pl.FoodCostSource = "purchases"
+	} else if recipeCOGS == 0 {
+		pl.FoodCostSource = "none"
+	}
+	pl.COGS = foodCost
 	pl.GrossProfit = pl.Revenue - pl.COGS
 
 	wastage, err := s.inventory.WastageCostBetween(start, end)
@@ -112,9 +133,8 @@ func (s *ReportService) ProfitLossBetween(start, end time.Time) (*ProfitLoss, er
 	if pl.InventoryValue, err = s.inventory.StockValue(); err != nil {
 		return nil, err
 	}
-	if pl.PurchasesSpend, err = s.inventory.PurchaseCostBetween(start, end); err != nil {
-		return nil, err
-	}
+
+	fillPeriodAverages(pl, start, end)
 
 	perfs, err := s.productPerformance(start, end)
 	if err != nil {
@@ -271,14 +291,51 @@ func (s *ReportService) productPerformance(start, end time.Time) ([]ProductPerf,
 }
 
 func (s *ReportService) expenseBreakdown(start, end time.Time) ([]ExpenseBucket, error) {
-	rows := make([]ExpenseBucket, 0)
-	err := s.db.Model(&domain.Expense{}).
-		Select("category, COALESCE(SUM(amount), 0) as total").
-		Where("expense_date >= ? AND expense_date < ?", start, end).
-		Group("category").
-		Order("total desc").
-		Scan(&rows).Error
-	return rows, err
+	rows, err := s.expenses.ListForAllocation(start, end)
+	if err != nil {
+		return nil, err
+	}
+	out := BreakdownAllocatedExpenses(rows, start, end)
+	// Sort by total desc for stable owner-facing charts.
+	for i := 0; i < len(out); i++ {
+		for j := i + 1; j < len(out); j++ {
+			if out[j].Total > out[i].Total {
+				out[i], out[j] = out[j], out[i]
+			}
+		}
+	}
+	return out, nil
+}
+
+func fillPeriodAverages(pl *ProfitLoss, start, end time.Time) {
+	loc := start.Location()
+	now := time.Now().In(loc)
+	periodStart := dateOnly(start, loc)
+	periodEnd := dateOnly(end, loc)
+	if end.After(periodEnd) {
+		periodEnd = periodEnd.AddDate(0, 0, 1)
+	}
+	pl.PeriodDays = calendarDays(periodStart, periodEnd)
+	pl.PeriodComplete = !now.Before(periodEnd)
+
+	elapsedEnd := periodEnd
+	if !pl.PeriodComplete {
+		tomorrow := dateOnly(now, loc).AddDate(0, 0, 1)
+		if tomorrow.Before(elapsedEnd) {
+			elapsedEnd = tomorrow
+		}
+		if !elapsedEnd.After(periodStart) {
+			elapsedEnd = periodStart.AddDate(0, 0, 1)
+		}
+	}
+	pl.ElapsedDays = calendarDays(periodStart, elapsedEnd)
+	if pl.ElapsedDays < 1 {
+		pl.ElapsedDays = 1
+	}
+	d := pl.ElapsedDays
+	pl.AvgDailyRevenue = pl.Revenue / d
+	pl.AvgDailyExpenses = pl.Expenses / d
+	pl.AvgDailyProfit = pl.NetProfit / d
 }
 
 func topByQty(rows []ProductPerf, desc bool, n int) []ProductPerf {

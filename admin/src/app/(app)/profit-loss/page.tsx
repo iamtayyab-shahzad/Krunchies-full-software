@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Boxes,
+  CalendarDays,
   Percent,
   TrendingDown,
   TrendingUp,
@@ -20,7 +21,7 @@ import {
   type ProfitLossReport,
 } from "@/services/api";
 
-type RangeKey = "today" | "week" | "month" | "custom";
+type RangeKey = "week" | "month" | "today" | "custom";
 
 const emptyReport: ProfitLossReport = {
   start: "",
@@ -36,6 +37,13 @@ const emptyReport: ProfitLossReport = {
   food_cost_percent: 0,
   inventory_value: 0,
   purchases_spend: 0,
+  food_cost_source: "none",
+  period_days: 0,
+  elapsed_days: 0,
+  period_complete: false,
+  avg_daily_revenue: 0,
+  avg_daily_expenses: 0,
+  avg_daily_profit: 0,
   best_selling: [],
   least_selling: [],
   most_profitable: [],
@@ -43,7 +51,9 @@ const emptyReport: ProfitLossReport = {
   expense_breakdown: [],
 };
 
-function normalizeReport(data: Partial<ProfitLossReport> | null | undefined): ProfitLossReport {
+function normalizeReport(
+  data: Partial<ProfitLossReport> | null | undefined,
+): ProfitLossReport {
   return {
     ...emptyReport,
     ...data,
@@ -65,8 +75,14 @@ function daysAgoISO(n: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function foodCostLabel(source: string | undefined) {
+  if (source === "purchases") return "Stock buys (no recipes yet)";
+  if (source === "cogs") return "Recipe COGS";
+  return "Food cost (none logged)";
+}
+
 export default function ProfitLossPage() {
-  const [range, setRange] = useState<RangeKey>("month");
+  const [range, setRange] = useState<RangeKey>("week");
   const [customStart, setCustomStart] = useState(daysAgoISO(30));
   const [customEnd, setCustomEnd] = useState(todayISO());
   const [loading, setLoading] = useState(true);
@@ -102,7 +118,6 @@ export default function ProfitLossPage() {
 
   const expenseBreakdown = report.expense_breakdown ?? [];
   const bestSelling = report.best_selling ?? [];
-  const mostProfitable = report.most_profitable ?? [];
 
   const maxExpense = Math.max(
     1,
@@ -112,24 +127,24 @@ export default function ProfitLossPage() {
     1,
     ...bestSelling.map((p) => Number(p.quantity || 0)),
   );
-  const maxProfit = Math.max(
-    1,
-    ...mostProfitable.map((p) => Number(p.profit || 0)),
-  );
+
+  const avgHint = report.period_complete
+    ? `Full period ÷ ${report.period_days || report.elapsed_days || 1} days`
+    : `So far ÷ ${report.elapsed_days || 1} days (period not finished)`;
 
   return (
     <div>
       <PageHeader
         title="Profit & Loss"
-        description="Revenue, COGS, expenses, and product profitability"
+        description="Week/month sales minus expenses (recurring bills allocated). Day averages come from the period total."
       />
 
       <div className="mb-6 flex flex-wrap items-end gap-3">
         {(
           [
+            ["week", "This week"],
+            ["month", "This month"],
             ["today", "Today"],
-            ["week", "Week"],
-            ["month", "Month"],
             ["custom", "Custom"],
           ] as const
         ).map(([key, label]) => {
@@ -185,34 +200,27 @@ export default function ProfitLossPage() {
               Period: {report.start?.slice(0, 10) || "—"} →{" "}
               {report.end?.slice(0, 10) || "—"} · {report.completed_orders}{" "}
               completed orders
+              {report.period_complete ? " · complete" : " · in progress"}
             </p>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Revenue"
               value={formatPrice(report.revenue)}
               icon={<TrendingUp className="h-5 w-5" />}
             />
             <StatCard
-              label="COGS"
+              label="Food / stock cost"
               value={formatPrice(report.cogs)}
+              hint={foodCostLabel(report.food_cost_source)}
               icon={<Boxes className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Gross Profit"
-              value={formatPrice(report.gross_profit)}
-              icon={<TrendingUp className="h-5 w-5" />}
             />
             <StatCard
               label="Expenses"
               value={formatPrice(report.expenses)}
+              hint="Includes weekly/monthly share"
               icon={<Wallet className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Wastage"
-              value={formatPrice(report.wastage_cost)}
-              icon={<AlertTriangle className="h-5 w-5" />}
             />
             <StatCard
               label="Net Profit"
@@ -223,19 +231,51 @@ export default function ProfitLossPage() {
               icon={<TrendingDown className="h-5 w-5" />}
             />
             <StatCard
+              label="Gross Profit"
+              value={formatPrice(report.gross_profit)}
+              icon={<TrendingUp className="h-5 w-5" />}
+            />
+            <StatCard
+              label="Wastage"
+              value={formatPrice(report.wastage_cost)}
+              icon={<AlertTriangle className="h-5 w-5" />}
+            />
+            <StatCard
               label="Food Cost %"
               value={`${Number(report.food_cost_percent || 0).toFixed(1)}%`}
               icon={<Percent className="h-5 w-5" />}
             />
             <StatCard
-              label="Inventory Value"
-              value={formatPrice(report.inventory_value)}
-              hint={`Stock buys ${formatPrice(report.purchases_spend)}`}
+              label="Stock buys (period)"
+              value={formatPrice(report.purchases_spend)}
+              hint={`On-hand value ${formatPrice(report.inventory_value)}`}
               icon={<Boxes className="h-5 w-5" />}
             />
           </div>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-3">
+          <Card className="mb-6">
+            <div className="mb-3 flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-orange-400" />
+              <h2 className="text-lg font-bold">Average per day</h2>
+            </div>
+            <p className="mb-4 text-sm text-zinc-400">{avgHint}</p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <StatCard
+                label="Avg daily sales"
+                value={formatPrice(report.avg_daily_revenue)}
+              />
+              <StatCard
+                label="Avg daily expenses"
+                value={formatPrice(report.avg_daily_expenses)}
+              />
+              <StatCard
+                label="Avg daily profit"
+                value={formatPrice(report.avg_daily_profit)}
+              />
+            </div>
+          </Card>
+
+          <div className="mt-6 grid gap-6 xl:grid-cols-2">
             <Card>
               <h2 className="mb-4 text-lg font-bold">Expense Breakdown</h2>
               {expenseBreakdown.length === 0 ? (
@@ -277,7 +317,8 @@ export default function ProfitLossPage() {
                           {item.product_name || "Unknown"}
                         </span>
                         <span className="text-orange-400">
-                          {item.quantity} sold
+                          {item.quantity} sold ·{" "}
+                          {formatPrice(Number(item.revenue || 0))}
                         </span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
@@ -285,39 +326,6 @@ export default function ProfitLossPage() {
                           className="h-full rounded-full bg-orange-500"
                           style={{
                             width: `${(Number(item.quantity || 0) / maxSold) * 100}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-
-            <Card>
-              <h2 className="mb-4 text-lg font-bold">Most Profitable</h2>
-              {mostProfitable.length === 0 ? (
-                <p className="text-zinc-400">No profitability data yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  {mostProfitable.map((item) => (
-                    <div key={item.product_id || item.product_name}>
-                      <div className="mb-1 flex justify-between text-sm">
-                        <span className="font-semibold">
-                          {item.product_name || "Unknown"}
-                        </span>
-                        <span className="text-emerald-400">
-                          {formatPrice(Number(item.profit || 0))}
-                          <span className="ml-1 text-xs text-zinc-500">
-                            ({Number(item.margin_pct || 0).toFixed(0)}%)
-                          </span>
-                        </span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-                        <div
-                          className="h-full rounded-full bg-emerald-500"
-                          style={{
-                            width: `${(Math.max(0, Number(item.profit || 0)) / maxProfit) * 100}%`,
                           }}
                         />
                       </div>

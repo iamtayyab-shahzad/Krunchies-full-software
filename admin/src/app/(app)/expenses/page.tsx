@@ -62,7 +62,77 @@ function startOfWeek(d: Date) {
   const day = x.getDay();
   const diff = day === 0 ? 6 : day - 1;
   x.setDate(x.getDate() - diff);
+  x.setHours(0, 0, 0, 0);
   return x;
+}
+
+function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function addDays(d: Date, n: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function daysBetween(start: Date, end: Date) {
+  const ms = end.getTime() - start.getTime();
+  return Math.max(0, Math.round(ms / 86400000));
+}
+
+/** Mirror of backend AllocateExpense for Expenses page week/month cards. */
+function allocateExpense(
+  amount: number,
+  recurrence: string,
+  expenseDate: Date,
+  start: Date,
+  end: Date,
+): number {
+  if (amount <= 0 || !(end > start)) return 0;
+  const exp = new Date(
+    expenseDate.getFullYear(),
+    expenseDate.getMonth(),
+    expenseDate.getDate(),
+  );
+  const periodStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const periodEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const rec = (recurrence || "NONE").toUpperCase();
+
+  if (rec === "NONE") {
+    return exp >= periodStart && exp < periodEnd ? amount : 0;
+  }
+
+  let from = periodStart;
+  if (exp > from) from = exp;
+  if (!(from < periodEnd)) return 0;
+
+  if (rec === "DAILY") {
+    return amount * daysBetween(from, periodEnd);
+  }
+  if (rec === "WEEKLY") {
+    return Math.round((amount * daysBetween(from, periodEnd)) / 7);
+  }
+  if (rec === "YEARLY") {
+    return Math.round((amount * daysBetween(from, periodEnd)) / 365);
+  }
+  if (rec === "MONTHLY") {
+    let total = 0;
+    let cur = from;
+    while (cur < periodEnd) {
+      const monthStart = new Date(cur.getFullYear(), cur.getMonth(), 1);
+      const nextMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+      const segEnd = nextMonth < periodEnd ? nextMonth : periodEnd;
+      const segDays = daysBetween(cur, segEnd);
+      const dim = daysBetween(monthStart, nextMonth);
+      if (dim > 0 && segDays > 0) {
+        total += (amount * segDays) / dim;
+      }
+      cur = segEnd;
+    }
+    return Math.round(total);
+  }
+  return exp >= periodStart && exp < periodEnd ? amount : 0;
 }
 
 export default function ExpensesPage() {
@@ -103,14 +173,16 @@ export default function ExpensesPage() {
   };
   const stats = useMemo(() => {
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = startOfMonth(now);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const weekStart = startOfWeek(now);
+    const weekEnd = addDays(weekStart, 7);
     let month = 0;
     let week = 0;
     for (const e of expenses) {
       const d = new Date(e.expenseDate);
-      if (d >= monthStart) month += e.amount;
-      if (d >= weekStart) week += e.amount;
+      month += allocateExpense(e.amount, e.recurrence, d, monthStart, monthEnd);
+      week += allocateExpense(e.amount, e.recurrence, d, weekStart, weekEnd);
     }
     return { month, week };
   }, [expenses]);
@@ -183,7 +255,7 @@ export default function ExpensesPage() {
     <div>
       <PageHeader
         title="Expenses"
-        description="Operating costs outside of inventory purchases"
+        description="Bills and running costs (not stock buys). Use WEEKLY/MONTHLY once — Profit & Loss shares them across days."
         action={
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" />
@@ -196,13 +268,13 @@ export default function ExpensesPage() {
         <StatCard
           label="This Month"
           value={formatPrice(stats.month)}
-          hint="All expenses this calendar month"
+          hint="Allocated share for this calendar month"
           icon={<Wallet className="h-5 w-5" />}
         />
         <StatCard
           label="This Week"
           value={formatPrice(stats.week)}
-          hint="Monday to today"
+          hint="Allocated share for Mon–Sun week"
           icon={<CalendarDays className="h-5 w-5" />}
         />
       </div>
@@ -384,6 +456,11 @@ export default function ExpensesPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-zinc-500">
+                MONTHLY/WEEKLY: enter the bill once (e.g. rent). Do not also add
+                a separate one-off row for the same bill, or profit will count it
+                twice.
+              </p>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Notes</Label>

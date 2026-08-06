@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { Plus, Save, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { RecipesPanel } from "@/components/recipes-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +29,7 @@ import { formatPrice, formatStock } from "@/lib/utils";
 import type { InventoryItem, Product } from "@/lib/mock-data";
 import { inventoryApi, inventoryTransactionsApi, productsApi } from "@/services/api";
 
-type Tab = "stock" | "wastage" | "history";
+type Tab = "stock" | "wastage" | "history" | "recipes";
 
 type RowEdit = {
   purchaseUnit: string;
@@ -124,8 +126,26 @@ function emptyRow(item: InventoryItem): RowEdit {
 
 export default function InventoryPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("stock");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("tab");
+    if (
+      raw === "recipes" ||
+      raw === "wastage" ||
+      raw === "history" ||
+      raw === "stock"
+    ) {
+      setTab(raw);
+    }
+  }, []);
+
+  const selectTab = (id: Tab) => {
+    setTab(id);
+    router.replace(id === "stock" ? "/inventory" : `/inventory?tab=${id}`);
+  };
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [rows, setRows] = useState<Record<string, RowEdit>>({});
   const [query, setQuery] = useState("");
@@ -422,6 +442,7 @@ export default function InventoryPage() {
         {(
           [
             ["stock", "Stock"],
+            ["recipes", "Recipes"],
             ["wastage", "Wastage"],
             ["history", "History"],
           ] as const
@@ -429,7 +450,7 @@ export default function InventoryPage() {
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => selectTab(id)}
             className={`rounded-lg px-4 py-2 text-sm font-bold ${
               tab === id
                 ? "bg-orange-500 text-black"
@@ -441,7 +462,9 @@ export default function InventoryPage() {
         ))}
       </div>
 
-      {loading ? (
+      {tab === "recipes" ? <RecipesPanel /> : null}
+
+      {loading && tab !== "recipes" ? (
         <p className="text-zinc-400">Loading inventory…</p>
       ) : null}
 

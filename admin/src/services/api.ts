@@ -1108,6 +1108,13 @@ export type ProfitLossReport = {
   food_cost_percent: number;
   inventory_value: number;
   purchases_spend: number;
+  food_cost_source?: string;
+  period_days?: number;
+  elapsed_days?: number;
+  period_complete?: boolean;
+  avg_daily_revenue?: number;
+  avg_daily_expenses?: number;
+  avg_daily_profit?: number;
   best_selling: {
     product_id: string;
     product_name: string;

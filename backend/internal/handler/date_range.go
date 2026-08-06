@@ -8,11 +8,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func businessLocation() *time.Location {
+	loc, err := time.LoadLocation("Asia/Karachi")
+	if err != nil {
+		return time.FixedZone("PKT", 5*3600)
+	}
+	return loc
+}
+
 // parseDateRange reads ?start=&end= (YYYY-MM-DD) or ?range=today|week|month.
+// All windows use Asia/Karachi. Week is Monday 00:00 → next Monday 00:00.
 // Defaults to the current calendar month when nothing is provided.
 func parseDateRange(c *gin.Context) (time.Time, time.Time, error) {
-	now := time.Now()
-	loc := now.Location()
+	loc := businessLocation()
+	now := time.Now().In(loc)
 
 	if r := strings.ToLower(strings.TrimSpace(c.Query("range"))); r != "" {
 		startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
@@ -20,7 +29,11 @@ func parseDateRange(c *gin.Context) (time.Time, time.Time, error) {
 		case "today", "daily":
 			return startOfDay, startOfDay.AddDate(0, 0, 1), nil
 		case "week", "weekly":
-			return startOfDay.AddDate(0, 0, -6), startOfDay.AddDate(0, 0, 1), nil
+			// Monday-start calendar week
+			weekday := int(now.Weekday()) // Sunday=0
+			offset := (weekday + 6) % 7    // Monday=0
+			start := startOfDay.AddDate(0, 0, -offset)
+			return start, start.AddDate(0, 0, 7), nil
 		case "month", "monthly":
 			start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
 			return start, start.AddDate(0, 1, 0), nil
