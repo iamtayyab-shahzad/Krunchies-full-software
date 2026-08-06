@@ -9,6 +9,7 @@ import (
 
 	"backend/internal/domain"
 	"backend/internal/dto"
+	"backend/internal/notify"
 	"backend/internal/repository"
 	"backend/internal/utils"
 
@@ -207,6 +208,10 @@ func (s *OrderService) CreateOrder(
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
+
+	// WhatsApp Cloud API alert — never blocks checkout or fails the order.
+	notify.NotifyNewOrderAsync(order.ID, order.GrandTotal)
+
 	return s.orderRepo.GetByID(order.ID)
 }
 

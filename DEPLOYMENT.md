@@ -241,6 +241,9 @@ cd admin && npm run dev      # :3002
 | `APP_PORT` | Local only | Default 8080 |
 | `DB_*` | Local alt | Used if no `DATABASE_URL` |
 | `CLOUDINARY_*` | No | Optional |
+| `WHATSAPP_TOKEN` | No | Meta Cloud API bearer token (order alerts) |
+| `WHATSAPP_PHONE_NUMBER_ID` | No | Meta WhatsApp phone number ID |
+| `WHATSAPP_OWNER_PHONE` | No | Owner E.164 digits, e.g. `923001234567` |
 
 ### Frontends (Vercel)
 
