@@ -12,12 +12,14 @@ import {
   findPendingCreateByClientId,
   cacheGet,
   cacheSet,
+  resolveServerOrderId,
 } from "@/lib/offline-db";
 import { isNetworkError, isOnline, isQueueableError } from "@/lib/network";
 import {
   notifyCacheUpdated,
   notifyOrdersChanged,
 } from "@/lib/offline-events";
+import { ordersShareIdentity } from "@/lib/order-identity";
 import {
   enqueueAndTrack,
   runSync,
@@ -609,19 +611,28 @@ async function markLocalOrderStatus(
 ) {
   try {
     // Always read from IndexedDB — never hit the network for status marks.
-    // ordersRepo.get() used to call the API when navigator.onLine was true,
-    // which made cancel/complete hang on flaky connections.
-    const order = (await listLocalOrders()).find((o) => o.id === id);
-    if (!order) return;
-    await upsertLocalOrder({
-      ...order,
-      order_status,
-      updated_at: new Date().toISOString(),
-      // When the status change is queued offline, mark it pending_sync so the
-      // pending list keeps our local status instead of the server's stale copy
-      // until the change is synced.
-      ...(opts?.pendingSync ? { sync_status: "pending_sync" } : {}),
-    });
+    // Update every local row that shares this ticket identity (client UUID
+    // and/or mapped server UUID) so pending polls cannot resurrect a twin.
+    const locals = await listLocalOrders();
+    const serverId = await resolveServerOrderId(id);
+    const matches = locals.filter(
+      (o) =>
+        o.id === id ||
+        o.id === serverId ||
+        o.client_order_id === id ||
+        ordersShareIdentity(o, { id, client_order_id: id }),
+    );
+    if (!matches.length) return;
+
+    const now = new Date().toISOString();
+    for (const order of matches) {
+      await upsertLocalOrder({
+        ...order,
+        order_status,
+        updated_at: now,
+        ...(opts?.pendingSync ? { sync_status: "pending_sync" } : {}),
+      });
+    }
   } catch {
     // ignore
   } finally {

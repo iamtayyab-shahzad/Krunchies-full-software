@@ -217,6 +217,11 @@ async function processAction(
 
       const syncedOrder: Order = {
         ...order,
+        client_order_id:
+          order.client_order_id ||
+          p.input.client_order_id ||
+          p.localId ||
+          order.id,
         order_status: orderStatus,
         // Keep pending_sync until follow-up COMPLETE/CANCEL PATCH succeeds.
         sync_status:
@@ -228,8 +233,17 @@ async function processAction(
 
       if (p.localId) {
         await mapLocalToServerId(p.localId, order.id);
-        if (p.localId !== order.id) {
-          await deleteLocalOrder(p.localId);
+        // Purge every local twin for this ticket (client UUID / LOCAL-* row).
+        const locals = await listLocalOrders();
+        for (const row of locals) {
+          if (row.id === syncedOrder.id) continue;
+          if (
+            row.id === p.localId ||
+            row.client_order_id === p.localId ||
+            row.client_order_id === syncedOrder.client_order_id
+          ) {
+            await deleteLocalOrder(row.id);
+          }
         }
         for (const follow of followUps) {
           if (follow.type === "COMPLETE_ORDER") {

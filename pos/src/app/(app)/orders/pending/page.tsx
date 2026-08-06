@@ -18,6 +18,7 @@ import { printCustomerReceipt, printKitchenReceipt, decodeKitchenInstructions, p
 import { ordersApi, productsApi, settingsApi } from "@/services/api";
 import { isOnline } from "@/lib/network";
 import { getSyncState } from "@/lib/sync-engine";
+import { ordersShareIdentity } from "@/lib/order-identity";
 import type { Order, OrderType, PaymentMethod } from "@/types";
 
 type FilterType = "all" | "website" | "phone" | "walkin";
@@ -121,9 +122,9 @@ export default function PendingOrdersPage() {
     ensureReceiptItemNames(order, productNameById);
 
   const complete = (order: Order) => {
-    // Optimistic: remove + print immediately; persist in background.
+    // Optimistic: remove every twin identity + print immediately.
     queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
-      (old || []).filter((o) => o.id !== order.id),
+      (old || []).filter((o) => !ordersShareIdentity(o, order)),
     );
     void printCustomerReceipt(
       { ...printableOrder(order), order_status: "COMPLETED" },
@@ -160,7 +161,7 @@ export default function PendingOrdersPage() {
 
   const cancel = (order: Order) => {
     queryClient.setQueryData<Order[]>(["orders", "pending"], (old) =>
-      (old || []).filter((o) => o.id !== order.id),
+      (old || []).filter((o) => !ordersShareIdentity(o, order)),
     );
     toast.success("Order cancelled");
     void ordersApi

@@ -125,55 +125,33 @@ async function fetchOrdersRemote(): Promise<Order[]> {
 }
 
 async function fetchPendingRemote(): Promise<Order[]> {
+  const { reconcilePendingOrders } = await import("@/lib/order-identity");
+  const { cacheGet, deleteLocalOrder } = await import("@/lib/offline-db");
+
   const rows = await apiFetch<Order[]>("/orders/pending");
   const existing = await listLocalOrders();
-  const localById = new Map(existing.map((o) => [o.id, o]));
-  const byId = new Map<string, Order>();
-  for (const row of rows) {
-    const local = localById.get(row.id);
-    if (
-      local &&
-      local.sync_status === "pending_sync" &&
-      local.order_status !== "PENDING"
-    ) {
-      continue;
-    }
-    byId.set(row.id, row);
-  }
-  for (const o of existing) {
-    if (
-      o.order_status === "PENDING" &&
-      (o.order_number.startsWith("LOCAL-") ||
-        o.sync_status === "pending_sync")
-    ) {
-      byId.set(o.id, o);
-    }
-  }
-  const pending = Array.from(byId.values()).filter(
-    (o) => o.order_status === "PENDING",
+  const idMap =
+    (await cacheGet<Record<string, string>>("order_id_map")) || {};
+
+  const { pending, localUpdates, deleteIds } = reconcilePendingOrders(
+    rows,
+    existing,
+    idMap,
   );
-  const pendingIds = new Set(pending.map((o) => o.id));
 
-  let reconciled = 0;
-  for (const o of existing) {
-    if (o.order_status !== "PENDING") continue;
-    if (pendingIds.has(o.id)) continue;
-    if (o.sync_status === "pending_sync" || o.sync_status === "local") {
-      continue;
-    }
-    if (o.order_number?.startsWith("LOCAL-")) continue;
-    await upsertLocalOrder({
-      ...o,
-      order_status: "COMPLETED",
-      sync_status: "synced",
-      updated_at: new Date().toISOString(),
-    });
-    reconciled += 1;
+  for (const id of deleteIds) {
+    await deleteLocalOrder(id);
+  }
+  for (const update of localUpdates) {
+    await upsertLocalOrder(update);
   }
 
+  // Persist pending rows without resurrecting duplicates.
   await mergeOrders(pending);
-  if (reconciled > 0) notifyOrdersChanged();
-  return pending;
+  // Hydrate React Query from IDB — do not invalidate (that would start another
+  // network pending pull and amplify LOCAL/server races).
+  notifyOrdersChanged();
+  return listLocalPendingOrders();
 }
 
 export const catalogRepo = {
@@ -223,18 +201,44 @@ export const ordersRepo = {
         /* merge handled inside fetchPendingRemote */
       },
       [],
-      ["orders"],
+      // No notifyKeys: fetchPendingRemote calls notifyOrdersChanged (IDB hydrate)
+      // instead of invalidate→refetch storms.
     );
   },
 
   async get(id: string): Promise<Order> {
-    const local = (await listLocalOrders()).find((o) => o.id === id);
+    const local = (await listLocalOrders()).find(
+      (o) => o.id === id || o.client_order_id === id,
+    );
     if (local) {
       if (isOnline()) {
         void apiFetch<Order>(`/orders/${id}`)
-          .then((remote) =>
-            upsertLocalOrder({ ...remote, sync_status: "synced" }),
-          )
+          .then(async (remote) => {
+            // Never overwrite a local terminal status with a stale server PENDING.
+            if (
+              (local.order_status === "COMPLETED" ||
+                local.order_status === "CANCELLED") &&
+              remote.order_status === "PENDING"
+            ) {
+              await upsertLocalOrder({
+                ...remote,
+                order_status: local.order_status,
+                client_order_id:
+                  local.client_order_id ||
+                  remote.client_order_id ||
+                  local.id,
+                sync_status:
+                  local.sync_status === "synced" ? "synced" : "pending_sync",
+              });
+              return;
+            }
+            await upsertLocalOrder({
+              ...remote,
+              client_order_id:
+                remote.client_order_id || local.client_order_id || local.id,
+              sync_status: "synced",
+            });
+          })
           .catch(() => undefined);
       }
       return local;

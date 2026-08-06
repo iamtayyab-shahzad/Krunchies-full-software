@@ -416,13 +416,39 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
   await replaceOrders(Array.from(byId.values()));
 }
 
-/** Upsert without wiping history — used by pending polls. */
+/** Upsert without wiping history — used by pending polls. Dedupes identities. */
 export async function mergeOrders(orders: Order[]) {
+  const { dedupeOrdersByIdentity, ordersShareIdentity } = await import(
+    "@/lib/order-identity"
+  );
   const db = await getDb();
   const existing = await db.getAll("orders");
   const byId = new Map(existing.map((o) => [o.id, o]));
-  for (const o of orders) byId.set(o.id, o);
-  const merged = Array.from(byId.values())
+
+  for (const incoming of orders) {
+    for (const [id, row] of [...byId.entries()]) {
+      if (id === incoming.id) continue;
+      if (ordersShareIdentity(row, incoming)) {
+        byId.delete(id);
+      }
+    }
+    const previous = byId.get(incoming.id);
+    byId.set(
+      incoming.id,
+      previous
+        ? {
+            ...previous,
+            ...incoming,
+            client_order_id:
+              incoming.client_order_id ||
+              previous.client_order_id ||
+              previous.id,
+          }
+        : incoming,
+    );
+  }
+
+  const merged = dedupeOrdersByIdentity(Array.from(byId.values()))
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, 500);
   const tx = db.transaction("orders", "readwrite");
@@ -433,11 +459,25 @@ export async function mergeOrders(orders: Order[]) {
 }
 
 export async function upsertLocalOrder(order: Order) {
+  const { ordersShareIdentity } = await import("@/lib/order-identity");
   const db = await getDb();
-  const existed = await db.get("orders", order.id);
+  const all = await db.getAll("orders");
+  for (const row of all) {
+    if (row.id !== order.id && ordersShareIdentity(row, order)) {
+      await db.delete("orders", row.id);
+    }
+  }
+  const existed = all.some(
+    (row) => row.id === order.id || ordersShareIdentity(row, order),
+  );
   await db.put("orders", order);
   const cached = (await cacheGet<Order[]>("orders")) || [];
-  const next = [order, ...cached.filter((o) => o.id !== order.id)].slice(0, 500);
+  const next = [
+    order,
+    ...cached.filter(
+      (o) => o.id !== order.id && !ordersShareIdentity(o, order),
+    ),
+  ].slice(0, 500);
   await cacheSet("orders", next);
   await upsertCustomerFromOrder(order, !existed);
 }
@@ -453,10 +493,13 @@ export async function deleteLocalOrder(id: string) {
 }
 
 export async function listLocalOrders() {
+  const { dedupeOrdersByIdentity } = await import("@/lib/order-identity");
   const db = await getDb();
   const rows = await db.getAll("orders");
-  if (rows.length) return rows;
-  return (await cacheGet<Order[]>("orders")) || [];
+  const source = rows.length
+    ? rows
+    : (await cacheGet<Order[]>("orders")) || [];
+  return dedupeOrdersByIdentity(source);
 }
 
 export async function listLocalPendingOrders() {

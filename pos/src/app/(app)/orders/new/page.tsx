@@ -38,6 +38,7 @@ import {
 import { printCustomerReceipt, printKitchenReceipt, encodeKitchenInstructions } from "@/lib/receipt";
 import { weekendPromoLabel } from "@/lib/weekend-promo";
 import { deleteDraft } from "@/lib/offline-db";
+import { ordersShareIdentity } from "@/lib/order-identity";
 import { PhoneSuggest } from "@/components/phone-suggest";
 import {
   categoriesApi,
@@ -446,20 +447,19 @@ export default function NewOrderPage() {
     if (status === "PENDING") {
       qc.setQueryData<Order[]>(["orders", "pending"], (old) => {
         const list = old || [];
-        const without = list.filter((o) => o.id !== printable.id);
+        const without = list.filter((o) => !ordersShareIdentity(o, printable));
         return [printable, ...without];
       });
     } else {
       qc.setQueryData<Order[]>(["orders", "pending"], (old) =>
-        (old || []).filter((o) => o.id !== printable.id),
+        (old || []).filter((o) => !ordersShareIdentity(o, printable)),
       );
     }
 
     if (draftId) void deleteDraft(draftId);
     bill.clearBill();
-    setBusy(false);
-
-    // Persist + sync in the background — never block the next order.
+    // Keep busy until the local persist/enqueue finishes so a second click
+    // cannot create another client_order_id for the same ticket.
     void (async () => {
       try {
         if (editingOrderId) {
@@ -503,6 +503,8 @@ export default function NewOrderPage() {
           qc.invalidateQueries({ queryKey: ["orders"] }),
           qc.invalidateQueries({ queryKey: ["orders", "pending"] }),
         ]);
+      } finally {
+        setBusy(false);
       }
     })();
   };
