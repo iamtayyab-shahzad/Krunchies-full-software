@@ -89,6 +89,36 @@ const defaults: BillState = {
   items: [],
 };
 
+/** Fresh customer fields after clear / type switch — phone orders must not keep zeros. */
+function customerFieldsForOrderType(orderType: OrderType): Pick<
+  BillState,
+  | "customerName"
+  | "phone"
+  | "address"
+  | "locationId"
+  | "deliveryCharge"
+  | "paymentMethod"
+> {
+  if (orderType === "walkin") {
+    return {
+      customerName: "Walk-in Customer",
+      phone: "0000000000",
+      address: "",
+      locationId: WALKIN_LOCATION_ID,
+      deliveryCharge: 0,
+      paymentMethod: defaultPaymentForOrderType(orderType),
+    };
+  }
+  return {
+    customerName: "",
+    phone: "",
+    address: "",
+    locationId: "",
+    deliveryCharge: 0,
+    paymentMethod: defaultPaymentForOrderType(orderType),
+  };
+}
+
 const BillContext = createContext<BillContextValue | null>(null);
 
 function toPendingDraft(state: BillState): PendingDraft {
@@ -256,17 +286,14 @@ export function BillProvider({ children }: { children: ReactNode }) {
             return {
               ...p,
               orderType,
-              customerName: "Walk-in Customer",
-              phone: "0000000000",
-              address: "",
-              locationId: WALKIN_LOCATION_ID,
-              deliveryCharge: 0,
-              paymentMethod: defaultPaymentForOrderType(orderType),
+              ...customerFieldsForOrderType("walkin"),
             };
           }
+          const fields = customerFieldsForOrderType(orderType);
           return {
             ...p,
             orderType,
+            // Keep a real customer name when switching away from walk-in.
             customerName:
               p.customerName === "Walk-in Customer" ? "" : p.customerName,
             phone: p.phone === "0000000000" ? "" : p.phone,
@@ -274,7 +301,8 @@ export function BillProvider({ children }: { children: ReactNode }) {
               p.locationId === WALKIN_LOCATION_ID ? "" : p.locationId,
             deliveryCharge:
               p.locationId === WALKIN_LOCATION_ID ? 0 : p.deliveryCharge,
-            paymentMethod: defaultPaymentForOrderType(orderType),
+            paymentMethod: fields.paymentMethod,
+            address: p.locationId === WALKIN_LOCATION_ID ? "" : p.address,
           };
         }),
       setCustomerName: (customerName) =>
@@ -400,6 +428,13 @@ export function BillProvider({ children }: { children: ReactNode }) {
           ...defaults,
           draftId: ACTIVE_DRAFT_ID,
           orderType: p.orderType,
+          // Preserve channel (phone/walkin/website) but reset customer fields
+          // so the next phone order does not keep 0000000000 in the number box.
+          ...customerFieldsForOrderType(p.orderType),
+          orderNotes: "",
+          tableNumber: "",
+          items: [],
+          editingOrderId: null,
         }));
       },
     };
