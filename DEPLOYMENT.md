@@ -243,7 +243,7 @@ cd admin && npm run dev      # :3002
 | `CLOUDINARY_*` | No | Optional |
 | `WHATSAPP_TOKEN` | No | Meta Cloud API bearer token (order alerts) |
 | `WHATSAPP_PHONE_NUMBER_ID` | No | Meta WhatsApp phone number ID |
-| `WHATSAPP_OWNER_PHONE` | No | Owner E.164 digits, e.g. `923001234567` |
+| `WHATSAPP_OWNER_PHONE` | No | Owner phone(s), comma-separated, e.g. `92300…`. Website orders also always notify `923000128562` (03000128562). |
 
 ### Frontends (Vercel)
 

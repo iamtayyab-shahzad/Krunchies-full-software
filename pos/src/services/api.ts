@@ -31,6 +31,12 @@ import {
 } from "@/lib/sync-engine";
 import { calcCodFee, calcGrandTotal, recomputeOrderMoney } from "@/lib/utils";
 import { weekendDiscount } from "@/lib/weekend-promo";
+import {
+  localMonthlySales,
+  localTodaySales,
+  localWeeklySales,
+  localYesterdaySales,
+} from "@/lib/local-sales";
 import { isDealProduct } from "@/lib/deal-flavors";
 import {
   catalogRepo,
@@ -1080,9 +1086,8 @@ const analyticsRefreshAt = new Map<string, number>();
 const ANALYTICS_REFRESH_COOLDOWN_MS = 30_000;
 
 /**
- * Analytics are informational: paint the last local snapshot immediately and
- * refresh it in the background. Opening Dashboard/Analytics must not wait on
- * Render/Supabase or an 8-second network timeout.
+ * Informational cloud analytics: paint last snapshot, refresh in background.
+ * Dashboard sales totals do NOT use this — they read local COMPLETED orders.
  */
 async function cachedAnalytics<T>(
   cacheKey: string,
@@ -1108,31 +1113,57 @@ async function cachedAnalytics<T>(
   return cached ?? fallback;
 }
 
+/** Always from IndexedDB COMPLETED orders — works offline, updates after each sale. */
+async function localSalesTotals() {
+  const orders = await listLocalOrders();
+  const now = new Date();
+  return {
+    today: localTodaySales(orders, now),
+    yesterday: localYesterdaySales(orders, now),
+    weekly: localWeeklySales(orders, now),
+    monthly: localMonthlySales(orders, now),
+  };
+}
+
 export const analyticsApi = {
-  todaySales: () =>
-    cachedAnalytics(
-      "analytics:today",
-      () => apiFetch<{ total: number }>("/analytics/today-sales"),
-      { total: 0 },
-    ),
-  yesterdaySales: () =>
-    cachedAnalytics(
-      "analytics:yesterday",
-      () => apiFetch<{ total: number }>("/analytics/yesterday-sales"),
-      { total: 0 },
-    ),
-  weeklySales: () =>
-    cachedAnalytics(
-      "analytics:weekly",
-      () => apiFetch<{ total: number }>("/analytics/weekly-sales"),
-      { total: 0 },
-    ),
-  monthlySales: () =>
-    cachedAnalytics(
-      "analytics:monthly",
-      () => apiFetch<{ total: number }>("/analytics/monthly-sales"),
-      { total: 0 },
-    ),
+  todaySales: async () => {
+    const { today } = await localSalesTotals();
+    // Keep cloud cache warm when online (Analytics extras / future), never block UI.
+    if (isOnline()) {
+      void cachedAnalytics(
+        "analytics:today",
+        () => apiFetch<{ total: number }>("/analytics/today-sales"),
+        { total: today },
+      );
+    }
+    return { total: today };
+  },
+  yesterdaySales: async () => {
+    const { yesterday } = await localSalesTotals();
+    return { total: yesterday };
+  },
+  weeklySales: async () => {
+    const { weekly } = await localSalesTotals();
+    if (isOnline()) {
+      void cachedAnalytics(
+        "analytics:weekly",
+        () => apiFetch<{ total: number }>("/analytics/weekly-sales"),
+        { total: weekly },
+      );
+    }
+    return { total: weekly };
+  },
+  monthlySales: async () => {
+    const { monthly } = await localSalesTotals();
+    if (isOnline()) {
+      void cachedAnalytics(
+        "analytics:monthly",
+        () => apiFetch<{ total: number }>("/analytics/monthly-sales"),
+        { total: monthly },
+      );
+    }
+    return { total: monthly };
+  },
   /** Single day: { date } or range: { from, to } — Asia/Karachi calendar days. */
   salesForPeriod: (params: { date: string } | { from: string; to: string }) => {
     const q =

@@ -211,7 +211,40 @@ func (s *OrderService) CreateOrder(
 
 	// WhatsApp alert only for customer website orders (not POS walk-in / phone).
 	if orderType == "website" || orderType == "guest" {
-		notify.NotifyNewOrderAsync(order.ID, order.GrandTotal)
+		items := make([]notify.OrderAlertItem, 0, len(order.Items))
+		for _, it := range order.Items {
+			name := "Item"
+			if p, ok := productsByID[it.ProductID]; ok && strings.TrimSpace(p.Name) != "" {
+				name = p.Name
+			}
+			sizeLabel := ""
+			if sz, ok := sizesByID[it.ProductSizeID]; ok {
+				sizeLabel = sz.Size
+			}
+			items = append(items, notify.OrderAlertItem{
+				Name:         name,
+				Size:         sizeLabel,
+				Quantity:     it.Quantity,
+				LineTotal:    it.Price * it.Quantity,
+				Instructions: it.SpecialInstructions,
+			})
+		}
+		notify.NotifyWebsiteOrderAsync(notify.OrderAlert{
+			OrderID:       order.ID,
+			OrderNumber:   order.OrderNumber,
+			CustomerName:  order.CustomerName,
+			Phone:         order.Phone,
+			Address:       order.Address,
+			LocationName:  location.Name,
+			PaymentMethod: order.PaymentMethod,
+			OrderNotes:    order.OrderNotes,
+			Subtotal:      order.Subtotal,
+			Discount:      order.Discount,
+			Delivery:      order.DeliveryCharge,
+			CODFee:        order.CashOnDeliveryFee,
+			GrandTotal:    order.GrandTotal,
+			Items:         items,
+		})
 	}
 
 	return s.orderRepo.GetByID(order.ID)

@@ -19,10 +19,12 @@ export default function DashboardPage() {
   const { data: today } = useQuery({
     queryKey: ["analytics", "today"],
     queryFn: analyticsApi.todaySales,
+    staleTime: 0,
   });
   const { data: weekly } = useQuery({
     queryKey: ["analytics", "weekly"],
     queryFn: analyticsApi.weeklySales,
+    staleTime: 0,
   });
   const { data: pendingOrders = [] } = useQuery({
     queryKey: ["orders", "pending"],

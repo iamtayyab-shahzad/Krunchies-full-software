@@ -72,15 +72,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const stop = startSyncEngine();
+    // Local cashier mutations: paint from IndexedDB immediately — never wait on API.
+    const onOrdersChanged = () => {
+      void hydrateOrdersFromIdb(client);
+      // Dashboard / Analytics today+weekly totals come from local COMPLETED orders.
+      void client.invalidateQueries({ queryKey: ["analytics"] });
+    };
     const onSync = () => {
       // Soft refresh from IDB first, then let localFirst revalidate in background.
       void hydrateOrdersFromIdb(client);
       void client.invalidateQueries({ queryKey: ["orders"] });
       void client.invalidateQueries({ queryKey: ["inventory"] });
-    };
-    // Local cashier mutations: paint from IndexedDB immediately — never wait on API.
-    const onOrdersChanged = () => {
-      void hydrateOrdersFromIdb(client);
+      void client.invalidateQueries({ queryKey: ["analytics"] });
     };
     const onCacheUpdated = (e: Event) => {
       const keys =

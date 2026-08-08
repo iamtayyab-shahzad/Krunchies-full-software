@@ -54,14 +54,17 @@ export default function AnalyticsPage() {
   const { data: today } = useQuery({
     queryKey: ["analytics", "today"],
     queryFn: analyticsApi.todaySales,
+    staleTime: 0,
   });
   const { data: weekly } = useQuery({
     queryKey: ["analytics", "weekly"],
     queryFn: analyticsApi.weeklySales,
+    staleTime: 0,
   });
   const { data: monthly } = useQuery({
     queryKey: ["analytics", "monthly"],
     queryFn: analyticsApi.monthlySales,
+    staleTime: 0,
   });
   const { data: best = [] } = useQuery({
     queryKey: ["analytics", "best"],
