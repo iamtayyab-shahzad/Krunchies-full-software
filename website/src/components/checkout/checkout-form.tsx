@@ -358,7 +358,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             </div>
             {discount > 0 ? (
               <div className="flex justify-between text-emerald-400">
-                <span>Fri–Sun 10% off</span>
+                <span>Fri & Sun 10% off</span>
                 <span>-{formatPrice(discount, currency)}</span>
               </div>
             ) : null}

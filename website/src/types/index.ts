@@ -76,7 +76,7 @@ export interface CartItem {
   price: number;
   quantity: number;
   special_instructions?: string;
-  /** Flyer/combo deal — excluded from Fri–Sun 10% promo. */
+  /** Flyer/combo deal — excluded from Fri & Sun 10% promo. */
   is_deal?: boolean;
   was_price?: number;
 }

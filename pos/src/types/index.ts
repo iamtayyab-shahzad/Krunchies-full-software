@@ -193,7 +193,7 @@ export interface BillLine {
   crust?: string;
   toppings?: string;
   extras?: string;
-  /** Flyer/combo deal — excluded from Fri–Sun 10% promo. */
+  /** Flyer/combo deal — excluded from Fri & Sun 10% promo. */
   is_deal?: boolean;
   was_price?: number;
 }

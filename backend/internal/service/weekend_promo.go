@@ -9,11 +9,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// Weekend promo: Fri–Sun 10% on non-deal lines when eligible subtotal ≥ Rs 1000.
-// Flyer deals already include savings and must never stack this discount.
+// Weekend promo: Fri & Sun 10% on non-deal lines when eligible subtotal ≥ Rs 1000.
+// Valid through 31 Aug 2026 (Asia/Karachi). Saturday is excluded. Flyer deals
+// already include savings and must never stack this discount.
 const (
 	weekendPromoPercent   = 10
 	weekendPromoMinRupees = 1000
+	// Inclusive last calendar day in Asia/Karachi.
+	weekendPromoEndYMD = "2026-08-31"
 )
 
 var (
@@ -30,11 +33,14 @@ func init() {
 	karachiLoc = loc
 }
 
-// WeekendPromoActive is true Fri/Sat/Sun in Asia/Karachi (restaurant local time).
+// WeekendPromoActive is true Fri/Sun in Asia/Karachi through 31 Aug 2026.
 func WeekendPromoActive(now time.Time) bool {
 	t := now.In(karachiLoc)
+	if t.Format("2006-01-02") > weekendPromoEndYMD {
+		return false
+	}
 	switch t.Weekday() {
-	case time.Friday, time.Saturday, time.Sunday:
+	case time.Friday, time.Sunday:
 		return true
 	default:
 		return false

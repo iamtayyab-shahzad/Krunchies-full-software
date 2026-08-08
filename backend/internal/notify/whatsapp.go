@@ -8,13 +8,20 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 const graphAPIBase = "https://graph.facebook.com/v21.0"
+
+var (
+	nonDigit      = regexp.MustCompile(`\D+`)
+	missingEnvOnce sync.Once
+)
 
 type textMessagePayload struct {
 	MessagingProduct string `json:"messaging_product"`
@@ -35,8 +42,13 @@ func NotifyNewOrderAsync(orderID uuid.UUID, grandTotal int) {
 func notifyNewOrder(orderID uuid.UUID, grandTotal int) {
 	token := strings.TrimSpace(os.Getenv("WHATSAPP_TOKEN"))
 	phoneNumberID := strings.TrimSpace(os.Getenv("WHATSAPP_PHONE_NUMBER_ID"))
-	ownerPhone := strings.TrimSpace(os.Getenv("WHATSAPP_OWNER_PHONE"))
+	ownerPhone := normalizePhone(os.Getenv("WHATSAPP_OWNER_PHONE"))
 	if token == "" || phoneNumberID == "" || ownerPhone == "" {
+		missingEnvOnce.Do(func() {
+			log.Printf(
+				"whatsapp notify: skipped — set WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, and WHATSAPP_OWNER_PHONE on Render",
+			)
+		})
 		return
 	}
 
@@ -79,5 +91,11 @@ func notifyNewOrder(orderID uuid.UUID, grandTotal int) {
 			orderID,
 			strings.TrimSpace(string(respBody)),
 		)
+		return
 	}
+	log.Printf("whatsapp notify: sent for order %s to %s", orderID, ownerPhone)
+}
+
+func normalizePhone(raw string) string {
+	return nonDigit.ReplaceAllString(strings.TrimSpace(raw), "")
 }

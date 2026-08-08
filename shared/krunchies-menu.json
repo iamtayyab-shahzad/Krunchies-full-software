@@ -15,12 +15,12 @@
   "promotions": [
     {
       "id": "70000000-0000-4000-8000-000000000001",
-      "title": "Friday to Sunday 10% Off",
-      "description": "10% discount on non-deal items when your eligible total is over Rs 1,000. Valid Friday, Saturday and Sunday. Flyer deals already have special pricing and are excluded.",
+      "title": "Friday & Sunday 10% Off",
+      "description": "10% discount on non-deal items when your eligible total is over Rs 1,000. Valid Friday and Sunday only (not Saturday). Flyer deals already have special pricing and are excluded. Offer ends 31 August 2026.",
       "image": "/products/deals/deal-1.webp",
       "active": true,
       "startDate": "2026-07-01",
-      "endDate": "2026-12-31"
+      "endDate": "2026-08-31"
     }
   ],
   "notes": [

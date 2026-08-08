@@ -209,8 +209,10 @@ func (s *OrderService) CreateOrder(
 		return nil, err
 	}
 
-	// WhatsApp Cloud API alert — never blocks checkout or fails the order.
-	notify.NotifyNewOrderAsync(order.ID, order.GrandTotal)
+	// WhatsApp alert only for customer website orders (not POS walk-in / phone).
+	if orderType == "website" || orderType == "guest" {
+		notify.NotifyNewOrderAsync(order.ID, order.GrandTotal)
+	}
 
 	return s.orderRepo.GetByID(order.ID)
 }

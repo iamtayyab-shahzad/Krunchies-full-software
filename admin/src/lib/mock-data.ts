@@ -341,7 +341,8 @@ export const mockDeals: Deal[] = [
   {
     id: "d1",
     title: "Friday & Sunday 10% Off",
-    description: "10% off on purchases over Rs 1,000.",
+    description:
+      "10% off on non-deal items over Rs 1,000. Friday & Sunday only (not Saturday). Ends 31 Aug 2026.",
     image:
       "https://images.unsplash.com/photo-1593560708920-61dd98c46a4e?w=800&q=80",
     enabled: true,
