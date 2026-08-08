@@ -23,6 +23,107 @@ import { assertImageFieldSafe } from "@/lib/image-upload";
 import { usePosTheme } from "@/context/theme-context";
 import { locationsApi, offersApi, settingsApi } from "@/services/api";
 import type { Location, Offer } from "@/types";
+import {
+  discardAction,
+  listDeadActions,
+  reviveDeadAction,
+} from "@/lib/offline-db";
+import { runSync } from "@/lib/sync-engine";
+
+function FailedSyncPanel() {
+  const [items, setItems] = useState<
+    Awaited<ReturnType<typeof listDeadActions>>
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      setItems(await listDeadActions());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  if (!loading && items.length === 0) return null;
+
+  return (
+    <section className="mb-8 rounded-xl border border-amber-500/40 bg-zinc-950 p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-amber-300">Failed sync items</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            These actions stopped retrying. Retry all or discard after fixing the
+            cause (bad product id, expired login, etc.).
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={loading || items.length === 0}
+          onClick={async () => {
+            for (const item of items) await reviveDeadAction(item.id);
+            toast.success("Retrying failed sync…");
+            await refresh();
+            void runSync("manual");
+          }}
+        >
+          Retry all
+        </Button>
+      </div>
+      {loading ? (
+        <p className="text-sm text-zinc-500">Loading…</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-black/40 px-3 py-3"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-zinc-200">
+                  {item.type}
+                </p>
+                <p className="break-all text-xs text-zinc-500">
+                  {item.error || "Unknown error"}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={async () => {
+                    await reviveDeadAction(item.id);
+                    toast.success("Queued for retry");
+                    await refresh();
+                    void runSync("manual");
+                  }}
+                >
+                  Retry
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={async () => {
+                    await discardAction(item.id);
+                    toast.message("Discarded");
+                    await refresh();
+                  }}
+                >
+                  Discard
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -253,6 +354,8 @@ export default function SettingsPage() {
           Save Flavors
         </Button>
       </section>
+
+      <FailedSyncPanel />
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         <div className="mb-4 flex items-center justify-between">

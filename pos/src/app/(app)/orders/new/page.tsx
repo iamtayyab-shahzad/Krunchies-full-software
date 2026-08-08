@@ -422,28 +422,6 @@ export default function NewOrderPage() {
     const printable = recomputeOrderMoney(enrichOrderForPrint(order));
     localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(printable));
 
-    if (status === "COMPLETED") {
-      void printCustomerReceipt(printable, settings || null).then((printed) => {
-        toast.success(
-          !printed
-            ? "Order completed — allow popups to print customer receipt"
-            : editingOrderId
-              ? "Order updated & completed"
-              : "Order completed & customer receipt printed",
-        );
-      });
-    } else {
-      void printKitchenReceipt(printable).then((printed) => {
-        toast.success(
-          !printed
-            ? "Saved to Pending — allow popups to print kitchen receipt"
-            : editingOrderId
-              ? "Pending updated — kitchen receipt printed"
-              : "Saved to Pending — kitchen receipt printed",
-        );
-      });
-    }
-
     if (status === "PENDING") {
       qc.setQueryData<Order[]>(["orders", "pending"], (old) => {
         const list = old || [];
@@ -458,8 +436,8 @@ export default function NewOrderPage() {
 
     if (draftId) void deleteDraft(draftId);
     bill.clearBill();
-    // Keep busy until the local persist/enqueue finishes so a second click
-    // cannot create another client_order_id for the same ticket.
+    // Persist locally before printing so a crash cannot leave a printed ticket
+    // with nothing in IndexedDB / sync queue.
     void (async () => {
       try {
         if (editingOrderId) {
@@ -489,8 +467,33 @@ export default function NewOrderPage() {
             await ordersApi.complete(created.id);
           }
         }
+
+        if (status === "COMPLETED") {
+          void printCustomerReceipt(printable, settings || null).then(
+            (printed) => {
+              toast.success(
+                !printed
+                  ? "Order completed — allow popups to print customer receipt"
+                  : editingOrderId
+                    ? "Order updated & completed"
+                    : "Order completed & customer receipt printed",
+              );
+            },
+          );
+        } else {
+          void printKitchenReceipt(printable).then((printed) => {
+            toast.success(
+              !printed
+                ? "Saved to Pending — allow popups to print kitchen receipt"
+                : editingOrderId
+                  ? "Pending updated — kitchen receipt printed"
+                  : "Saved to Pending — kitchen receipt printed",
+            );
+          });
+        }
+
         void Promise.all([
-          qc.invalidateQueries({ queryKey: ["orders"] }),
+          qc.invalidateQueries({ queryKey: ["orders"], exact: true }),
           qc.invalidateQueries({ queryKey: ["orders", "pending"] }),
         ]);
       } catch (err) {
@@ -500,7 +503,7 @@ export default function NewOrderPage() {
             : "Failed to save order in background",
         );
         void Promise.all([
-          qc.invalidateQueries({ queryKey: ["orders"] }),
+          qc.invalidateQueries({ queryKey: ["orders"], exact: true }),
           qc.invalidateQueries({ queryKey: ["orders", "pending"] }),
         ]);
       } finally {

@@ -94,6 +94,10 @@ describe("sync race simulations", () => {
     ];
     const result = reconcilePendingOrders(server, local, { c2: "s2" });
     expect(result.pending).toHaveLength(0);
+    expect(result.localUpdates.some((u) => u.id === "s2" && u.order_status === "COMPLETED")).toBe(
+      true,
+    );
+    expect(result.deleteIds).toContain("c2");
   });
 
   it("100 mixed walkin/phone/website create+complete options stay unique", () => {

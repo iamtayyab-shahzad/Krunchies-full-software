@@ -135,6 +135,82 @@ describe("reconcilePendingOrders", () => {
     });
     expect(result.pending).toHaveLength(0);
     expect(result.deleteIds).toContain("client-1");
+    // Must persist COMPLETED under server id so next poll still knows.
+    expect(result.localUpdates.some((u) => u.id === "server-1")).toBe(true);
+    expect(
+      result.localUpdates.find((u) => u.id === "server-1")?.order_status,
+    ).toBe("COMPLETED");
+  });
+
+  it("second poll after LOCAL delete still keeps completed out of pending", () => {
+    // Simulates: first reconcile deleted LOCAL-*, wrote server-id COMPLETED.
+    // Second poll: local only has server-id COMPLETED; server still PENDING.
+    const local = [
+      order({
+        id: "server-1",
+        client_order_id: "client-1",
+        order_number: "A-1001",
+        order_status: "COMPLETED",
+        sync_status: "pending_sync",
+        updated_at: "2026-08-06T10:06:00.000Z",
+      }),
+    ];
+    const server = [
+      order({
+        id: "server-1",
+        client_order_id: "client-1",
+        order_number: "A-1001",
+        order_status: "PENDING",
+      }),
+    ];
+    const result = reconcilePendingOrders(server, local, {
+      "client-1": "server-1",
+    });
+    expect(result.pending).toHaveLength(0);
+    expect(
+      result.localUpdates.find((u) => u.id === "server-1")?.order_status,
+    ).toBe("COMPLETED");
+  });
+
+  it("matches completed local via reverse idMap when server omits client_order_id", () => {
+    const local = [
+      order({
+        id: "client-9",
+        client_order_id: "client-9",
+        order_number: "LOCAL-CCCC",
+        order_status: "COMPLETED",
+        sync_status: "pending_sync",
+      }),
+    ];
+    const server = [
+      order({
+        id: "server-9",
+        order_number: "A-1009",
+        order_status: "PENDING",
+      }),
+    ];
+    const result = reconcilePendingOrders(server, local, {
+      "client-9": "server-9",
+    });
+    expect(result.pending).toHaveLength(0);
+    expect(
+      result.localUpdates.find((u) => u.id === "server-9")?.order_status,
+    ).toBe("COMPLETED");
+  });
+
+  it("does not invent COMPLETED when synced pending disappears from server", () => {
+    const local = [
+      order({
+        id: "server-gone",
+        client_order_id: "client-gone",
+        order_number: "A-7777",
+        order_status: "PENDING",
+        sync_status: "synced",
+      }),
+    ];
+    const result = reconcilePendingOrders([], local, {});
+    expect(result.pending).toHaveLength(0);
+    expect(result.localUpdates).toHaveLength(0);
   });
 
   it("keeps unsynced local pending when server has not received it yet", () => {

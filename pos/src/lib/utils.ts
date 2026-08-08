@@ -115,6 +115,11 @@ export function recomputeOrderMoney(order: Order): Order {
     (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
     0,
   );
+  // Pin promo rules to the order day — reprint/edit after midnight must not
+  // strip Friday/Sunday discount using "today".
+  const promoDate = order.created_at
+    ? new Date(order.created_at)
+    : new Date();
   const discount = weekendDiscount(
     items.map((i) => ({
       product_name:
@@ -125,6 +130,7 @@ export function recomputeOrderMoney(order: Order): Order {
         ? isDealProduct(i.product)
         : (i as { is_deal?: boolean }).is_deal,
     })),
+    Number.isNaN(promoDate.getTime()) ? new Date() : promoDate,
   );
   const delivery_charge = Number(order.delivery_charge) || 0;
   const cash_on_delivery_fee = Number(order.cash_on_delivery_fee) || 0;

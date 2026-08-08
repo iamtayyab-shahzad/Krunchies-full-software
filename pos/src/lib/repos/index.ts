@@ -139,11 +139,13 @@ async function fetchPendingRemote(): Promise<Order[]> {
     idMap,
   );
 
-  for (const id of deleteIds) {
-    await deleteLocalOrder(id);
-  }
+  // Persist terminal overlays before deleting LOCAL-* twins so a crashed
+  // poll mid-reconcile cannot wipe completion knowledge.
   for (const update of localUpdates) {
     await upsertLocalOrder(update);
+  }
+  for (const id of deleteIds) {
+    await deleteLocalOrder(id);
   }
 
   // Persist pending rows without resurrecting duplicates.

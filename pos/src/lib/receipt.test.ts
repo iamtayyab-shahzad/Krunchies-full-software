@@ -3,9 +3,9 @@ import {
   buildCustomerReceiptHtml,
   ensureReceiptItemNames,
 } from "./receipt";
-import type { Order } from "../types";
+import type { Order, OrderItem } from "../types";
 
-function baseOrder(items: Order["items"]): Order {
+function baseOrder(items: OrderItem[]): Order {
   return {
     id: "ord-1",
     created_at: "2026-07-30T10:00:00.000Z",
@@ -20,6 +20,7 @@ function baseOrder(items: Order["items"]): Order {
     payment_method: "cash",
     order_status: "COMPLETED",
     order_type: "walkin",
+    order_notes: "",
     subtotal: 750,
     grand_total: 750,
     items,
@@ -41,7 +42,7 @@ describe("receipt product names", () => {
           price: 375,
           product_name: "Tikka Roll",
           size: "Regular",
-        } as Order["items"][number],
+        },
       ]),
     );
     const html = buildCustomerReceiptHtml(order, {
@@ -84,8 +85,55 @@ describe("receipt product names", () => {
       ]),
       map,
     );
-    expect(order.items[0].product?.name).toBe("Chicken Fajita");
+    expect(order.items?.[0]?.product?.name).toBe("Chicken Fajita");
     const html = buildCustomerReceiptHtml(order, null);
     expect(html).toContain("Chicken Fajita");
+  });
+
+  it("preserves stored discount (does not recompute money)", () => {
+    const order = ensureReceiptItemNames(
+      {
+        ...baseOrder([
+          {
+            id: "i1",
+            created_at: "",
+            updated_at: "",
+            order_id: "ord-1",
+            product_id: "p1",
+            product_size_id: "s1",
+            quantity: 1,
+            price: 2000,
+            product_name: "Chicken Fajita",
+          },
+        ]),
+        discount: 200,
+        grand_total: 1800,
+        subtotal: 2000,
+      },
+    );
+    expect(order.discount).toBe(200);
+    expect(order.grand_total).toBe(1800);
+  });
+
+  it("prints crust/toppings on customer receipt", () => {
+    const order = ensureReceiptItemNames(
+      baseOrder([
+        {
+          id: "i1",
+          created_at: "",
+          updated_at: "",
+          order_id: "ord-1",
+          product_id: "p1",
+          product_size_id: "s1",
+          quantity: 1,
+          price: 999,
+          special_instructions: "Crust: Thin | Toppings: Extra Cheese",
+          product_name: "Chicken Fajita",
+        },
+      ]),
+    );
+    const html = buildCustomerReceiptHtml(order, null);
+    expect(html).toContain("Crust: Thin");
+    expect(html).toContain("Toppings: Extra Cheese");
   });
 });

@@ -17,6 +17,7 @@ import {
   listLocalOrders,
   deleteLocalOrder,
   pruneCacheKeys,
+  reviveDeadAction,
 } from "@/lib/offline-db";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import {
@@ -282,12 +283,25 @@ async function processAction(
     }
     case "COMPLETE_ORDER": {
       const localId = (action.payload as { id: string }).id;
-      const waitingCreate = (await listPendingActions()).some(
+      const pendingCreates = await listPendingActions();
+      const waitingCreate = pendingCreates.some(
         (a) =>
           a.type === "CREATE_ORDER" &&
           (a.payload as { localId?: string }).localId === localId,
       );
       if (waitingCreate) return "skip";
+      // Dead CREATE must be revived before COMPLETE — otherwise we PATCH a
+      // client UUID that never existed on the server (permanent 404).
+      const deadCreates = await listDeadActions();
+      const deadCreate = deadCreates.find(
+        (a) =>
+          a.type === "CREATE_ORDER" &&
+          (a.payload as { localId?: string }).localId === localId,
+      );
+      if (deadCreate) {
+        await reviveDeadAction(deadCreate.id);
+        return "skip";
+      }
       const serverId = await resolveOrderId(localId);
       try {
         await apiFetch(`/orders/${serverId}/complete`, { method: "PATCH" });
@@ -330,6 +344,15 @@ async function processAction(
           (a.payload as { localId?: string }).localId === localId,
       );
       if (waitingCreate) return "skip";
+      const deadCreate = (await listDeadActions()).find(
+        (a) =>
+          a.type === "CREATE_ORDER" &&
+          (a.payload as { localId?: string }).localId === localId,
+      );
+      if (deadCreate) {
+        await reviveDeadAction(deadCreate.id);
+        return "skip";
+      }
       const serverId = await resolveOrderId(localId);
       try {
         await apiFetch(`/orders/${serverId}/cancel`, { method: "PATCH" });

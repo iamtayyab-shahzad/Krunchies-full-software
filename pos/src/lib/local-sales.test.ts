@@ -14,6 +14,7 @@ function order(
     Pick<Order, "id" | "order_status" | "grand_total" | "created_at">,
 ): Order {
   return {
+    order_number: `ORD-${partial.id}`,
     updated_at: partial.created_at,
     customer_name: "Walk-in",
     phone: "0000000000",

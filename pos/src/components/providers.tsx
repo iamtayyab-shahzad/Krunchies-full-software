@@ -81,7 +81,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const onSync = () => {
       // Soft refresh from IDB first, then let localFirst revalidate in background.
       void hydrateOrdersFromIdb(client);
-      void client.invalidateQueries({ queryKey: ["orders"] });
+      // Exact match only — prefix ["orders"] would also refetch pending and
+      // amplify LOCAL/server races right after complete.
+      void client.invalidateQueries({ queryKey: ["orders"], exact: true });
       void client.invalidateQueries({ queryKey: ["inventory"] });
       void client.invalidateQueries({ queryKey: ["analytics"] });
     };

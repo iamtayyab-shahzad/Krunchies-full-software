@@ -31,6 +31,16 @@ export function findOrderByIdentity(
   idMap: Record<string, string> = {},
 ) {
   const mapped = needle.id ? idMap[needle.id] : undefined;
+  // Reverse: idMap is local→server; server pending may lack client_order_id.
+  let reverseLocalId: string | undefined;
+  if (needle.id) {
+    for (const [localId, serverId] of Object.entries(idMap)) {
+      if (serverId === needle.id) {
+        reverseLocalId = localId;
+        break;
+      }
+    }
+  }
   return (
     orders.find((o) => ordersShareIdentity(o, needle)) ||
     (mapped
@@ -39,6 +49,13 @@ export function findOrderByIdentity(
             o.id === mapped ||
             o.client_order_id === mapped ||
             o.client_order_id === needle.id,
+        )
+      : undefined) ||
+    (reverseLocalId
+      ? orders.find(
+          (o) =>
+            o.id === reverseLocalId ||
+            o.client_order_id === reverseLocalId,
         )
       : undefined)
   );
@@ -171,7 +188,9 @@ export function reconcilePendingOrders(
         local.order_status === "CANCELLED")
     ) {
       // Never reintroduce server PENDING over a local terminal status.
-      remember({
+      // Persist the winner under the server id so deleting LOCAL-* does not
+      // wipe completion knowledge (that used to resurrect Pending on next poll).
+      const overlay: Order = {
         ...row,
         ...local,
         id: row.id,
@@ -180,7 +199,10 @@ export function reconcilePendingOrders(
         order_status: local.order_status,
         sync_status:
           local.sync_status === "synced" ? "synced" : "pending_sync",
-      });
+        updated_at: local.updated_at || new Date().toISOString(),
+      };
+      remember(overlay);
+      localUpdates.push(overlay);
       if (local.id !== row.id) deleteIds.add(local.id);
       continue;
     }
@@ -243,12 +265,9 @@ export function reconcilePendingOrders(
     }
     if (local.order_number?.startsWith("LOCAL-")) continue;
 
-    localUpdates.push({
-      ...local,
-      order_status: "COMPLETED",
-      sync_status: "synced",
-      updated_at: new Date().toISOString(),
-    });
+    // Synced PENDING missing from server pending: hide from Pending UI only.
+    // Do NOT invent COMPLETED — remote cancel / filter glitches would fake sales.
+    // Full /orders refresh (or COMPLETE sync) will set the real status later.
   }
 
   return {

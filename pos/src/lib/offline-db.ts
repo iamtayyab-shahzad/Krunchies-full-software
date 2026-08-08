@@ -256,14 +256,32 @@ const ID_MAP_KEY = "order_id_map";
 export async function mapLocalToServerId(localId: string, serverId: string) {
   const map = (await cacheGet<Record<string, string>>(ID_MAP_KEY)) || {};
   map[localId] = serverId;
-  // Keep map bounded
   const entries = Object.entries(map);
-  if (entries.length > 500) {
-    const trimmed = Object.fromEntries(entries.slice(-400));
-    await cacheSet(ID_MAP_KEY, trimmed);
+  if (entries.length <= 500) {
+    await cacheSet(ID_MAP_KEY, map);
     return;
   }
-  await cacheSet(ID_MAP_KEY, map);
+  // Prefer keeping ids still referenced by the offline queue.
+  const queue = await listPendingActions();
+  const dead = await listDeadActions();
+  const needed = new Set<string>();
+  for (const a of [...queue, ...dead]) {
+    const p = a.payload as { localId?: string; id?: string };
+    if (p.localId) needed.add(p.localId);
+    if (p.id) needed.add(p.id);
+  }
+  needed.add(localId);
+  const keep: [string, string][] = [];
+  const rest: [string, string][] = [];
+  for (const entry of entries) {
+    if (needed.has(entry[0]) || needed.has(entry[1])) keep.push(entry);
+    else rest.push(entry);
+  }
+  const trimmed = Object.fromEntries([
+    ...keep,
+    ...rest.slice(-(400 - Math.min(keep.length, 400))),
+  ].slice(-500));
+  await cacheSet(ID_MAP_KEY, trimmed);
 }
 
 export async function resolveServerOrderId(id: string): Promise<string> {
@@ -361,9 +379,18 @@ export async function replaceOrders(orders: Order[]) {
   await rebuildCustomersFromOrders(capped);
 }
 
+/** Keep local COMPLETED sales for this many Karachi calendar days past today. */
+const PRESERVE_COMPLETED_DAYS = 45;
+
+function orderCreatedMs(order: Order): number {
+  return Date.parse(order.created_at || "") || 0;
+}
+
 /**
- * Replace IDB orders from a server snapshot while keeping unsynced local
- * rows (offline creates / pending status changes) so a refresh never wipes them.
+ * Replace IDB orders from a server snapshot while keeping:
+ * - unsynced local rows (offline creates / pending status changes)
+ * - recent local COMPLETED/CANCELLED that fell off the server's limit=100 window
+ *   (otherwise dashboard/history sales silently shrink on busy days)
  */
 export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
   const existing = await listLocalOrders();
@@ -373,6 +400,9 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
       .map((r) => r.client_order_id)
       .filter((id): id is string => Boolean(id)),
   );
+
+  const preserveAfterMs =
+    Date.now() - PRESERVE_COMPLETED_DAYS * 24 * 60 * 60 * 1000;
 
   const unsynced = existing.filter((o) => {
     const pendingLocal =
@@ -387,6 +417,18 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
       return false;
     }
     return !serverIds.has(o.id) || o.order_status !== "PENDING";
+  });
+
+  const recentTerminal = existing.filter((o) => {
+    if (o.order_status !== "COMPLETED" && o.order_status !== "CANCELLED") {
+      return false;
+    }
+    if (serverIds.has(o.id)) return false;
+    if (o.client_order_id && serverClientIds.has(o.client_order_id)) {
+      return false;
+    }
+    const created = orderCreatedMs(o);
+    return created >= preserveAfterMs;
   });
 
   const byId = new Map<string, Order>();
@@ -413,10 +455,15 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
     }
   }
   for (const o of unsynced) byId.set(o.id, o);
+  for (const o of recentTerminal) {
+    if (!byId.has(o.id)) byId.set(o.id, o);
+  }
   await replaceOrders(Array.from(byId.values()));
 }
 
-/** Upsert without wiping history — used by pending polls. Dedupes identities. */
+/** Upsert without wiping history — used by pending polls. Dedupes identities.
+ *  Never lets a PENDING incoming row overwrite a local COMPLETED/CANCELLED twin.
+ */
 export async function mergeOrders(orders: Order[]) {
   const { dedupeOrdersByIdentity, ordersShareIdentity } = await import(
     "@/lib/order-identity"
@@ -429,10 +476,38 @@ export async function mergeOrders(orders: Order[]) {
     for (const [id, row] of [...byId.entries()]) {
       if (id === incoming.id) continue;
       if (ordersShareIdentity(row, incoming)) {
+        // Keep terminal local twin; drop only if incoming is also terminal or pending twin of pending.
+        if (
+          (row.order_status === "COMPLETED" ||
+            row.order_status === "CANCELLED") &&
+          incoming.order_status === "PENDING"
+        ) {
+          // Do not delete the completed row — skip absorbing this pending identity.
+          continue;
+        }
         byId.delete(id);
       }
     }
     const previous = byId.get(incoming.id);
+    const previousTerminal =
+      previous &&
+      (previous.order_status === "COMPLETED" ||
+        previous.order_status === "CANCELLED");
+    const identityTerminal = [...byId.values()].find(
+      (row) =>
+        ordersShareIdentity(row, incoming) &&
+        (row.order_status === "COMPLETED" ||
+          row.order_status === "CANCELLED"),
+    );
+
+    if (
+      incoming.order_status === "PENDING" &&
+      (previousTerminal || identityTerminal)
+    ) {
+      // Stale server PENDING must not resurrect a ticket the cashier finished.
+      continue;
+    }
+
     byId.set(
       incoming.id,
       previous

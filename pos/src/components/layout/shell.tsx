@@ -122,7 +122,7 @@ export function Sidebar() {
           {sync.conflicts.length > 0 || sync.dead_count > 0 ? (
             <p className="text-amber-400">
               {sync.dead_count > 0
-                ? `${sync.dead_count} failed sync item${sync.dead_count === 1 ? "" : "s"}`
+                ? `${sync.dead_count} failed sync item${sync.dead_count === 1 ? "" : "s"} — open Settings to retry`
                 : `${sync.conflicts.length} conflict${sync.conflicts.length === 1 ? "" : "s"}`}
             </p>
           ) : null}

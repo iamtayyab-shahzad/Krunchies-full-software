@@ -1,5 +1,5 @@
 import type { Order, OrderItem, Settings } from "@/types";
-import { formatPrice, recomputeOrderMoney } from "@/lib/utils";
+import { formatPrice } from "@/lib/utils";
 
 function escapeHtml(value: string) {
   return value
@@ -330,10 +330,10 @@ export function ensureReceiptItemNames(
       size,
     };
   });
-  return recomputeOrderMoney({
+  return {
     ...order,
     items: items as Order["items"],
-  });
+  };
 }
 
 export function buildKitchenReceiptHtml(order: Order) {
@@ -487,13 +487,18 @@ export function buildCustomerReceiptHtml(
       const name = itemName(item);
       const size = itemSize(item);
       const meta = decodeKitchenInstructions(item.special_instructions);
-      const note = meta.notes || item.special_instructions || "";
-      const noteHtml =
-        note && !note.includes("Crust:")
-          ? `<div class="note">${escapeHtml(note)}</div>`
-          : meta.notes
-            ? `<div class="note">${escapeHtml(meta.notes)}</div>`
-            : "";
+      const extras = [
+        meta.crust ? `Crust: ${meta.crust}` : "",
+        meta.toppings ? `Toppings: ${meta.toppings}` : "",
+        meta.extras ? `Extras: ${meta.extras}` : "",
+        meta.flavor ? `Flavor: ${meta.flavor}` : "",
+        meta.notes || "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const noteHtml = extras
+        ? `<div class="note">${escapeHtml(extras)}</div>`
+        : "";
       return `
       <tr>
         <td class="col-item">
