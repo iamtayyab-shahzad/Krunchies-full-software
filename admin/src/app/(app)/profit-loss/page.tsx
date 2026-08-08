@@ -262,15 +262,15 @@ export default function ProfitLossPage() {
             <div className="grid gap-4 sm:grid-cols-3">
               <StatCard
                 label="Avg daily sales"
-                value={formatPrice(report.avg_daily_revenue)}
+                value={formatPrice(report.avg_daily_revenue ?? 0)}
               />
               <StatCard
                 label="Avg daily expenses"
-                value={formatPrice(report.avg_daily_expenses)}
+                value={formatPrice(report.avg_daily_expenses ?? 0)}
               />
               <StatCard
                 label="Avg daily profit"
-                value={formatPrice(report.avg_daily_profit)}
+                value={formatPrice(report.avg_daily_profit ?? 0)}
               />
             </div>
           </Card>
