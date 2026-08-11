@@ -11,6 +11,13 @@ export function isPizzaSizeLabel(size?: string | null): boolean {
   return PIZZA_SIZE_RE.test((size || "").trim());
 }
 
+/** S/M/L/XL only — leftover Regular rows stay in the DB for old tickets. */
+export function pizzaSellableSizes<T extends { size?: string }>(
+  sizes: T[] | undefined | null,
+): T[] {
+  return (sizes || []).filter((s) => isPizzaSizeLabel(s.size));
+}
+
 export function isPizzaCategoryName(name?: string | null): boolean {
   return (name || "").toLowerCase().includes("pizza");
 }

@@ -280,6 +280,7 @@ export const productsApi = {
       return local;
     };
 
+    const keptForHistory: string[] = [];
     try {
       if (!isOnline()) throw new ApiError("Network unavailable", 0);
 
@@ -304,21 +305,34 @@ export const productsApi = {
             try {
               await apiFetch(`/product-sizes/${e.id}`, { method: "DELETE" });
             } catch (err) {
-              if (!(err instanceof ApiError) || err.status !== 409) throw err;
+              // Old tickets may still reference this size (409, or 500 on older API).
+              // Keep the row for history and still save the other sizes.
+              if (
+                err instanceof ApiError &&
+                (err.status === 409 || err.status === 500)
+              ) {
+                keptForHistory.push(e.size);
+                continue;
+              }
+              throw err;
             }
           }
         }
         for (const s of sizes) {
-          const match =
-            existing.find((e) => s.id && e.id === s.id) ||
-            existing.find(
-              (e) => e.size.toLowerCase() === s.size.toLowerCase(),
-            );
+          const match = existing.find(
+            (e) => e.size.toLowerCase() === s.size.toLowerCase(),
+          );
           if (match) {
-            await apiFetch(`/product-sizes/${match.id}`, {
-              method: "PUT",
-              body: JSON.stringify({ size: s.size, price: Math.round(s.price) }),
-            });
+            const price = Math.round(s.price);
+            if (
+              match.size !== s.size ||
+              Number(match.price) !== price
+            ) {
+              await apiFetch(`/product-sizes/${match.id}`, {
+                method: "PUT",
+                body: JSON.stringify({ size: s.size, price }),
+              });
+            }
           } else {
             await apiFetch("/product-sizes", {
               method: "POST",
@@ -349,10 +363,19 @@ export const productsApi = {
         }
       }
 
-      const refreshed = await catalogRepo.listProducts();
-      const saved =
-        refreshed.find((p) => p.id === productId) || (await applyLocal());
-      return { data: saved, offline: false as const };
+      await applyLocal();
+      let saved: Product | undefined;
+      try {
+        const refreshed = await catalogRepo.refreshProducts();
+        saved = refreshed.find((p) => p.id === productId);
+      } catch {
+        /* local copy already written */
+      }
+      return {
+        data: saved || (await applyLocal()),
+        offline: false as const,
+        keptSizes: keptForHistory,
+      };
     } catch (e) {
       if (!isQueueableError(e) && isOnline()) throw e;
       const local = await applyLocal();
@@ -371,6 +394,7 @@ export const productsApi = {
       return {
         data: local,
         offline: true as const,
+        keptSizes: keptForHistory,
         message: offlineOkMessage(
           input.id ? "Product update" : "Product",
         ),

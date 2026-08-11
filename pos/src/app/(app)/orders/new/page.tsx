@@ -21,7 +21,11 @@ import { useBill } from "@/context/bill-context";
 import { useMenuSearch } from "@/context/menu-search-context";
 import { requiresDealFlavorChoice } from "@/lib/deal-flavors";
 import { requiresDrinkFlavor } from "@/lib/drink-flavors";
-import { isPizzaProduct, isPizzaSizeLabel } from "@/lib/is-pizza";
+import {
+  isPizzaProduct,
+  isPizzaSizeLabel,
+  pizzaSellableSizes,
+} from "@/lib/is-pizza";
 import {
   calcCodFee,
   calcGrandTotal,
@@ -153,8 +157,10 @@ export default function NewOrderPage() {
 
   const onProductClick = useCallback(
     (product: Product, size?: ProductSize) => {
-      const sizes = product.sizes || [];
-      const chosen = size || sizes[0];
+      const sizes = isPizzaProduct(product)
+        ? pizzaSellableSizes(product.sizes)
+        : product.sizes || [];
+      const chosen = size || sizes[0] || product.sizes?.[0];
       if (!chosen) {
         toast.error("No sizes configured for this product");
         return;
@@ -754,10 +760,9 @@ export default function NewOrderPage() {
                   </div>
                   {product &&
                     isPizzaProduct(product) &&
-                    product.sizes &&
-                    product.sizes.length > 1 && (
+                    pizzaSellableSizes(product.sizes).length > 1 && (
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {product.sizes.map((s: ProductSize) => (
+                      {pizzaSellableSizes(product.sizes).map((s: ProductSize) => (
                         <button
                           key={s.id}
                           type="button"
@@ -933,7 +938,9 @@ function ProductTile({
   currency: string;
   onAdd: (p: Product, size?: ProductSize) => void;
 }) {
-  const sizes = product.sizes || [];
+  const sizes = isPizzaProduct(product)
+    ? pizzaSellableSizes(product.sizes)
+    : product.sizes || [];
   const prices = sizes.map((s) => s.price);
   const minPrice = prices.length ? Math.min(...prices) : 0;
   const maxPrice = prices.length ? Math.max(...prices) : 0;

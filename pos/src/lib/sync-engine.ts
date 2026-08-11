@@ -448,7 +448,11 @@ async function processAction(
         const desired = new Set(p.sizes.map((s) => s.size.toLowerCase()));
         for (const e of existing) {
           if (!desired.has(e.size.toLowerCase())) {
-            await apiFetch(`/product-sizes/${e.id}`, { method: "DELETE" });
+            try {
+              await apiFetch(`/product-sizes/${e.id}`, { method: "DELETE" });
+            } catch {
+              // Size may be referenced by old orders — leave it, sync the rest.
+            }
           }
         }
         for (const s of p.sizes) {

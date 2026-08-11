@@ -168,6 +168,14 @@ export const catalogRepo = {
     );
   },
 
+  /** After a catalog write, replace IndexedDB from the server so sizes don't bounce back. */
+  async refreshProducts(): Promise<Product[]> {
+    const data = await fetchProductsRemote();
+    await replaceProducts(data);
+    notifyCacheUpdated(["products"]);
+    return data;
+  },
+
   async listCategories(): Promise<Category[]> {
     return localFirst(
       "categories",

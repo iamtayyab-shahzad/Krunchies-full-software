@@ -26,11 +26,27 @@ import {
   prepareProductImage,
 } from "@/lib/image-upload";
 import { formatPrice } from "@/lib/utils";
-import { isPizzaCategoryName, isPizzaProduct } from "@/lib/is-pizza";
+import {
+  isPizzaCategoryName,
+  isPizzaProduct,
+  isPizzaSizeLabel,
+  pizzaSellableSizes,
+} from "@/lib/is-pizza";
 import { categoriesApi, productsApi } from "@/services/api";
 import type { Category, Product } from "@/types";
 
-type SizeRow = { id?: string; label: string; price: number };
+type SizeRow = { key: string; id?: string; label: string; price: number };
+
+function newSizeRow(
+  partial: Omit<SizeRow, "key"> & { key?: string } = { label: "", price: 0 },
+): SizeRow {
+  return {
+    key: partial.key || crypto.randomUUID(),
+    id: partial.id,
+    label: partial.label,
+    price: partial.price,
+  };
+}
 
 const emptyForm = {
   name: "",
@@ -50,10 +66,10 @@ export default function ProductsPage() {
   const [form, setForm] = useState(emptyForm);
   const [useSizes, setUseSizes] = useState(true);
   const [sizes, setSizes] = useState<SizeRow[]>([
-    { label: "S", price: 0 },
-    { label: "M", price: 0 },
-    { label: "L", price: 0 },
-    { label: "XL", price: 0 },
+    newSizeRow({ label: "S", price: 0 }),
+    newSizeRow({ label: "M", price: 0 }),
+    newSizeRow({ label: "L", price: 0 }),
+    newSizeRow({ label: "XL", price: 0 }),
   ]);
   const [q, setQ] = useState("");
   const [saving, setSaving] = useState(false);
@@ -86,10 +102,10 @@ export default function ProductsPage() {
     setForm({ ...emptyForm, category_id: categoryId });
     setUseSizes(categoryIsPizza(categoryId));
     setSizes([
-      { label: "S", price: 0 },
-      { label: "M", price: 0 },
-      { label: "L", price: 0 },
-      { label: "XL", price: 0 },
+      newSizeRow({ label: "S", price: 0 }),
+      newSizeRow({ label: "M", price: 0 }),
+      newSizeRow({ label: "L", price: 0 }),
+      newSizeRow({ label: "XL", price: 0 }),
     ]);
     setOpen(true);
   };
@@ -108,18 +124,25 @@ export default function ProductsPage() {
       basePrice: p.sizes?.[0]?.price || 0,
     });
     setUseSizes(pizza);
+    const pizzaRows = pizzaSellableSizes(p.sizes).map((s) =>
+      newSizeRow({ id: s.id, label: s.size, price: s.price }),
+    );
     setSizes(
-      pizza && (p.sizes || []).length
-        ? (p.sizes || []).map((s) => ({
-            id: s.id,
-            label: s.size,
-            price: s.price,
-          }))
+      pizza
+        ? pizzaRows.length
+          ? pizzaRows
+          : [
+              newSizeRow({ label: "S", price: 0 }),
+              newSizeRow({ label: "M", price: 0 }),
+              newSizeRow({ label: "L", price: 0 }),
+              newSizeRow({ label: "XL", price: 0 }),
+            ]
         : [
-            { label: "S", price: 0 },
-            { label: "M", price: 0 },
-            { label: "L", price: 0 },
-            { label: "XL", price: 0 },
+            newSizeRow({
+              id: p.sizes?.[0]?.id,
+              label: "Regular",
+              price: p.sizes?.[0]?.price || 0,
+            }),
           ],
     );
     setOpen(true);
@@ -155,8 +178,8 @@ export default function ProductsPage() {
       return;
     }
     const pizzaSizes: SizeRow[] = useSizes
-      ? sizes.filter((s) => s.label.trim())
-      : [{ label: "Regular", price: Number(form.basePrice) || 0 }];
+      ? sizes.filter((s) => s.label.trim() && isPizzaSizeLabel(s.label))
+      : [newSizeRow({ label: "Regular", price: Number(form.basePrice) || 0 })];
 
     if (!pizzaSizes.length || pizzaSizes.every((s) => !s.price && s.price !== 0)) {
       toast.error("Add at least one size with a price");
@@ -184,13 +207,19 @@ export default function ProductsPage() {
           price: Number(s.price) || 0,
         })),
       });
-      toast.success(
-        res.offline
-          ? res.message || "Product saved offline — will sync with prices"
-          : editing
-            ? "Product updated"
-            : "Product created",
-      );
+      if (res.keptSizes?.length) {
+        toast.message(
+          `Saved. ${res.keptSizes.join(", ")} kept for old tickets and hidden on pizza cards.`,
+        );
+      } else {
+        toast.success(
+          res.offline
+            ? res.message || "Product saved offline — will sync with prices"
+            : editing
+              ? "Product updated"
+              : "Product created",
+        );
+      }
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["products"] });
     } catch (e) {
@@ -258,11 +287,15 @@ export default function ProductsPage() {
             <div>
               <p className="text-lg font-bold">{p.name}</p>
               <p className="text-sm text-zinc-400">
-                {isPizzaProduct(p) && (p.sizes || []).length > 1
-                  ? (p.sizes || [])
+                {isPizzaProduct(p) && pizzaSellableSizes(p.sizes).length > 1
+                  ? pizzaSellableSizes(p.sizes)
                       .map((s) => `${s.size} ${formatPrice(s.price)}`)
                       .join(" · ")
-                  : formatPrice(p.sizes?.[0]?.price || 0)}
+                  : formatPrice(
+                      pizzaSellableSizes(p.sizes)[0]?.price ||
+                        p.sizes?.[0]?.price ||
+                        0,
+                    )}
               </p>
               <div className="mt-2 flex gap-4 text-sm">
                 <label className="flex items-center gap-2">
@@ -367,7 +400,7 @@ export default function ProductsPage() {
               <div className="space-y-2 rounded-lg border border-zinc-800 p-3">
                 <Label>Sizes &amp; Prices</Label>
                 {sizes.map((s, idx) => (
-                  <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                  <div key={s.key} className="grid grid-cols-[1fr_1fr_auto] gap-2">
                     <Input
                       placeholder="Size"
                       value={s.label}
@@ -401,9 +434,7 @@ export default function ProductsPage() {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() =>
-                    setSizes([...sizes, { label: "", price: 0 }])
-                  }
+                  onClick={() => setSizes([...sizes, newSizeRow()])}
                 >
                   Add size
                 </Button>
