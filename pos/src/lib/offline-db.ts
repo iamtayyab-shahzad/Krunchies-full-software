@@ -242,11 +242,18 @@ export async function pruneSyncedActions(keepLast = 50) {
   for (const item of synced.slice(keepLast)) {
     await db.delete("offline_queue", item.id);
   }
-  // Cap dead-letter items
-  const dead = all
-    .filter((a) => a.dead && !a.synced)
+  // Never delete dead order sync actions — those payloads are the only way
+  // to upload after a long outage. Cap only unrelated dead items.
+  const orderTypes = new Set([
+    "CREATE_ORDER",
+    "COMPLETE_ORDER",
+    "CANCEL_ORDER",
+    "UPDATE_ORDER",
+  ]);
+  const deadOther = all
+    .filter((a) => a.dead && !a.synced && !orderTypes.has(a.type))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  for (const item of dead.slice(30)) {
+  for (const item of deadOther.slice(50)) {
     await db.delete("offline_queue", item.id);
   }
 }
@@ -365,12 +372,30 @@ export async function listLocalCategories() {
   return (await cacheGet<Category[]>("categories")) || [];
 }
 
+function capOrdersKeepingUnsynced(orders: Order[], limit = 2000): Order[] {
+  const sorted = orders
+    .slice()
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const unsynced = sorted.filter(
+    (o) => o.sync_status === "pending_sync" || o.sync_status === "local",
+  );
+  const rest = sorted.filter(
+    (o) => o.sync_status !== "pending_sync" && o.sync_status !== "local",
+  );
+  const kept = [...unsynced];
+  const seen = new Set(kept.map((o) => o.id));
+  for (const row of rest) {
+    if (kept.length >= limit) break;
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    kept.push(row);
+  }
+  return kept.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
 export async function replaceOrders(orders: Order[]) {
   const db = await getDb();
-  const capped = orders
-    .slice()
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, 500);
+  const capped = capOrdersKeepingUnsynced(orders);
   const tx = db.transaction("orders", "readwrite");
   await tx.store.clear();
   for (const o of capped) await tx.store.put(o);
@@ -393,13 +418,18 @@ function orderCreatedMs(order: Order): number {
  *   (otherwise dashboard/history sales silently shrink on busy days)
  */
 export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
+  const { findOrderByIdentity, ordersShareIdentity, preferEarlierCreatedAt } =
+    await import("@/lib/order-identity");
   const existing = await listLocalOrders();
+  const idMap =
+    (await cacheGet<Record<string, string>>(ID_MAP_KEY)) || {};
   const serverIds = new Set(serverOrders.map((r) => r.id));
   const serverClientIds = new Set(
     serverOrders
       .map((r) => r.client_order_id)
       .filter((id): id is string => Boolean(id)),
   );
+  const mappedServerIds = new Set(Object.values(idMap));
 
   const preserveAfterMs =
     Date.now() - PRESERVE_COMPLETED_DAYS * 24 * 60 * 60 * 1000;
@@ -412,6 +442,7 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
     if (o.client_order_id && serverClientIds.has(o.client_order_id)) {
       return false;
     }
+    if (idMap[o.id] && serverIds.has(idMap[o.id])) return false;
     if (serverIds.has(o.id) && o.order_status === "PENDING") {
       // Server row wins for still-pending synced ids; keep local if status diverged.
       return false;
@@ -427,19 +458,20 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
     if (o.client_order_id && serverClientIds.has(o.client_order_id)) {
       return false;
     }
+    if (idMap[o.id] && serverIds.has(idMap[o.id])) return false;
+    if (mappedServerIds.has(o.id)) return false;
     const created = orderCreatedMs(o);
     return created >= preserveAfterMs;
   });
 
   const byId = new Map<string, Order>();
   for (const s of serverOrders) {
-    const loc = existing.find(
-      (l) =>
-        l.id === s.id ||
-        (l.client_order_id &&
-          s.client_order_id &&
-          l.client_order_id === s.client_order_id),
-    );
+    const loc = findOrderByIdentity(existing, s, idMap);
+    const createdAt = loc
+      ? preferEarlierCreatedAt(loc.created_at, s.created_at)
+      : s.created_at;
+    const clientOrderId =
+      s.client_order_id || loc?.client_order_id || loc?.id || undefined;
     if (
       loc &&
       loc.sync_status === "pending_sync" &&
@@ -447,16 +479,29 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
     ) {
       byId.set(s.id, {
         ...s,
+        client_order_id: clientOrderId,
+        created_at: createdAt,
         order_status: loc.order_status,
         sync_status: "pending_sync",
       });
     } else {
-      byId.set(s.id, { ...s, sync_status: "synced" as const });
+      byId.set(s.id, {
+        ...s,
+        client_order_id: clientOrderId,
+        created_at: createdAt,
+        sync_status: "synced" as const,
+      });
     }
   }
-  for (const o of unsynced) byId.set(o.id, o);
+  const identityTaken = (row: Order) =>
+    [...byId.values()].some((existingRow) =>
+      ordersShareIdentity(existingRow, row),
+    );
+  for (const o of unsynced) {
+    if (!byId.has(o.id) && !identityTaken(o)) byId.set(o.id, o);
+  }
   for (const o of recentTerminal) {
-    if (!byId.has(o.id)) byId.set(o.id, o);
+    if (!byId.has(o.id) && !identityTaken(o)) byId.set(o.id, o);
   }
   await replaceOrders(Array.from(byId.values()));
 }
@@ -465,9 +510,11 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
  *  Never lets a PENDING incoming row overwrite a local COMPLETED/CANCELLED twin.
  */
 export async function mergeOrders(orders: Order[]) {
-  const { dedupeOrdersByIdentity, ordersShareIdentity } = await import(
-    "@/lib/order-identity"
-  );
+  const {
+    dedupeOrdersByIdentity,
+    ordersShareIdentity,
+    preferEarlierCreatedAt,
+  } = await import("@/lib/order-identity");
   const db = await getDb();
   const existing = await db.getAll("orders");
   const byId = new Map(existing.map((o) => [o.id, o]));
@@ -518,14 +565,18 @@ export async function mergeOrders(orders: Order[]) {
               incoming.client_order_id ||
               previous.client_order_id ||
               previous.id,
+            created_at: preferEarlierCreatedAt(
+              previous.created_at,
+              incoming.created_at,
+            ),
           }
         : incoming,
     );
   }
 
-  const merged = dedupeOrdersByIdentity(Array.from(byId.values()))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, 500);
+  const merged = capOrdersKeepingUnsynced(
+    dedupeOrdersByIdentity(Array.from(byId.values())),
+  );
   const tx = db.transaction("orders", "readwrite");
   await tx.store.clear();
   for (const o of merged) await tx.store.put(o);

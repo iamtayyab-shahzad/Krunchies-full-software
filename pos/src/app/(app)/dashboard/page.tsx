@@ -21,6 +21,12 @@ export default function DashboardPage() {
     queryFn: analyticsApi.todaySales,
     staleTime: 0,
   });
+  const { data: recon } = useQuery({
+    queryKey: ["analytics", "reconcile-today"],
+    queryFn: () => analyticsApi.reconcileDay(),
+    staleTime: 30_000,
+    retry: false,
+  });
   const { data: weekly } = useQuery({
     queryKey: ["analytics", "weekly"],
     queryFn: analyticsApi.weeklySales,
@@ -59,6 +65,17 @@ export default function DashboardPage() {
         <Stat label="Pending Orders" value={String(pending)} />
         <Stat label="Low Stock Items" value={String(lowStock)} warn={lowStock > 0} />
       </div>
+      {recon &&
+      recon.cloud_total != null &&
+      recon.matched === false ? (
+        <p className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          Till today ({recon.local_count} orders,{" "}
+          {formatPrice(recon.local_total, currency)}) does not match cloud (
+          {recon.cloud_count} orders, {formatPrice(recon.cloud_total, currency)}
+          ). Open Analytics to compare. Unsynced or delayed cloud orders cause
+          this until Sync finishes.
+        </p>
+      ) : null}
       <div className="mt-8 grid gap-4 md:grid-cols-3">
         <QuickLink href="/orders/new" title="New Order" desc="Create walk-in or phone order" />
         <QuickLink href="/orders/pending" title="Pending" desc="Resume or complete saved orders" />

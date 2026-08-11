@@ -35,6 +35,23 @@ func NewOrderService(db *gorm.DB) *OrderService {
 
 var phonePattern = regexp.MustCompile(`^[0-9+()[:space:]-]{7,20}$`)
 
+// resolveClientCreatedAt keeps the original till time so a 3-day offline
+// backlog is not stamped as "today" when it finally syncs.
+func resolveClientCreatedAt(raw *time.Time) time.Time {
+	now := time.Now().UTC()
+	if raw == nil || raw.IsZero() {
+		return now
+	}
+	t := raw.UTC()
+	if t.After(now.Add(5 * time.Minute)) {
+		return now
+	}
+	if now.Sub(t) > 365*24*time.Hour {
+		return now
+	}
+	return t
+}
+
 func (s *OrderService) CreateOrder(
 	input dto.CreateOrderRequest,
 	orderType string,
@@ -109,9 +126,10 @@ func (s *OrderService) CreateOrder(
 		codFee = setting.CashOnDeliveryFee
 	}
 
+	saleTime := resolveClientCreatedAt(input.CreatedAt)
 	orderID := uuid.New()
 	order := &domain.Order{
-		BaseModel:         domain.BaseModel{ID: orderID},
+		BaseModel:         domain.BaseModel{ID: orderID, CreatedAt: saleTime, UpdatedAt: time.Now().UTC()},
 		OrderNumber:       "KR-" + strings.ToUpper(strings.ReplaceAll(orderID.String(), "-", "")[:16]),
 		ClientOrderID:     input.ClientOrderID,
 		CustomerID:        customerID,
@@ -177,7 +195,7 @@ func (s *OrderService) CreateOrder(
 		})
 	}
 
-	discount := WeekendDiscount(time.Now(), eligibleSubtotal)
+	discount := WeekendDiscount(saleTime, eligibleSubtotal)
 	order.Subtotal = subtotal
 	order.Discount = discount
 	order.GrandTotal = subtotal - discount + location.DeliveryCharge + codFee
@@ -387,7 +405,7 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 				SpecialInstructions: strings.TrimSpace(item.SpecialInstructions),
 			})
 		}
-		discount := WeekendDiscount(time.Now(), eligibleSubtotal)
+		discount := WeekendDiscount(current.CreatedAt, eligibleSubtotal)
 		updates["subtotal"] = subtotal
 		updates["discount"] = discount
 		updates["grand_total"] = subtotal - discount + location.DeliveryCharge + codFee

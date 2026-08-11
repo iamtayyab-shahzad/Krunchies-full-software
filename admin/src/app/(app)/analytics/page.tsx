@@ -183,9 +183,10 @@ export default function AnalyticsPage() {
       </div>
 
       <Card className="mt-6">
-        <h2 className="mb-1 text-lg font-bold">Sales lookup</h2>
+        <h2 className="mb-1 text-lg font-bold">Cloud sales lookup</h2>
         <p className="mb-4 text-sm text-zinc-400">
-          Pick one day or a date range (Pakistan time, midnight to midnight).
+          Server completed sales for a Pakistan calendar day. Compare against
+          the shop POS Analytics → Till vs cloud on the cashier PC.
         </p>
         <div className="mb-4 flex flex-wrap gap-2">
           <button

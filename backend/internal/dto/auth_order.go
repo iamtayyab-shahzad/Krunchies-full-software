@@ -1,6 +1,10 @@
 package dto
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type StaffLoginRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=50"`
@@ -35,6 +39,8 @@ type CreateOrderRequest struct {
 	PaymentMethod string                   `json:"payment_method" binding:"required,oneof=cash easypaisa jazzcash card bank cod"`
 	OrderNotes    string                   `json:"order_notes" binding:"max=2000"`
 	ClientOrderID *uuid.UUID               `json:"client_order_id"`
+	// CreatedAt is the original till timestamp. If omitted, server time is used.
+	CreatedAt     *time.Time               `json:"created_at"`
 	IsGuest       bool                     `json:"is_guest"`
 	Items         []CreateOrderItemRequest `json:"items" binding:"required,min=1,dive"`
 }

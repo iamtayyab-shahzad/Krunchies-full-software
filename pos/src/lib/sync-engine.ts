@@ -28,6 +28,7 @@ import {
   isOnline,
   isPermanentSyncError,
   isQueueableError,
+  shouldCountSyncAttempt,
   POS_CONNECTIVITY_EVENT,
 } from "@/lib/network";
 import { notifyOrdersChanged } from "@/lib/offline-events";
@@ -216,6 +217,7 @@ async function processAction(
       if (willComplete) orderStatus = "COMPLETED";
       else if (willCancel) orderStatus = "CANCELLED";
 
+      const { preferEarlierCreatedAt } = await import("@/lib/order-identity");
       const syncedOrder: Order = {
         ...order,
         client_order_id:
@@ -223,6 +225,10 @@ async function processAction(
           p.input.client_order_id ||
           p.localId ||
           order.id,
+        created_at: preferEarlierCreatedAt(
+          localExisting?.created_at,
+          preferEarlierCreatedAt(p.input.created_at, order.created_at),
+        ),
         order_status: orderStatus,
         // Keep pending_sync until follow-up COMPLETE/CANCEL PATCH succeeds.
         sync_status:
@@ -591,6 +597,17 @@ async function processAction(
   }
 }
 
+const PERMANENT_DEAD_ERROR =
+  /invalid product|unavailable|cart cannot be empty|customer name is required|invalid phone|invalid location/i;
+
+async function reviveDeadActionsOnReconnect() {
+  const dead = await listDeadActions();
+  for (const action of dead) {
+    if (action.error && PERMANENT_DEAD_ERROR.test(action.error)) continue;
+    await reviveDeadAction(action.id);
+  }
+}
+
 export async function runSync(reason: string = "manual"): Promise<void> {
   if (!isOnline()) {
     setState({ online: false });
@@ -602,6 +619,9 @@ export async function runSync(reason: string = "manual"): Promise<void> {
   syncPromise = (async () => {
     setState({ online: true, syncing: true, completed: 0, current_action: null });
     try {
+      if (reason === "online" || reason === "startup" || reason === "manual") {
+        await reviveDeadActionsOnReconnect();
+      }
       const pending = await listPendingActions();
       const now = Date.now();
       const due = pending
@@ -637,9 +657,13 @@ export async function runSync(reason: string = "manual"): Promise<void> {
           const message =
             err instanceof Error ? err.message : "Sync failed";
           lastError = message;
-          const attempts = (action.attempts || 0) + 1;
+          const countAttempt = shouldCountSyncAttempt(err);
+          const attempts = countAttempt
+            ? (action.attempts || 0) + 1
+            : action.attempts || 0;
           const permanent =
-            isPermanentSyncError(err) || attempts >= MAX_ATTEMPTS;
+            isPermanentSyncError(err) ||
+            (countAttempt && attempts >= MAX_ATTEMPTS);
 
           if (permanent) {
             await markActionError(action.id, message, {
@@ -655,7 +679,7 @@ export async function runSync(reason: string = "manual"): Promise<void> {
             return;
           }
 
-          const delay = Math.min(1000 * 2 ** Math.min(attempts, 6), 60_000);
+          const delay = Math.min(1000 * 2 ** Math.min(attempts || 1, 6), 60_000);
           await markActionError(action.id, message, {
             attempts,
             next_retry_at: new Date(Date.now() + delay).toISOString(),

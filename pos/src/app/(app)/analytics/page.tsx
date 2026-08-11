@@ -95,6 +95,21 @@ export default function AnalyticsPage() {
   const [to, setTo] = useState(todayIso);
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookup, setLookup] = useState<PeriodResult | null>(null);
+  const [reconBusy, setReconBusy] = useState(false);
+  const [recon, setRecon] = useState<Awaited<
+    ReturnType<typeof analyticsApi.reconcileDay>
+  > | null>(null);
+
+  const runReconcile = async () => {
+    setReconBusy(true);
+    try {
+      setRecon(await analyticsApi.reconcileDay(day));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Compare failed");
+    } finally {
+      setReconBusy(false);
+    }
+  };
 
   const runLookup = async () => {
     setLookupBusy(true);
@@ -124,6 +139,54 @@ export default function AnalyticsPage() {
         />
         <Card title="Cancelled" value={String(cancelled?.count || 0)} />
       </div>
+
+      <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+        <h2 className="mb-1 text-xl font-bold">Till vs cloud</h2>
+        <p className="mb-4 text-sm text-zinc-400">
+          Compare this PC&apos;s completed sales for a Pakistan calendar day
+          against the server. A mismatch usually means unsynced orders or a
+          delay — it does not change Today&apos;s Sales on the till.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block min-w-[12rem]">
+            <span className="mb-1 block text-xs text-zinc-500">Date</span>
+            <Input
+              type="date"
+              value={day}
+              onChange={(e) => setDay(e.target.value)}
+            />
+          </label>
+          <Button onClick={() => void runReconcile()} disabled={reconBusy}>
+            {reconBusy ? "Comparing..." : "Compare till vs cloud"}
+          </Button>
+        </div>
+        {recon ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Card
+              title={`Till ${recon.date}`}
+              value={`${recon.local_count} · ${formatPrice(recon.local_total, currency)}`}
+            />
+            <Card
+              title="Cloud"
+              value={
+                recon.cloud_total == null
+                  ? "Offline / unavailable"
+                  : `${recon.cloud_count} · ${formatPrice(recon.cloud_total, currency)}`
+              }
+            />
+            <Card
+              title="Match"
+              value={
+                recon.cloud_total == null
+                  ? "—"
+                  : recon.matched
+                    ? "Yes"
+                    : "No — check Sync"
+              }
+            />
+          </div>
+        ) : null}
+      </section>
 
       <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="mb-1 text-xl font-bold">Sales lookup</h2>

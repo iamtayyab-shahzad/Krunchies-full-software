@@ -25,6 +25,21 @@ export function ordersShareIdentity(
   return false;
 }
 
+/** Keep the original sale timestamp — never let sync time replace place time. */
+export function preferEarlierCreatedAt(
+  a?: string | null,
+  b?: string | null,
+): string {
+  const ta = Date.parse(a || "");
+  const tb = Date.parse(b || "");
+  if (!Number.isFinite(ta) && !Number.isFinite(tb)) {
+    return a || b || new Date().toISOString();
+  }
+  if (!Number.isFinite(ta)) return b as string;
+  if (!Number.isFinite(tb)) return a as string;
+  return ta <= tb ? (a as string) : (b as string);
+}
+
 export function findOrderByIdentity(
   orders: Order[],
   needle: Pick<Order, "id" | "client_order_id">,

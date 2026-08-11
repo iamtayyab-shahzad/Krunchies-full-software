@@ -1,4 +1,5 @@
 import type { Order } from "@/types";
+import { dedupeOrdersByIdentity } from "@/lib/order-identity";
 
 const KARACHI = "Asia/Karachi";
 
@@ -30,21 +31,42 @@ export function isCompletedSale(order: Order): boolean {
   return status === "COMPLETED";
 }
 
-/** Sum grand_total of COMPLETED orders with created_at in [startMs, endMs). */
+/** Unique COMPLETED sales in [startMs, endMs). Twins (LOCAL-* + server id) count once. */
+export function completedSalesInRange(
+  orders: Order[],
+  startMs: number,
+  endMs: number,
+): { total: number; orderCount: number } {
+  let total = 0;
+  let orderCount = 0;
+  for (const order of dedupeOrdersByIdentity(orders)) {
+    if (!isCompletedSale(order)) continue;
+    const t = Date.parse(order.created_at || "");
+    if (!Number.isFinite(t) || t < startMs || t >= endMs) continue;
+    const amount = Number(order.grand_total);
+    if (!Number.isFinite(amount)) continue;
+    total += amount;
+    orderCount += 1;
+  }
+  return { total, orderCount };
+}
+
+/** Sum grand_total of unique COMPLETED orders with created_at in [startMs, endMs). */
 export function sumCompletedSalesInRange(
   orders: Order[],
   startMs: number,
   endMs: number,
 ): number {
-  let total = 0;
-  for (const order of orders) {
-    if (!isCompletedSale(order)) continue;
-    const t = Date.parse(order.created_at || "");
-    if (!Number.isFinite(t) || t < startMs || t >= endMs) continue;
-    const amount = Number(order.grand_total);
-    if (Number.isFinite(amount)) total += amount;
-  }
-  return total;
+  return completedSalesInRange(orders, startMs, endMs).total;
+}
+
+/** Karachi calendar day completed sales from local orders. */
+export function localSalesForKarachiDay(
+  orders: Order[],
+  dayYmd: string,
+): { total: number; orderCount: number } {
+  const { startMs, endMs } = karachiDayBoundsUtc(dayYmd);
+  return completedSalesInRange(orders, startMs, endMs);
 }
 
 /** Today's completed sales (Karachi calendar day) from local orders. */

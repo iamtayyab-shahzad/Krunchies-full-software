@@ -177,6 +177,8 @@ export interface CreateOrderInput {
   payment_method: string;
   order_notes?: string;
   client_order_id?: string;
+  /** Original till timestamp (ISO). Backend must persist this, not sync time. */
+  created_at?: string;
   items: CreateOrderItemInput[];
 }
 

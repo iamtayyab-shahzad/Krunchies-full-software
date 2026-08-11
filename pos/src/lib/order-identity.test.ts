@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   dedupeOrdersByIdentity,
   ordersShareIdentity,
+  preferEarlierCreatedAt,
   preferOrder,
   reconcilePendingOrders,
 } from "@/lib/order-identity";
@@ -46,6 +47,15 @@ describe("order identity", () => {
       order_status: "PENDING",
     });
     expect(ordersShareIdentity(local, server)).toBe(true);
+  });
+
+  it("keeps the earlier created_at when sync stamps a later time", () => {
+    expect(
+      preferEarlierCreatedAt(
+        "2026-08-08T12:00:00.000Z",
+        "2026-08-11T09:00:00.000Z",
+      ),
+    ).toBe("2026-08-08T12:00:00.000Z");
   });
 
   it("prefers COMPLETED over PENDING for the same ticket", () => {

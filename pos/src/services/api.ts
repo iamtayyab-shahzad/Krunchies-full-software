@@ -32,8 +32,9 @@ import {
 import { calcCodFee, calcGrandTotal, recomputeOrderMoney } from "@/lib/utils";
 import { weekendDiscount } from "@/lib/weekend-promo";
 import {
+  karachiYmd,
   localMonthlySales,
-  localTodaySales,
+  localSalesForKarachiDay,
   localWeeklySales,
   localYesterdaySales,
 } from "@/lib/local-sales";
@@ -679,10 +680,14 @@ export const ordersApi = {
     }
 
     const local = await buildLocalOrder(input, orderType, clientOrderId);
+    const queuedInput: CreateOrderInput = {
+      ...apiInput,
+      created_at: local.created_at,
+    };
     if (!existing) {
       await enqueueAndTrack({
         type: "CREATE_ORDER",
-        payload: { input: apiInput, orderType, localId: local.id },
+        payload: { input: queuedInput, orderType, localId: local.id },
       });
     }
     await upsertLocalOrder(local);
@@ -764,7 +769,15 @@ export const ordersApi = {
     };
   },
   complete: async (id: string) => {
-    await enqueueAndTrack({ type: "COMPLETE_ORDER", payload: { id } });
+    const { listPendingActions } = await import("@/lib/offline-db");
+    const alreadyQueued = (await listPendingActions()).some(
+      (a) =>
+        a.type === "COMPLETE_ORDER" &&
+        (a.payload as { id?: string }).id === id,
+    );
+    if (!alreadyQueued) {
+      await enqueueAndTrack({ type: "COMPLETE_ORDER", payload: { id } });
+    }
     await markLocalOrderStatus(id, "COMPLETED", { pendingSync: true });
     return {
       offline: true as const,
@@ -1117,8 +1130,10 @@ async function cachedAnalytics<T>(
 async function localSalesTotals() {
   const orders = await listLocalOrders();
   const now = new Date();
+  const today = localSalesForKarachiDay(orders, karachiYmd(now));
   return {
-    today: localTodaySales(orders, now),
+    today: today.total,
+    todayCount: today.orderCount,
     yesterday: localYesterdaySales(orders, now),
     weekly: localWeeklySales(orders, now),
     monthly: localMonthlySales(orders, now),
@@ -1127,16 +1142,45 @@ async function localSalesTotals() {
 
 export const analyticsApi = {
   todaySales: async () => {
-    const { today } = await localSalesTotals();
-    // Keep cloud cache warm when online (Analytics extras / future), never block UI.
+    const { today, todayCount } = await localSalesTotals();
+    // POS till total is always local unique COMPLETED sales (Karachi day).
+    // Cloud is comparison only — never replace the till after a long outage.
+    return { total: today, order_count: todayCount };
+  },
+  cloudSalesForDay: (dayYmd?: string) => {
+    const date = dayYmd || karachiYmd();
+    return apiFetch<{
+      total: number;
+      order_count: number;
+      from: string;
+      to: string;
+    }>(`/analytics/sales?date=${encodeURIComponent(date)}`);
+  },
+  reconcileDay: async (dayYmd?: string) => {
+    const date = dayYmd || karachiYmd();
+    const orders = await listLocalOrders();
+    const local = localSalesForKarachiDay(orders, date);
+    let cloud: { total: number; order_count: number } | null = null;
     if (isOnline()) {
-      void cachedAnalytics(
-        "analytics:today",
-        () => apiFetch<{ total: number }>("/analytics/today-sales"),
-        { total: today },
-      );
+      try {
+        cloud = await apiFetch<{ total: number; order_count: number }>(
+          `/analytics/sales?date=${encodeURIComponent(date)}`,
+        );
+      } catch {
+        cloud = null;
+      }
     }
-    return { total: today };
+    return {
+      date,
+      local_total: local.total,
+      local_count: local.orderCount,
+      cloud_total: cloud?.total ?? null,
+      cloud_count: cloud?.order_count ?? null,
+      matched:
+        cloud != null &&
+        cloud.total === local.total &&
+        cloud.order_count === local.orderCount,
+    };
   },
   yesterdaySales: async () => {
     const { yesterday } = await localSalesTotals();
@@ -1144,24 +1188,10 @@ export const analyticsApi = {
   },
   weeklySales: async () => {
     const { weekly } = await localSalesTotals();
-    if (isOnline()) {
-      void cachedAnalytics(
-        "analytics:weekly",
-        () => apiFetch<{ total: number }>("/analytics/weekly-sales"),
-        { total: weekly },
-      );
-    }
     return { total: weekly };
   },
   monthlySales: async () => {
     const { monthly } = await localSalesTotals();
-    if (isOnline()) {
-      void cachedAnalytics(
-        "analytics:monthly",
-        () => apiFetch<{ total: number }>("/analytics/monthly-sales"),
-        { total: monthly },
-      );
-    }
     return { total: monthly };
   },
   /** Single day: { date } or range: { from, to } — Asia/Karachi calendar days. */

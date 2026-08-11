@@ -97,12 +97,22 @@ export function isQueueableError(err: unknown) {
   return status != null && [0, 408, 429, 502, 503, 504].includes(status);
 }
 
-/** Client validation / permanent failures — do not keep retrying forever. */
+/** Client validation failures — do not keep retrying forever.
+ *  404 is NOT permanent (COMPLETE against a client UUID before CREATE lands).
+ *  401/429 are auth/rate-limit — retry after login/backoff, don't dead-letter.
+ */
 export function isPermanentSyncError(err: unknown) {
   const status = errorStatus(err);
   if (status == null) return false;
-  if ([401, 429].includes(status)) return false;
-  return status >= 400 && status < 500;
+  return status === 400 || status === 403 || status === 422;
+}
+
+/** Network / host-sick errors must not burn the 8-attempt dead-letter budget. */
+export function shouldCountSyncAttempt(err: unknown) {
+  if (isNetworkError(err) || isQueueableError(err)) return false;
+  const status = errorStatus(err);
+  if (status === 401) return false;
+  return true;
 }
 
 /** Wire browser online/offline once (safe to call multiple times). */
