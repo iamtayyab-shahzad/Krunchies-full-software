@@ -56,7 +56,7 @@ func (r *GenericRepository[T]) ListPaged(limit, offset int) ([]T, int64, error) 
 
 func (r *GenericRepository[T]) Update(id uuid.UUID, updates map[string]any) error {
 	var model T
-	return r.db.Model(&model).Where("id = ?", id).Updates(updates).Error
+	return r.db.Model(&model).Where("id = ?", id).Updates(NormalizeJSONUpdates(updates)).Error
 }
 
 func (r *GenericRepository[T]) Delete(id uuid.UUID) error {

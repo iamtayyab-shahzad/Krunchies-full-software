@@ -26,8 +26,9 @@ import {
   prepareProductImage,
 } from "@/lib/image-upload";
 import { formatPrice } from "@/lib/utils";
+import { isPizzaCategoryName, isPizzaProduct } from "@/lib/is-pizza";
 import { categoriesApi, productsApi } from "@/services/api";
-import type { Product } from "@/types";
+import type { Category, Product } from "@/types";
 
 type SizeRow = { id?: string; label: string; price: number };
 
@@ -74,10 +75,16 @@ export default function ProductsPage() {
     [products, q],
   );
 
+  const categoryIsPizza = (categoryId: string) => {
+    const cat = categories.find((c: Category) => c.id === categoryId);
+    return isPizzaCategoryName(cat?.name);
+  };
+
   const openCreate = () => {
     setEditing(null);
-    setForm({ ...emptyForm, category_id: categories[0]?.id || "" });
-    setUseSizes(true);
+    const categoryId = categories[0]?.id || "";
+    setForm({ ...emptyForm, category_id: categoryId });
+    setUseSizes(categoryIsPizza(categoryId));
     setSizes([
       { label: "S", price: 0 },
       { label: "M", price: 0 },
@@ -89,7 +96,7 @@ export default function ProductsPage() {
 
   const openEdit = (p: Product) => {
     setEditing(p);
-    const hasMulti = (p.sizes || []).length > 1;
+    const pizza = isPizzaProduct(p) || categoryIsPizza(p.category_id);
     setForm({
       name: p.name,
       description: p.description || "",
@@ -100,9 +107,9 @@ export default function ProductsPage() {
       display_order: p.display_order,
       basePrice: p.sizes?.[0]?.price || 0,
     });
-    setUseSizes(hasMulti || (p.sizes || []).length > 0);
+    setUseSizes(pizza);
     setSizes(
-      (p.sizes || []).length
+      pizza && (p.sizes || []).length
         ? (p.sizes || []).map((s) => ({
             id: s.id,
             label: s.size,
@@ -251,9 +258,11 @@ export default function ProductsPage() {
             <div>
               <p className="text-lg font-bold">{p.name}</p>
               <p className="text-sm text-zinc-400">
-                {(p.sizes || [])
-                  .map((s) => `${s.size} ${formatPrice(s.price)}`)
-                  .join(" · ") || "No sizes"}
+                {isPizzaProduct(p) && (p.sizes || []).length > 1
+                  ? (p.sizes || [])
+                      .map((s) => `${s.size} ${formatPrice(s.price)}`)
+                      .join(" · ")
+                  : formatPrice(p.sizes?.[0]?.price || 0)}
               </p>
               <div className="mt-2 flex gap-4 text-sm">
                 <label className="flex items-center gap-2">
@@ -303,7 +312,10 @@ export default function ProductsPage() {
               <Label>Category</Label>
               <Select
                 value={form.category_id}
-                onValueChange={(v) => setForm({ ...form, category_id: v })}
+                onValueChange={(v) => {
+                  setForm({ ...form, category_id: v });
+                  setUseSizes(categoryIsPizza(v));
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
@@ -350,11 +362,6 @@ export default function ProductsPage() {
                 <p className="text-xs text-emerald-500">Optimized image ready</p>
               ) : null}
             </div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <Switch checked={useSizes} onCheckedChange={setUseSizes} />
-              Use multiple sizes (S / M / L / XL)
-            </label>
 
             {useSizes ? (
               <div className="space-y-2 rounded-lg border border-zinc-800 p-3">
@@ -403,7 +410,7 @@ export default function ProductsPage() {
               </div>
             ) : (
               <div className="space-y-1">
-                <Label>Price (Regular)</Label>
+                <Label>Price</Label>
                 <Input
                   type="number"
                   value={form.basePrice}

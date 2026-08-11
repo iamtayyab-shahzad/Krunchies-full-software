@@ -55,6 +55,7 @@ describe("receipt product names", () => {
       currency: "Rs",
     } as never);
     expect(html).toContain("Tikka Roll");
+    expect(html).not.toContain("(Regular)");
     expect(html).not.toMatch(/>\s*Item\s*\(/);
   });
 
@@ -167,6 +168,47 @@ describe("kitchen ticket layout", () => {
     expect(html).not.toMatch(/class="qty">4x/);
     expect(html).not.toContain("font-weight: 800");
     expect(html).not.toContain("www.krunchies.pk");
+    expect(html).not.toContain("Regular");
+  });
+
+  it("prints pizza size S/M/L/XL but not shake Regular", () => {
+    const pizza = ensureReceiptItemNames(
+      baseOrder([
+        {
+          id: "i1",
+          created_at: "",
+          updated_at: "",
+          order_id: "ord-1",
+          product_id: "p1",
+          product_size_id: "s1",
+          quantity: 1,
+          price: 1400,
+          product_name: "Chicken Tika",
+          size: "L",
+        },
+      ]),
+    );
+    const shake = ensureReceiptItemNames(
+      baseOrder([
+        {
+          id: "i2",
+          created_at: "",
+          updated_at: "",
+          order_id: "ord-1",
+          product_id: "p2",
+          product_size_id: "s2",
+          quantity: 1,
+          price: 200,
+          product_name: "Mango Shake",
+          size: "Regular",
+        },
+      ]),
+    );
+    const pizzaHtml = buildCustomerReceiptHtml(pizza, null);
+    const shakeHtml = buildCustomerReceiptHtml(shake, null);
+    expect(pizzaHtml).toContain("Chicken Tika (L)");
+    expect(shakeHtml).toContain("Mango Shake");
+    expect(shakeHtml).not.toContain("(Regular)");
   });
 
   it("lists items included in a deal", () => {

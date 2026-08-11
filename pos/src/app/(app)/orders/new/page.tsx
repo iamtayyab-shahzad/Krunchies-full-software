@@ -21,6 +21,7 @@ import { useBill } from "@/context/bill-context";
 import { useMenuSearch } from "@/context/menu-search-context";
 import { requiresDealFlavorChoice } from "@/lib/deal-flavors";
 import { requiresDrinkFlavor } from "@/lib/drink-flavors";
+import { isPizzaProduct, isPizzaSizeLabel } from "@/lib/is-pizza";
 import {
   calcCodFee,
   calcGrandTotal,
@@ -167,7 +168,7 @@ export default function NewOrderPage() {
         return;
       }
       bill.addProduct(product, chosen);
-      if (sizes.length > 1) {
+      if (isPizzaProduct(product) && sizes.length > 1) {
         toast.message(`${product.name} added (${chosen.size})`);
       }
     },
@@ -739,7 +740,8 @@ export default function NewOrderPage() {
                     <div>
                       <p className="font-bold text-white">{item.product_name}</p>
                       <p className="text-sm text-orange-400">
-                        {formatPrice(item.price, currency)} · {item.size}
+                        {formatPrice(item.price, currency)}
+                        {isPizzaSizeLabel(item.size) ? ` · ${item.size}` : ""}
                       </p>
                     </div>
                     <button
@@ -750,7 +752,10 @@ export default function NewOrderPage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  {product?.sizes && product.sizes.length > 1 && (
+                  {product &&
+                    isPizzaProduct(product) &&
+                    product.sizes &&
+                    product.sizes.length > 1 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {product.sizes.map((s: ProductSize) => (
                         <button
@@ -932,7 +937,7 @@ function ProductTile({
   const prices = sizes.map((s) => s.price);
   const minPrice = prices.length ? Math.min(...prices) : 0;
   const maxPrice = prices.length ? Math.max(...prices) : 0;
-  const multiSize = sizes.length > 1;
+  const multiSize = isPizzaProduct(product) && sizes.length > 1;
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 text-left transition hover:border-orange-500">
@@ -982,18 +987,23 @@ function ProductTile({
         </div>
       </button>
       {multiSize ? (
-        <div className="grid grid-cols-2 gap-1 p-3 pt-2">
+        <div className="relative z-10 grid grid-cols-2 gap-1.5 p-3 pt-2">
           {sizes.map((s) => (
             <button
-              key={s.id}
+              key={s.id || s.size}
               type="button"
-              onClick={() => onAdd(product, s)}
-              className="rounded bg-zinc-900 px-1.5 py-1.5 text-center transition hover:bg-zinc-800 hover:ring-1 hover:ring-orange-500 active:bg-orange-500 active:text-black"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onAdd(product, s);
+              }}
+              className="min-h-11 rounded-md bg-zinc-900 px-1.5 py-2 text-center ring-1 ring-zinc-800 transition hover:bg-zinc-800 hover:ring-orange-500 active:bg-orange-500 active:text-black"
             >
-              <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">
                 {s.size}
               </p>
-              <p className="text-xs font-semibold text-zinc-200">
+              <p className="text-xs font-semibold text-zinc-100">
                 {formatPrice(s.price, currency)}
               </p>
             </button>

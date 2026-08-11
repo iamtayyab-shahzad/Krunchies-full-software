@@ -2,6 +2,7 @@ import type { Order, OrderItem, Settings } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import { parseDealIncludedItems } from "@/lib/deal-flavors";
 import { isDealLineName } from "@/lib/weekend-promo";
+import { isPizzaSizeLabel } from "@/lib/is-pizza";
 import { krunchiesProducts } from "@/data/krunchies";
 
 const bundledDescriptionByProductId = new Map(
@@ -294,6 +295,13 @@ function itemSize(item: OrderItem) {
   return "-";
 }
 
+/** Pizza S/M/L/XL only — hide Regular/Deal/etc on kitchen and customer tickets. */
+function printablePizzaSize(item: OrderItem) {
+  const size = itemSize(item);
+  if (!size || size === "-") return "";
+  return isPizzaSizeLabel(size) ? size : "";
+}
+
 /**
  * Fill missing product/size names on an order before printing.
  * Handles empty nested `product: {}` objects from API/IndexedDB.
@@ -397,11 +405,10 @@ export function buildKitchenReceiptHtml(order: Order) {
         .filter(Boolean)
         .map((m) => `<div class="mod">${escapeHtml(m)}</div>`)
         .join("");
-      const size = itemSize(item);
-      const sizeHtml =
-        size && size !== "-" && size.toLowerCase() !== "deal"
-          ? `<div class="size">${escapeHtml(size)}</div>`
-          : "";
+      const size = printablePizzaSize(item);
+      const sizeHtml = size
+        ? `<div class="size">${escapeHtml(size)}</div>`
+        : "";
       return `
       <div class="item">
         <div class="row">
@@ -546,7 +553,7 @@ export function buildCustomerReceiptHtml(
   const lines = (order.items || [])
     .map((item) => {
       const name = itemName(item);
-      const size = itemSize(item);
+      const size = printablePizzaSize(item);
       const meta = decodeKitchenInstructions(item.special_instructions);
       const extras = [
         meta.crust ? `Crust: ${meta.crust}` : "",
@@ -564,7 +571,7 @@ export function buildCustomerReceiptHtml(
       return `
       <tr>
         <td class="col-item">
-          ${escapeHtml(name)}${size && size !== "-" ? ` (${escapeHtml(size)})` : ""}
+          ${escapeHtml(name)}${size ? ` (${escapeHtml(size)})` : ""}
           ${included}
           ${noteHtml}
         </td>

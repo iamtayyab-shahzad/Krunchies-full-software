@@ -119,6 +119,9 @@ export default function ProductsPage() {
     return (id: string) => map[id] || "—";
   }, [categories]);
 
+  const categoryIsPizza = (categoryId: string) =>
+    categoryName(categoryId).toLowerCase().includes("pizza");
+
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return products;
@@ -134,8 +137,9 @@ export default function ProductsPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm(categories));
-    setUseSizes(true);
+    const next = emptyForm(categories);
+    setForm(next);
+    setUseSizes(categoryIsPizza(next.categoryId));
     setSizes([
       { label: "S", price: 0 },
       { label: "M", price: 0 },
@@ -148,9 +152,10 @@ export default function ProductsPage() {
   const openEdit = (product: Product) => {
     setEditing(product);
     setForm({ ...product });
-    setUseSizes(Boolean(product.pizzaSizes?.length));
+    const pizza = categoryIsPizza(product.categoryId);
+    setUseSizes(pizza);
     setSizes(
-      product.pizzaSizes?.length
+      pizza && product.pizzaSizes?.length
         ? product.pizzaSizes
         : [
             { label: "S", price: 0 },
@@ -315,7 +320,9 @@ export default function ProductsPage() {
                   {categoryName(product.categoryId)}
                 </td>
                 <td className="px-4 py-3 font-bold text-orange-400">
-                  {product.pizzaSizes?.length
+                  {categoryIsPizza(product.categoryId) &&
+                  product.pizzaSizes &&
+                  product.pizzaSizes.length > 1
                     ? product.pizzaSizes
                         .map((s) => `${s.label}: ${formatPrice(s.price)}`)
                         .join(" · ")
@@ -377,7 +384,10 @@ export default function ProductsPage() {
               <Label>Category</Label>
               <Select
                 value={form.categoryId}
-                onValueChange={(v) => setForm({ ...form, categoryId: v })}
+                onValueChange={(v) => {
+                  setForm({ ...form, categoryId: v });
+                  setUseSizes(categoryIsPizza(v));
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Category" />
@@ -391,17 +401,18 @@ export default function ProductsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Base Price</Label>
-              <Input
-                type="number"
-                value={form.basePrice}
-                onChange={(e) =>
-                  setForm({ ...form, basePrice: Number(e.target.value) })
-                }
-                disabled={useSizes}
-              />
-            </div>
+            {!useSizes ? (
+              <div className="space-y-2">
+                <Label>Price</Label>
+                <Input
+                  type="number"
+                  value={form.basePrice}
+                  onChange={(e) =>
+                    setForm({ ...form, basePrice: Number(e.target.value) })
+                  }
+                />
+              </div>
+            ) : null}
             <div className="space-y-2 sm:col-span-2">
               <Label>Description</Label>
               <Textarea
@@ -462,15 +473,11 @@ export default function ProductsPage() {
                 onCheckedChange={(v) => setForm({ ...form, featured: v })}
               />
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-3 sm:col-span-2">
-              <div>
-                <Label>Pizza Sizes</Label>
-                <p className="text-xs text-zinc-500">
-                  Enable sized pricing (S / M / L / XL)
-                </p>
-              </div>
-              <Switch checked={useSizes} onCheckedChange={setUseSizes} />
-            </div>
+            {useSizes ? (
+              <p className="text-xs text-zinc-500 sm:col-span-2">
+                Pizza sizes (S / M / L / XL)
+              </p>
+            ) : null}
             {useSizes
               ? sizes.map((size, idx) => (
                   <div key={size.label} className="space-y-2">

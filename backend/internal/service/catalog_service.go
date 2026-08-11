@@ -29,6 +29,24 @@ func (s *CatalogService) DeleteProduct(id uuid.UUID) error {
 	})
 }
 
+// DeleteProductSize removes a size only when no order line references it.
+func (s *CatalogService) DeleteProductSize(id uuid.UUID) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var size domain.ProductSize
+		if err := tx.First(&size, "id = ?", id).Error; err != nil {
+			return err
+		}
+		var orderRefs int64
+		if err := tx.Model(&domain.OrderItem{}).Where("product_size_id = ?", id).Count(&orderRefs).Error; err != nil {
+			return err
+		}
+		if orderRefs > 0 {
+			return utils.NewAppError(http.StatusConflict, "cannot delete a size used on existing orders; change the price instead")
+		}
+		return tx.Where("id = ?", id).Delete(&domain.ProductSize{}).Error
+	})
+}
+
 func (s *CatalogService) deleteProductTx(tx *gorm.DB, id uuid.UUID) error {
 	var product domain.Product
 	if err := tx.First(&product, "id = ?", id).Error; err != nil {

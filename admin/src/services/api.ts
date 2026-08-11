@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, ApiError } from "@/lib/api-client";
 import type {
   Category,
   Deal,
@@ -331,11 +331,15 @@ export const productsApi = {
       (payload.pizzaSizes || []).map((s) => s.label.trim()).filter(Boolean),
     );
 
-    // Delete removed sizes
+    // Delete removed sizes (keep sizes already used on tickets)
     for (const e of existing) {
       const label = e.size.trim();
       if (!desiredLabels.has(label)) {
-        await apiFetch<unknown>(`/product-sizes/${e.id}`, { method: "DELETE" });
+        try {
+          await apiFetch<unknown>(`/product-sizes/${e.id}`, { method: "DELETE" });
+        } catch (err) {
+          if (!(err instanceof ApiError) || err.status !== 409) throw err;
+        }
       }
     }
 
@@ -343,13 +347,15 @@ export const productsApi = {
     for (const d of payload.pizzaSizes || []) {
       const label = d.label.trim();
       if (!label) continue;
-      const match = existing.find(
-        (e) => e.size.trim().toLowerCase() === label.toLowerCase(),
-      );
+      const match =
+        existing.find((e) => d.id && e.id === d.id) ||
+        existing.find(
+          (e) => e.size.trim().toLowerCase() === label.toLowerCase(),
+        );
       if (match) {
         await apiFetch<unknown>(`/product-sizes/${match.id}`, {
           method: "PUT",
-          body: JSON.stringify({ size: label, price: Number(d.price || 0) }),
+          body: JSON.stringify({ size: label, price: Math.round(Number(d.price || 0)) }),
         });
       } else {
         await apiFetch<BackendProductSize>("/product-sizes", {
@@ -357,7 +363,7 @@ export const productsApi = {
           body: JSON.stringify({
             product_id: id,
             size: label,
-            price: Number(d.price || 0),
+            price: Math.round(Number(d.price || 0)),
           }),
         });
       }

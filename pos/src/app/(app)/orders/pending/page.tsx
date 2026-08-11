@@ -19,6 +19,7 @@ import { ordersApi, productsApi, settingsApi } from "@/services/api";
 import { isOnline } from "@/lib/network";
 import { getSyncState } from "@/lib/sync-engine";
 import { ordersShareIdentity } from "@/lib/order-identity";
+import { isPizzaSizeLabel } from "@/lib/is-pizza";
 import type { Order, OrderType, PaymentMethod } from "@/types";
 
 type FilterType = "all" | "website" | "phone" | "walkin";
@@ -344,9 +345,9 @@ export default function PendingOrdersPage() {
                         className="flex justify-between gap-3"
                       >
                         <span>
-                          {item.quantity}× {item.product?.name || "Item"}
-                          {item.product_size?.size
-                            ? ` (${item.product_size.size})`
+                          {item.quantity}×                           {item.product?.name || "Item"}
+                          {isPizzaSizeLabel(item.product_size?.size)
+                            ? ` (${item.product_size?.size})`
                             : ""}
                           {item.special_instructions
                             ? ` — ${item.special_instructions}`

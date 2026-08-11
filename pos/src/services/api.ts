@@ -301,17 +301,23 @@ export const productsApi = {
         const desired = new Set(sizes.map((s) => s.size.toLowerCase()));
         for (const e of existing) {
           if (!desired.has(e.size.toLowerCase())) {
-            await apiFetch(`/product-sizes/${e.id}`, { method: "DELETE" });
+            try {
+              await apiFetch(`/product-sizes/${e.id}`, { method: "DELETE" });
+            } catch (err) {
+              if (!(err instanceof ApiError) || err.status !== 409) throw err;
+            }
           }
         }
         for (const s of sizes) {
-          const match = existing.find(
-            (e) => e.size.toLowerCase() === s.size.toLowerCase(),
-          );
+          const match =
+            existing.find((e) => s.id && e.id === s.id) ||
+            existing.find(
+              (e) => e.size.toLowerCase() === s.size.toLowerCase(),
+            );
           if (match) {
             await apiFetch(`/product-sizes/${match.id}`, {
               method: "PUT",
-              body: JSON.stringify({ size: s.size, price: s.price }),
+              body: JSON.stringify({ size: s.size, price: Math.round(s.price) }),
             });
           } else {
             await apiFetch("/product-sizes", {
@@ -320,7 +326,7 @@ export const productsApi = {
                 id: s.id,
                 product_id: productId,
                 size: s.size,
-                price: s.price,
+                price: Math.round(s.price),
               }),
             });
           }

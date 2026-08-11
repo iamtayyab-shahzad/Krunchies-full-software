@@ -102,7 +102,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 
 			staff.POST("/product-sizes", productSizeHandler.Create)
 			staff.PUT("/product-sizes/:id", productSizeHandler.Update)
-			staff.DELETE("/product-sizes/:id", productSizeHandler.Delete)
+			staff.DELETE("/product-sizes/:id", catalogHandler.DeleteProductSize)
 
 			staff.POST("/locations", locationHandler.Create)
 			staff.PUT("/locations/:id", locationHandler.Update)
