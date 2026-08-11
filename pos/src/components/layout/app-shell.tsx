@@ -26,6 +26,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { search, setSearch } = useMenuSearch();
   const isNewOrder = pathname.startsWith("/orders/new");
 
+  useEffect(() => {
+    if (!isNewOrder) setSearch("");
+  }, [isNewOrder, setSearch]);
+
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: settingsApi.get,

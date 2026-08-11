@@ -384,7 +384,6 @@ export function buildKitchenReceiptHtml(order: Order) {
     second: "2-digit",
     hour12: true,
   });
-  const table = parseTableNumber(order.order_notes);
   const orderNotes = stripTableFromNotes(order.order_notes);
   const itemCount = (order.items || []).length;
   const qtyTotal = (order.items || []).reduce(
@@ -520,7 +519,6 @@ export function buildKitchenReceiptHtml(order: Order) {
   <div class="banner">* Kitchen Order Ticket *</div>
   <div class="meta">
     <div>Ticket No. : ${escapeHtml(order.order_number || order.id)}</div>
-    <div>Table No. : ${escapeHtml(table || kitchenOrderTypeLabel(order.order_type))}</div>
     <div>Bill Date : ${escapeHtml(date)} ${escapeHtml(time)}</div>
     <div>Customer : ${escapeHtml(order.customer_name || "—")}</div>
   </div>

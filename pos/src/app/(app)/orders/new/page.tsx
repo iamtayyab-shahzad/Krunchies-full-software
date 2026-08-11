@@ -69,7 +69,7 @@ const DrinkFlavorDialog = dynamic(
 export default function NewOrderPage() {
   const qc = useQueryClient();
   const bill = useBill();
-  const { search } = useMenuSearch();
+  const { search, setSearch } = useMenuSearch();
   const [categoryId, setCategoryId] = useState("all");
   const [busy, setBusy] = useState(false);
   const [dealProduct, setDealProduct] = useState<Product | null>(null);
@@ -576,7 +576,10 @@ export default function NewOrderPage() {
         <div className="flex flex-wrap gap-2 border-b border-zinc-800 p-3">
           <button
             type="button"
-            onClick={() => setCategoryId("all")}
+            onClick={() => {
+              setSearch("");
+              setCategoryId("all");
+            }}
             className={cn(
               "rounded-lg px-4 py-2 text-sm font-bold",
               categoryId === "all"
@@ -593,7 +596,10 @@ export default function NewOrderPage() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setCategoryId(c.id)}
+                onClick={() => {
+                  setSearch("");
+                  setCategoryId(c.id);
+                }}
                 className={cn(
                   "rounded-lg px-4 py-2 text-sm font-bold",
                   categoryId === c.id
