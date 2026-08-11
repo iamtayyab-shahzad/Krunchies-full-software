@@ -1,6 +1,5 @@
 import { reviews, categories as localCategories, products as localProducts } from "@/data/krunchies";
 import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/constants";
-import { delay } from "@/lib/utils";
 import type {
   Category,
   CreateOrderPayload,
@@ -15,7 +14,6 @@ import type {
   Settings,
 } from "@/types";
 
-const MOCK_LATENCY = 250;
 const FETCH_TIMEOUT_MS = 10_000;
 
 const API_URL =
@@ -227,7 +225,6 @@ export async function getLocationById(id: string) {
 }
 
 export async function getReviews() {
-  await delay(MOCK_LATENCY);
   return reviews;
 }
 

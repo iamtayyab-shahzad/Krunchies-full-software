@@ -239,6 +239,9 @@ describe("kitchen ticket layout", () => {
     expect(customer).toContain("www.krunchies.pk");
     expect(customer).toContain("Order online");
     expect(customer).toContain("viewBox=\"0 0 33 33\"");
+    expect(customer).toContain('fill="#000"');
+    expect(customer).not.toContain('stroke="#000"');
+    expect(customer).toContain("width: 26mm");
     expect(customer).not.toContain("font-weight: 800");
   });
 });

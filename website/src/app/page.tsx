@@ -2,18 +2,12 @@ import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { HeroSection } from "@/components/home/hero-section";
 import { OfferPopup } from "@/components/home/offer-popup";
+import { FeaturedProducts } from "@/components/home/featured-products";
+import { PopularCategories } from "@/components/home/popular-categories";
 import { pageSeo } from "@/lib/seo";
+import { getCategories, getProducts } from "@/services/api";
+import type { Category, Product } from "@/types";
 
-const FeaturedProducts = dynamic(() =>
-  import("@/components/home/featured-products").then((m) => ({
-    default: m.FeaturedProducts,
-  })),
-);
-const PopularCategories = dynamic(() =>
-  import("@/components/home/popular-categories").then((m) => ({
-    default: m.PopularCategories,
-  })),
-);
 const RestaurantStory = dynamic(() =>
   import("@/components/home/restaurant-story").then((m) => ({
     default: m.RestaurantStory,
@@ -38,13 +32,34 @@ export const metadata: Metadata = pageSeo({
   absoluteTitle: true,
 });
 
-export default function HomePage() {
+/** Same ISR window as /menu so home catalog is in the HTML, not a client fetch. */
+export const revalidate = 60;
+
+async function loadHomeCatalog(): Promise<{
+  categories: Category[];
+  products: Product[];
+}> {
+  try {
+    const [categories, products] = await Promise.all([
+      getCategories(),
+      getProducts(),
+    ]);
+    return { categories, products };
+  } catch {
+    return { categories: [], products: [] };
+  }
+}
+
+export default async function HomePage() {
+  const { categories, products } = await loadHomeCatalog();
+  const featured = products.filter((p) => p.featured);
+
   return (
     <>
       <HeroSection />
       <OfferPopup />
-      <FeaturedProducts />
-      <PopularCategories />
+      <FeaturedProducts initialProducts={featured} />
+      <PopularCategories initialCategories={categories} />
       <RestaurantStory />
       <CustomerReviews />
       <CallToAction />

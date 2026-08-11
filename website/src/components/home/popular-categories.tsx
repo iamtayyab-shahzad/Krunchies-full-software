@@ -6,11 +6,20 @@ import { useEffect, useState } from "react";
 import { getCategories } from "@/services/api";
 import type { Category } from "@/types";
 
-export function PopularCategories() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+type PopularCategoriesProps = {
+  initialCategories?: Category[];
+};
+
+export function PopularCategories({
+  initialCategories = [],
+}: PopularCategoriesProps) {
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [loading, setLoading] = useState(initialCategories.length === 0);
 
   useEffect(() => {
+    if (initialCategories.length > 0) {
+      return;
+    }
     let active = true;
     getCategories()
       .then((rows) => {
@@ -22,7 +31,7 @@ export function PopularCategories() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialCategories.length]);
 
   return (
     <section className="border-y border-white/5 bg-zinc-950/80 py-12 sm:py-20">

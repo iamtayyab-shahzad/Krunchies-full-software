@@ -20,12 +20,21 @@ function FeaturedSkeleton() {
   );
 }
 
-export function FeaturedProducts() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+type FeaturedProductsProps = {
+  initialProducts?: Product[];
+};
+
+export function FeaturedProducts({
+  initialProducts = [],
+}: FeaturedProductsProps) {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [loading, setLoading] = useState(initialProducts.length === 0);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    if (reloadKey === 0 && initialProducts.length > 0) {
+      return;
+    }
     let active = true;
     setLoading(true);
     getProducts({ featured: true })
@@ -41,7 +50,7 @@ export function FeaturedProducts() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, initialProducts.length]);
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">

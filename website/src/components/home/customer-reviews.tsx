@@ -1,17 +1,7 @@
-"use client";
-
 import { Star } from "lucide-react";
-import { useEffect, useState } from "react";
-import { getReviews } from "@/services/api";
-import type { Review } from "@/types";
+import { reviews } from "@/data/krunchies";
 
 export function CustomerReviews() {
-  const [reviews, setReviews] = useState<Review[]>([]);
-
-  useEffect(() => {
-    getReviews().then(setReviews);
-  }, []);
-
   return (
     <section className="border-y border-white/5 bg-zinc-950/80 py-12 sm:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
