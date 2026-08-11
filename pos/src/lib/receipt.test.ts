@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCustomerReceiptHtml,
+  buildKitchenReceiptHtml,
   ensureReceiptItemNames,
 } from "./receipt";
+import { parseDealIncludedItems } from "./deal-flavors";
 import type { Order, OrderItem } from "../types";
 
 function baseOrder(items: OrderItem[]): Order {
@@ -135,5 +137,81 @@ describe("receipt product names", () => {
     const html = buildCustomerReceiptHtml(order, null);
     expect(html).toContain("Crust: Thin");
     expect(html).toContain("Toppings: Extra Cheese");
+  });
+});
+
+describe("kitchen ticket layout", () => {
+  it("puts quantity on the right and uses normal weight", () => {
+    const order = ensureReceiptItemNames(
+      baseOrder([
+        {
+          id: "i1",
+          created_at: "",
+          updated_at: "",
+          order_id: "ord-1",
+          product_id: "p1",
+          product_size_id: "s1",
+          quantity: 4,
+          price: 375,
+          product_name: "TIKKA ROLL",
+          size: "Regular",
+        },
+      ]),
+    );
+    const html = buildKitchenReceiptHtml(order);
+    expect(html).toContain("Item");
+    expect(html).toContain("Quantity");
+    expect(html).toMatch(
+      /class="name">TIKKA ROLL<\/span>\s*<span class="qty">4<\/span>/,
+    );
+    expect(html).not.toMatch(/class="qty">4x/);
+    expect(html).not.toContain("font-weight: 800");
+    expect(html).not.toContain("www.krunchies.pk");
+  });
+
+  it("lists items included in a deal", () => {
+    const order = ensureReceiptItemNames(
+      baseOrder([
+        {
+          id: "i1",
+          created_at: "",
+          updated_at: "",
+          order_id: "ord-1",
+          product_id: "20000000-0000-4000-8000-000000000090",
+          product_size_id: "s1",
+          quantity: 1,
+          price: 699,
+          product_name: "Deal 1",
+          product_description:
+            "1 Zinger Burger, 5 Hot Wings and 1 Regular Drink.",
+          size: "Deal",
+        },
+      ]),
+    );
+    const kitchen = buildKitchenReceiptHtml(order);
+    expect(kitchen).toContain("1 Zinger Burger");
+    expect(kitchen).toContain("5 Hot Wings");
+    expect(kitchen).toContain("1 Regular Drink");
+    const customer = buildCustomerReceiptHtml(order, null);
+    expect(customer).toContain("1 Zinger Burger");
+    expect(customer).toContain("www.krunchies.pk");
+    expect(customer).toContain("Order online");
+    expect(customer).toContain("viewBox=\"0 0 33 33\"");
+    expect(customer).not.toContain("font-weight: 800");
+  });
+});
+
+describe("parseDealIncludedItems", () => {
+  it("splits flyer deal descriptions for the cook", () => {
+    expect(
+      parseDealIncludedItems(
+        "1 Large Pizza, 2 Zinger Burgers, 1 Masala Fries and 1.5 L Drink.",
+      ),
+    ).toEqual([
+      "1 Large Pizza",
+      "2 Zinger Burgers",
+      "1 Masala Fries",
+      "1.5 L Drink",
+    ]);
   });
 });

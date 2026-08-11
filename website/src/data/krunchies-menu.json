@@ -1597,6 +1597,90 @@
           "price": 120
         }
       ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000090",
+      "category": "deals",
+      "name": "Deal 1",
+      "description": "1 Zinger Burger, 5 Hot Wings and 1 Regular Drink.",
+      "image": "/products/deals/deal-1.webp",
+      "featured": true,
+      "sizes": [
+        {
+          "name": "Deal",
+          "price": 699
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000091",
+      "category": "deals",
+      "name": "Deal 2",
+      "description": "1 Large Pizza, 1 Half L Drink and 1 Regular Fries.",
+      "image": "/products/deals/deal-2.webp",
+      "featured": true,
+      "sizes": [
+        {
+          "name": "Deal",
+          "price": 1590
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000092",
+      "category": "deals",
+      "name": "Deal 3",
+      "description": "1 Large Pizza, 2 Zinger Burgers, 1 Masala Fries and 1.5 L Drink.",
+      "image": "/products/deals/deal-3.webp",
+      "featured": true,
+      "sizes": [
+        {
+          "name": "Deal",
+          "price": 2650
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000093",
+      "category": "deals",
+      "name": "Deal 4",
+      "description": "2 Medium Pizzas, 1 Zinger Burger, 6 Pc. Hot Wings and 1.5 L Drink.",
+      "image": "/products/deals/deal-4.webp",
+      "featured": true,
+      "sizes": [
+        {
+          "name": "Deal",
+          "price": 2999
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000094",
+      "category": "deals",
+      "name": "Deal 5",
+      "description": "1 XL Pizza, 1 Grill Burger, 1 Creamy Pasta and 1.5 L Drink.",
+      "image": "/products/deals/deal-5.webp",
+      "featured": true,
+      "sizes": [
+        {
+          "name": "Deal",
+          "price": 3200
+        }
+      ]
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000095",
+      "category": "deals",
+      "name": "Deal 6",
+      "description": "4 Zinger Burgers, 2 Large Pizzas, 2 Shawarmas, 2 Dip Sauce and 2 Drinks 1.5 L.",
+      "image": "/products/deals/birthday.webp",
+      "featured": true,
+      "sizes": [
+        {
+          "name": "Deal",
+          "price": 5150
+        }
+      ]
     }
   ]
 }

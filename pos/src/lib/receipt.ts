@@ -1,5 +1,14 @@
 import type { Order, OrderItem, Settings } from "@/types";
 import { formatPrice } from "@/lib/utils";
+import { parseDealIncludedItems } from "@/lib/deal-flavors";
+import { isDealLineName } from "@/lib/weekend-promo";
+import { krunchiesProducts } from "@/data/krunchies";
+
+const bundledDescriptionByProductId = new Map(
+  krunchiesProducts.map((p) => [p.id, p.description || ""]),
+);
+
+const WEBSITE_QR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#fff" d="M0 0h33v33H0z"/><path stroke="#000" d="M4 4.5h7m4 0h1m1 0h1m2 0h1m1 0h7M4 5.5h1m5 0h1m2 0h1m5 0h2m1 0h1m5 0h1M4 6.5h1m1 0h3m1 0h1m1 0h1m1 0h1m7 0h1m1 0h3m1 0h1M4 7.5h1m1 0h3m1 0h1m1 0h3m1 0h4m2 0h1m1 0h3m1 0h1M4 8.5h1m1 0h3m1 0h1m1 0h4m1 0h1m2 0h1m1 0h1m1 0h3m1 0h1M4 9.5h1m5 0h1m1 0h1m1 0h1m4 0h1m2 0h1m5 0h1M4 10.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M12 11.5h3m3 0h1m1 0h1M4 12.5h1m1 0h5m2 0h1m1 0h4m3 0h5M4 13.5h2m1 0h3m2 0h1m1 0h3m3 0h2m1 0h1m3 0h1M5 14.5h4m1 0h1m1 0h1m1 0h3m1 0h8m1 0h2M6 15.5h1m1 0h1m2 0h1m2 0h1m3 0h4m1 0h1m4 0h1M5 16.5h1m2 0h1m1 0h1m1 0h1m1 0h2m1 0h8m1 0h3M4 17.5h1m2 0h2m3 0h3m1 0h1m1 0h1m1 0h2m1 0h1m1 0h1m1 0h1M4 18.5h1m1 0h2m1 0h2m1 0h1m1 0h1m2 0h1m1 0h1m1 0h5m1 0h2M4 19.5h1m3 0h1m2 0h2m3 0h1m1 0h1m2 0h1m1 0h2m3 0h1M4 20.5h1m4 0h3m2 0h1m1 0h2m1 0h6m1 0h1M12 21.5h2m3 0h1m2 0h1m3 0h2M4 22.5h7m3 0h5m1 0h1m1 0h1m1 0h1m1 0h3M4 23.5h1m5 0h1m1 0h1m2 0h1m4 0h1m3 0h2m2 0h1M4 24.5h1m1 0h3m1 0h1m1 0h2m1 0h10m1 0h1M4 25.5h1m1 0h3m1 0h1m1 0h2m2 0h1m1 0h1m1 0h1m1 0h1m1 0h5M4 26.5h1m1 0h3m1 0h1m1 0h1m6 0h2m4 0h2m1 0h1M4 27.5h1m5 0h1m3 0h3m2 0h3m1 0h3m2 0h1M4 28.5h7m1 0h1m1 0h5m4 0h6"/></svg>`;
 
 function escapeHtml(value: string) {
   return value
@@ -312,7 +321,11 @@ export function ensureReceiptItemNames(
         updated_at: item.product?.updated_at || "",
         category_id: item.product?.category_id || "",
         name,
-        description: item.product?.description || "",
+        description:
+          item.product?.description ||
+          (item as { product_description?: string }).product_description ||
+          bundledDescriptionByProductId.get(item.product_id) ||
+          "",
         image: item.product?.image || "",
         featured: false,
         available: true,
@@ -336,20 +349,40 @@ export function ensureReceiptItemNames(
   };
 }
 
+function dealContentsHtml(item: OrderItem) {
+  const name = itemName(item);
+  const desc =
+    item.product?.description ||
+    (item as { product_description?: string }).product_description ||
+    "";
+  if (!isDealLineName(name) && !isDealLineName(desc)) return "";
+  const included = parseDealIncludedItems(desc);
+  if (!included.length) return "";
+  return `<div class="inc">${included
+    .map((line) => `<div>- ${escapeHtml(line)}</div>`)
+    .join("")}</div>`;
+}
+
 export function buildKitchenReceiptHtml(order: Order) {
   const when = new Date(order.created_at || Date.now());
-  const date = when.toLocaleDateString("en-PK", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
+  const date = when.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
     year: "numeric",
   });
-  const time = when.toLocaleTimeString("en-PK", {
+  const time = when.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
   });
   const table = parseTableNumber(order.order_notes);
   const orderNotes = stripTableFromNotes(order.order_notes);
+  const itemCount = (order.items || []).length;
+  const qtyTotal = (order.items || []).reduce(
+    (sum, item) => sum + (Number(item.quantity) || 0),
+    0,
+  );
 
   const itemsHtml = (order.items || [])
     .map((item) => {
@@ -364,13 +397,19 @@ export function buildKitchenReceiptHtml(order: Order) {
         .filter(Boolean)
         .map((m) => `<div class="mod">${escapeHtml(m)}</div>`)
         .join("");
+      const size = itemSize(item);
+      const sizeHtml =
+        size && size !== "-" && size.toLowerCase() !== "deal"
+          ? `<div class="size">${escapeHtml(size)}</div>`
+          : "";
       return `
       <div class="item">
         <div class="row">
-          <span class="qty">${item.quantity}x</span>
           <span class="name">${escapeHtml(itemName(item))}</span>
+          <span class="qty">${item.quantity}</span>
         </div>
-        <div class="size">Size: ${escapeHtml(itemSize(item))}</div>
+        ${sizeHtml}
+        ${dealContentsHtml(item)}
         ${mods}
       </div>`;
     })
@@ -386,8 +425,9 @@ export function buildKitchenReceiptHtml(order: Order) {
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 14px;
-    line-height: 1.3;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.35;
     color: #000;
     width: 72mm;
     max-width: 72mm;
@@ -395,73 +435,94 @@ export function buildKitchenReceiptHtml(order: Order) {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  h1 {
-    font-size: 17px;
-    font-weight: 800;
+  .shop {
     text-align: center;
-    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: 600;
     letter-spacing: 0.4px;
-    word-break: break-all;
+    margin: 0 0 4px;
+    text-transform: uppercase;
   }
   .banner {
     text-align: center;
-    font-weight: 800;
-    font-size: 16px;
-    border: 2px solid #000;
-    padding: 5px 3px;
+    font-weight: 400;
+    font-size: 13px;
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    padding: 3px 0;
     margin-bottom: 6px;
-    letter-spacing: 0.5px;
   }
   .meta {
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 400;
     margin-bottom: 6px;
   }
-  .meta div { margin: 2px 0; }
-  .item {
-    border-top: 1px solid #000;
-    padding: 6px 0;
-  }
-  .row {
+  .meta div { margin: 1px 0; }
+  .head {
     display: flex;
-    gap: 6px;
-    font-weight: 800;
-    font-size: 16px;
-  }
-  .qty { min-width: 2.2em; }
-  .size {
-    font-weight: 700;
-    font-size: 13px;
-    margin-top: 2px;
-  }
-  .mod {
-    margin-top: 2px;
-    font-size: 13px;
+    justify-content: space-between;
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    padding: 3px 0;
+    font-size: 12px;
     font-weight: 600;
   }
-  .notes {
-    border-top: 1px solid #000;
-    margin-top: 6px;
-    padding-top: 5px;
-    font-weight: 700;
+  .item { padding: 4px 0; }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-weight: 400;
     font-size: 13px;
+  }
+  .name { flex: 1; padding-right: 4px; }
+  .qty { min-width: 12px; text-align: right; }
+  .size {
+    font-weight: 400;
+    font-size: 12px;
+    margin-top: 1px;
+  }
+  .inc {
+    margin: 2px 0 0 8px;
+    font-size: 12px;
+    font-weight: 400;
+  }
+  .mod {
+    margin: 1px 0 0 8px;
+    font-size: 12px;
+    font-weight: 400;
+  }
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    padding: 3px 0;
+    margin-top: 4px;
+    font-size: 12px;
+  }
+  .notes {
+    margin-top: 6px;
+    font-weight: 400;
+    font-size: 12px;
   }
 </style>
 </head>
 <body>
-  <div class="banner">KITCHEN ORDER</div>
-  <h1>${escapeHtml(order.order_number || order.id)}</h1>
+  <div class="shop">KRUNCHIES PIZZA</div>
+  <div class="banner">* Kitchen Order Ticket *</div>
   <div class="meta">
-    <div><strong>Type:</strong> ${escapeHtml(kitchenOrderTypeLabel(order.order_type))}</div>
-    <div><strong>Customer:</strong> ${escapeHtml(order.customer_name || "—")}</div>
-    ${table ? `<div><strong>Table:</strong> ${escapeHtml(table)}</div>` : ""}
-    <div><strong>Date:</strong> ${escapeHtml(date)}</div>
-    <div><strong>Time:</strong> ${escapeHtml(time)}</div>
+    <div>Ticket No. : ${escapeHtml(order.order_number || order.id)}</div>
+    <div>Table No. : ${escapeHtml(table || kitchenOrderTypeLabel(order.order_type))}</div>
+    <div>Bill Date : ${escapeHtml(date)} ${escapeHtml(time)}</div>
+    <div>Customer : ${escapeHtml(order.customer_name || "—")}</div>
   </div>
+  <div class="head"><span>Item</span><span>Quantity</span></div>
   ${itemsHtml || `<div class="item">No items</div>`}
+  <div class="foot"><span>Items : ${itemCount}</span><span>Qty : ${qtyTotal}</span></div>
   ${
     orderNotes
-      ? `<div class="notes">Order notes: ${escapeHtml(orderNotes)}</div>`
+      ? `<div class="notes">Notes: ${escapeHtml(orderNotes)}</div>`
       : ""
   }
 </body>
@@ -499,10 +560,12 @@ export function buildCustomerReceiptHtml(
       const noteHtml = extras
         ? `<div class="note">${escapeHtml(extras)}</div>`
         : "";
+      const included = dealContentsHtml(item);
       return `
       <tr>
         <td class="col-item">
-          ${escapeHtml(name)} (${escapeHtml(size)})
+          ${escapeHtml(name)}${size && size !== "-" ? ` (${escapeHtml(size)})` : ""}
+          ${included}
           ${noteHtml}
         </td>
         <td class="col-qty">${item.quantity}</td>
@@ -527,7 +590,8 @@ export function buildCustomerReceiptHtml(
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 400;
     line-height: 1.32;
     color: #000;
     /*
@@ -543,8 +607,8 @@ export function buildCustomerReceiptHtml(
     print-color-adjust: exact;
   }
   h1 {
-    font-size: 18px;
-    font-weight: 800;
+    font-size: 16px;
+    font-weight: 600;
     text-align: center;
     margin: 0 0 3px;
     letter-spacing: 0.3px;
@@ -553,12 +617,12 @@ export function buildCustomerReceiptHtml(
   .meta {
     text-align: center;
     margin-bottom: 5px;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 400;
   }
   .info {
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 400;
     margin: 2px 0;
     word-break: break-word;
   }
@@ -578,15 +642,15 @@ export function buildCustomerReceiptHtml(
   /* Wide enough for "Rs 9,999" without spilling into the clip zone */
   col.col-amt { width: 24mm; }
   thead td {
-    font-weight: 800;
-    font-size: 12px;
+    font-weight: 600;
+    font-size: 11px;
     border-bottom: 1px solid #000;
     padding: 3px 1px 4px 0;
   }
   tbody td {
     padding: 4px 1px 4px 0;
     vertical-align: top;
-    font-weight: 700;
+    font-weight: 400;
     border-bottom: 1px dashed #999;
   }
   .col-item {
@@ -605,17 +669,18 @@ export function buildCustomerReceiptHtml(
     overflow: visible;
     padding-right: 0 !important;
   }
-  .note {
-    font-size: 12px;
-    font-weight: 600;
+  .note, .inc {
+    font-size: 11px;
+    font-weight: 400;
     margin-top: 1px;
   }
+  .inc { padding-left: 4px; }
   .total {
-    border: 2px solid #000;
+    border: 1px solid #000;
     margin-top: 5px;
     padding: 5px 4px;
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 400;
   }
   .line {
     display: flex;
@@ -628,39 +693,41 @@ export function buildCustomerReceiptHtml(
     font-variant-numeric: tabular-nums;
   }
   .grand {
-    font-size: 16px;
-    font-weight: 800;
+    font-size: 14px;
+    font-weight: 600;
     margin-top: 4px;
     padding-top: 3px;
     border-top: 1px solid #000;
   }
   .notes {
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 400;
     margin-top: 5px;
   }
   .center {
     text-align: center;
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 400;
+    margin-top: 4px;
+  }
+  .web {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin-top: 5px;
-  }
-  /* Compact blank lines for handwritten staff notes */
-  .write-area {
-    margin-top: 6px;
     padding-top: 4px;
-    border-top: 1px dashed #000;
-    min-height: 14mm;
+    border-top: 1px solid #000;
   }
-  .write-area .label {
-    font-size: 11px;
-    font-weight: 700;
-    margin-bottom: 2px;
+  .web svg {
+    width: 16mm;
+    height: 16mm;
+    flex-shrink: 0;
   }
-  .write-line {
-    border-bottom: 1px solid #bbb;
-    height: 4.5mm;
+  .web p {
     margin: 0;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.25;
   }
 </style>
 </head>
@@ -703,11 +770,9 @@ export function buildCustomerReceiptHtml(
   </div>
   ${notes ? `<p class="notes">Notes: ${escapeHtml(notes)}</p>` : ""}
   <p class="center">Thank you!</p>
-  <div class="write-area">
-    <div class="label">Staff notes</div>
-    <div class="write-line"></div>
-    <div class="write-line"></div>
-    <div class="write-line"></div>
+  <div class="web">
+    ${WEBSITE_QR_SVG}
+    <p>Order online &amp; skip the queue<br/>www.krunchies.pk</p>
   </div>
 </body>
 </html>`;

@@ -85,6 +85,19 @@ if (-not $Chrome) {
   exit 1
 }
 
+# If POS Chrome is already running with this profile, focus it instead of
+# opening a second app window (two windows share IndexedDB and can double-sync).
+$existing = Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.CommandLine -and $_.CommandLine -like "*KrunchiesPOS\chrome-profile*" }
+if ($existing) {
+  $activate = New-Object -ComObject WScript.Shell
+  $null = $activate.AppActivate("Krunchies POS")
+  if (-not $activate.AppActivate("Krunchies POS")) {
+    $null = $activate.AppActivate("Krunchies")
+  }
+  exit 0
+}
+
 Start-Process `
   -FilePath $Chrome `
   -ArgumentList @(

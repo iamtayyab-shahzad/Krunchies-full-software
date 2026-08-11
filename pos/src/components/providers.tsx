@@ -18,6 +18,11 @@ import {
   listLocalOrders,
   listLocalPendingOrders,
 } from "@/lib/offline-db";
+import {
+  claimPosSingleInstance,
+  closeDuplicatePosWindow,
+  type PosInstanceRole,
+} from "@/lib/pos-single-instance";
 
 function ThemedToaster() {
   const { theme } = usePosTheme();
@@ -51,7 +56,23 @@ async function hydrateOrdersFromIdb(client: QueryClient) {
   }
 }
 
+function DuplicatePosScreen() {
+  useEffect(() => {
+    closeDuplicatePosWindow();
+  }, []);
+  return (
+    <div className="flex min-h-svh flex-col items-center justify-center bg-black px-6 text-center text-white">
+      <p className="text-2xl font-black text-orange-400">POS already open</p>
+      <p className="mt-3 max-w-md text-base text-zinc-300">
+        Use the other Krunchies POS window. This extra window closes so the
+        same orders are not synced twice.
+      </p>
+    </div>
+  );
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [role, setRole] = useState<PosInstanceRole | "checking">("checking");
   const [client] = useState(
     () =>
       new QueryClient({
@@ -71,6 +92,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    const claim = claimPosSingleInstance();
+    void claim.ready.then(setRole);
+    return () => claim.release();
+  }, []);
+
+  useEffect(() => {
+    if (role !== "leader") return;
     const stop = startSyncEngine();
     // Local cashier mutations: paint from IndexedDB immediately — never wait on API.
     const onOrdersChanged = () => {
@@ -103,7 +131,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
       window.removeEventListener(POS_ORDERS_CHANGED_EVENT, onOrdersChanged);
       window.removeEventListener(POS_CACHE_UPDATED_EVENT, onCacheUpdated);
     };
-  }, [client]);
+  }, [client, role]);
+
+  if (role === "checking") {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-black text-zinc-400">
+        Starting POS…
+      </div>
+    );
+  }
+
+  if (role === "duplicate") {
+    return <DuplicatePosScreen />;
+  }
 
   return (
     <QueryClientProvider client={client}>

@@ -65,6 +65,32 @@ export function isDealProduct(product: Product) {
   return productName.includes("deal") || productName.includes("mega combo");
 }
 
+/** Split a deal description into cook-facing included items. */
+export function parseDealIncludedItems(description: string | undefined | null): string[] {
+  const raw = (description || "").trim();
+  if (!raw) return [];
+  const withoutPromo = raw
+    .replace(/home delivery free!?/gi, "")
+    .replace(/perfect combo[^.!]*/gi, "")
+    .replace(/great taste[^.!]*/gi, "")
+    .replace(/best value!?/gi, "")
+    .replace(/mazay ka[^.!]*/gi, "")
+    .replace(/choose flavor[^.!]*/gi, "");
+  const parts = withoutPromo
+    .split(/,|\band\b/gi)
+    .map((p) => p.replace(/[.!]+$/g, "").trim())
+    .filter((p) => p.length > 2 && !/^perfect|^great|^best|^mazay/i.test(p));
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of parts) {
+    const key = part.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(part);
+  }
+  return out;
+}
+
 export function requiresDealFlavorChoice(product: Product) {
   return (
     isDealProduct(product) &&

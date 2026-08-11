@@ -558,6 +558,7 @@ async function buildLocalOrder(
         product_size: size,
         product_name: product?.name || "Item",
         size: size?.size || "-",
+        product_description: product?.description || "",
       } as OrderItem;
     }),
   );

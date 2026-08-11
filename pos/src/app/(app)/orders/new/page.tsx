@@ -151,9 +151,10 @@ export default function NewOrderPage() {
   }, [productsWithCategories, categoryId, search]);
 
   const onProductClick = useCallback(
-    (product: Product) => {
+    (product: Product, size?: ProductSize) => {
       const sizes = product.sizes || [];
-      if (!sizes.length) {
+      const chosen = size || sizes[0];
+      if (!chosen) {
         toast.error("No sizes configured for this product");
         return;
       }
@@ -165,9 +166,9 @@ export default function NewOrderPage() {
         setDrinkProduct(product);
         return;
       }
-      bill.addProduct(product, sizes[0]);
+      bill.addProduct(product, chosen);
       if (sizes.length > 1) {
-        toast.message(`${product.name} added (${sizes[0].size})`);
+        toast.message(`${product.name} added (${chosen.size})`);
       }
     },
     [bill.addProduct], // addProduct is stable from BillProvider
@@ -925,7 +926,7 @@ function ProductTile({
 }: {
   product: Product;
   currency: string;
-  onAdd: (p: Product) => void;
+  onAdd: (p: Product, size?: ProductSize) => void;
 }) {
   const sizes = product.sizes || [];
   const prices = sizes.map((s) => s.price);
@@ -934,63 +935,72 @@ function ProductTile({
   const multiSize = sizes.length > 1;
 
   return (
-    <button
-      type="button"
-      onClick={() => onAdd(product)}
-      className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 text-left transition hover:border-orange-500"
-    >
-      <div className="relative aspect-[4/3] bg-zinc-900">
-        {product.image ? (
-          <Image
-            src={product.image}
-            alt={product.name}
-            fill
-            unoptimized
-            className="object-cover"
-            sizes="200px"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-zinc-600">
-            No image
-          </div>
+    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 text-left transition hover:border-orange-500">
+      <button
+        type="button"
+        onClick={() => {
+          if (!multiSize) onAdd(product, sizes[0]);
+        }}
+        className={cn(
+          "w-full text-left",
+          multiSize ? "cursor-default" : "cursor-pointer",
         )}
-      </div>
-      <div className="p-3">
-        <p className="line-clamp-1 text-base font-bold text-white">
-          {product.name}
-        </p>
-        {multiSize ? (
-          <>
+      >
+        <div className="relative aspect-[4/3] bg-zinc-900">
+          {product.image ? (
+            <Image
+              src={product.image}
+              alt={product.name}
+              fill
+              unoptimized
+              className="object-cover"
+              sizes="200px"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-zinc-600">
+              No image
+            </div>
+          )}
+        </div>
+        <div className="px-3 pt-3">
+          <p className="line-clamp-1 text-base font-bold text-white">
+            {product.name}
+          </p>
+          {multiSize ? (
             <p className="mt-1 text-sm font-semibold text-orange-400">
               {formatPrice(minPrice, currency)}
               {maxPrice !== minPrice
                 ? ` – ${formatPrice(maxPrice, currency)}`
                 : ""}
             </p>
-            <div className="mt-2 grid grid-cols-2 gap-1">
-              {sizes.map((s) => (
-                <div
-                  key={s.id}
-                  className="rounded bg-zinc-900 px-1.5 py-1 text-center"
-                >
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                    {s.size}
-                  </p>
-                  <p className="text-xs font-semibold text-zinc-200">
-                    {formatPrice(s.price, currency)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <p className="mt-1 text-sm font-semibold text-orange-400">
-            {formatPrice(minPrice, currency)}
-          </p>
-        )}
-      </div>
-    </button>
+          ) : (
+            <p className="mt-1 pb-3 text-sm font-semibold text-orange-400">
+              {formatPrice(minPrice, currency)}
+            </p>
+          )}
+        </div>
+      </button>
+      {multiSize ? (
+        <div className="grid grid-cols-2 gap-1 p-3 pt-2">
+          {sizes.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => onAdd(product, s)}
+              className="rounded bg-zinc-900 px-1.5 py-1.5 text-center transition hover:bg-zinc-800 hover:ring-1 hover:ring-orange-500 active:bg-orange-500 active:text-black"
+            >
+              <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                {s.size}
+              </p>
+              <p className="text-xs font-semibold text-zinc-200">
+                {formatPrice(s.price, currency)}
+              </p>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
