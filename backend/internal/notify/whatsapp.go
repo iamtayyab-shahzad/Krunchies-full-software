@@ -104,15 +104,24 @@ func SendWhatsAppText(to, body string) error {
 	token := strings.TrimSpace(os.Getenv("WHATSAPP_TOKEN"))
 	phoneNumberID := strings.TrimSpace(os.Getenv("WHATSAPP_PHONE_NUMBER_ID"))
 	if token == "" || phoneNumberID == "" {
+		log.Printf("whatsapp send: not configured (token=%t phoneNumberID=%t)",
+			token != "", phoneNumberID != "")
 		return fmt.Errorf("whatsapp not configured")
 	}
-	to = utils.NormalizePhone(to)
-	if to == "" {
+	normalized := utils.NormalizePhone(to)
+	if normalized == "" {
+		log.Printf("whatsapp send: invalid phone %q", to)
 		return fmt.Errorf("invalid phone")
 	}
 	url := graphAPIBase + "/" + phoneNumberID + "/messages"
+	log.Printf("whatsapp send: to=%q (from %q) phoneNumberID=%s", normalized, to, phoneNumberID)
 	client := &http.Client{Timeout: 10 * time.Second}
-	return sendWhatsAppText(client, url, token, to, body)
+	if err := sendWhatsAppText(client, url, token, normalized, body); err != nil {
+		log.Printf("whatsapp send: FAILED to %q: %v", normalized, err)
+		return err
+	}
+	log.Printf("whatsapp send: SUCCESS to %q", normalized)
+	return nil
 }
 
 // NormalizePhone converts local PK numbers to international digits for WhatsApp API.

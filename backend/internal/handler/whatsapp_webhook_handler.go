@@ -53,30 +53,41 @@ type whatsAppWebhookPayload struct {
 func (h *WhatsAppWebhookHandler) Receive(c *gin.Context) {
 	body, err := c.GetRawData()
 	if err != nil {
+		log.Printf("whatsapp webhook: read body error: %v", err)
 		c.Status(http.StatusOK)
 		return
 	}
+	log.Printf("whatsapp webhook: raw payload: %s", string(body))
 
 	var payload whatsAppWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
+		log.Printf("whatsapp webhook: json unmarshal error: %v", err)
 		c.Status(http.StatusOK)
 		return
 	}
 
 	from, text := extractWhatsAppMessage(payload)
+	log.Printf("whatsapp webhook: extracted from=%q text=%q", from, text)
+
 	if from == "" || text == "" {
+		log.Printf("whatsapp webhook: no message in payload (status update or empty)")
 		c.Status(http.StatusOK)
 		return
 	}
 
-	if strings.ToLower(strings.TrimSpace(text)) != "reset" {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if normalized != "reset" {
+		log.Printf("whatsapp webhook: ignoring non-reset message: %q", normalized)
 		c.Status(http.StatusOK)
 		return
 	}
 
+	log.Printf("whatsapp webhook: RESET from %s, processing async", from)
 	go func(phone string) {
 		if err := h.auth.HandleWhatsAppPasswordReset(phone); err != nil {
-			log.Printf("whatsapp webhook: password reset for %s: %v", phone, err)
+			log.Printf("whatsapp webhook: password reset failed for %s: %v", phone, err)
+		} else {
+			log.Printf("whatsapp webhook: password reset completed for %s", phone)
 		}
 	}(from)
 

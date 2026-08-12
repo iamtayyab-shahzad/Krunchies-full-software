@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -131,26 +132,55 @@ const passwordResetTTL = time.Hour
 const passwordResetSiteURL = "https://krunchies.pk/reset?token="
 
 func (s *AuthService) HandleWhatsAppPasswordReset(senderPhone string) error {
+	log.Printf("whatsapp reset: lookup start sender=%q variants=%v",
+		senderPhone, utils.PhoneLookupVariants(senderPhone))
+
 	customer, err := s.repo.GetCustomerByPhoneVariants(senderPhone)
 	if err != nil {
+		log.Printf("whatsapp reset: customer NOT FOUND for %q: %v", senderPhone, err)
 		reply := "We couldn't find an account with this WhatsApp number. Please register at https://krunchies.pk/register"
-		return notify.SendWhatsAppText(senderPhone, reply)
+		if sendErr := notify.SendWhatsAppText(senderPhone, reply); sendErr != nil {
+			log.Printf("whatsapp reset: send not-found reply FAILED to %q: %v", senderPhone, sendErr)
+			return sendErr
+		}
+		log.Printf("whatsapp reset: send not-found reply OK to %q", senderPhone)
+		return nil
 	}
+	log.Printf("whatsapp reset: customer FOUND id=%s phone=%q", customer.ID, customer.Phone)
 
 	user, err := s.repo.GetUserByUsername(customer.Phone)
 	if err != nil || user.Role != "customer" {
+		role := ""
+		if user != nil {
+			role = user.Role
+		}
+		log.Printf("whatsapp reset: user NOT FOUND or wrong role phone=%q err=%v role=%q",
+			customer.Phone, err, role)
 		reply := "We couldn't find an account with this WhatsApp number. Please register at https://krunchies.pk/register"
-		return notify.SendWhatsAppText(senderPhone, reply)
+		if sendErr := notify.SendWhatsAppText(senderPhone, reply); sendErr != nil {
+			log.Printf("whatsapp reset: send not-found reply FAILED to %q: %v", senderPhone, sendErr)
+			return sendErr
+		}
+		log.Printf("whatsapp reset: send not-found reply OK to %q", senderPhone)
+		return nil
 	}
+	log.Printf("whatsapp reset: user FOUND id=%s username=%q", user.ID, user.Username)
 
 	token, err := s.createPasswordReset(user.ID)
 	if err != nil {
+		log.Printf("whatsapp reset: create token FAILED for user %s: %v", user.ID, err)
 		return err
 	}
+	log.Printf("whatsapp reset: token created for user %s", user.ID)
 
 	link := passwordResetSiteURL + token
 	reply := "Reset your Krunchies password here (link expires in 1 hour):\n" + link
-	return notify.SendWhatsAppText(senderPhone, reply)
+	if sendErr := notify.SendWhatsAppText(senderPhone, reply); sendErr != nil {
+		log.Printf("whatsapp reset: send reset link FAILED to %q: %v", senderPhone, sendErr)
+		return sendErr
+	}
+	log.Printf("whatsapp reset: send reset link OK to %q", senderPhone)
+	return nil
 }
 
 func (s *AuthService) ResetPassword(input dto.CustomerResetPasswordRequest) error {
