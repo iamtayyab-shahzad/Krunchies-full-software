@@ -11,6 +11,8 @@ import {
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Card, StatCard } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatPrice } from "@/lib/utils";
 import {
   reportsApi,
@@ -19,7 +21,7 @@ import {
 
 type Mode = "weeks" | "months";
 
-/** Only even week counts — 2 weeks and multiples of 2. */
+/** Length must be 2 weeks or a multiple of 2. */
 const WEEK_OPTIONS = [2, 4, 6, 8, 10, 12] as const;
 const MONTH_OPTIONS = [1, 2, 3, 4, 5, 6, 9, 12] as const;
 
@@ -82,10 +84,6 @@ function addDaysYMD(ymd: string, days: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
-function firstOfMonthYMD(ymd: string): string {
-  return `${ymd.slice(0, 7)}-01`;
-}
-
 function addMonthsYMD(ymd: string, months: number): string {
   const [y, m, d] = ymd.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
@@ -93,43 +91,78 @@ function addMonthsYMD(ymd: string, months: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+function lastDayOfMonthYMD(yearMonth: string): string {
+  const firstNext = addMonthsYMD(`${yearMonth}-01`, 1);
+  return addDaysYMD(firstNext, -1);
+}
+
+function formatMonthLabel(yearMonth: string): string {
+  const [y, m] = yearMonth.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, 1));
+  return new Intl.DateTimeFormat("en-PK", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(dt);
+}
+
+function defaultWeekStart(): string {
+  // Default: start of the last completed 2-week block ending today.
+  return addDaysYMD(karachiTodayYMD(), -13);
+}
+
+function defaultMonthStart(): string {
+  return karachiTodayYMD().slice(0, 7);
+}
+
 /**
- * Weeks mode: exactly `weeks` days ending today (inclusive), weeks ∈ {2,4,6…}.
- * Months mode: from the 1st of (current month − (n−1)) through today.
+ * Weeks: any start date + N weeks (N even) → inclusive end = start + N*7 − 1.
+ * Months: any start month + N months → 1st of start through last day of last month.
  */
-function periodBounds(
-  mode: Mode,
-  weeks: number,
-  months: number,
-): { start: string; end: string; label: string } {
-  const today = karachiTodayYMD();
-  if (mode === "weeks") {
-    const days = weeks * 7;
-    const start = addDaysYMD(today, -(days - 1));
+function periodBounds(params: {
+  mode: Mode;
+  weekStart: string;
+  weeks: number;
+  monthStart: string;
+  months: number;
+}): { start: string; end: string; label: string } {
+  if (params.mode === "weeks") {
+    const days = params.weeks * 7;
+    const start = params.weekStart;
+    const end = addDaysYMD(start, days - 1);
     return {
       start,
-      end: today,
-      label: `${weeks} weeks (${days} days)`,
+      end,
+      label: `${params.weeks} weeks (${days} days)`,
     };
   }
-  const start = firstOfMonthYMD(addMonthsYMD(today, -(months - 1)));
+  const start = `${params.monthStart}-01`;
+  const lastMonth = addMonthsYMD(start, params.months - 1).slice(0, 7);
+  const end = lastDayOfMonthYMD(lastMonth);
+  const fromLabel = formatMonthLabel(params.monthStart);
+  const toLabel = formatMonthLabel(lastMonth);
   return {
     start,
-    end: today,
-    label: months === 1 ? "This month" : `Last ${months} months`,
+    end,
+    label:
+      params.months === 1
+        ? fromLabel
+        : `${fromLabel} → ${toLabel} (${params.months} months)`,
   };
 }
 
 export default function ProfitLossPage() {
   const [mode, setMode] = useState<Mode>("weeks");
+  const [weekStart, setWeekStart] = useState(defaultWeekStart);
   const [weeks, setWeeks] = useState<(typeof WEEK_OPTIONS)[number]>(2);
+  const [monthStart, setMonthStart] = useState(defaultMonthStart);
   const [months, setMonths] = useState<(typeof MONTH_OPTIONS)[number]>(1);
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<ProfitLossReport>(emptyReport);
 
   const bounds = useMemo(
-    () => periodBounds(mode, weeks, months),
-    [mode, weeks, months],
+    () => periodBounds({ mode, weekStart, weeks, monthStart, months }),
+    [mode, weekStart, weeks, monthStart, months],
   );
 
   useEffect(() => {
@@ -179,7 +212,7 @@ export default function ProfitLossPage() {
     <div>
       <PageHeader
         title="Profit & Loss"
-        description="Sales minus expenses for 2-week blocks or full months. Monthly bills (salaries, rent) are split by days in the month."
+        description="Pick any start date or month, then how long to include. Profit = sales − expenses (monthly bills split by days)."
       />
 
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
@@ -199,31 +232,55 @@ export default function ProfitLossPage() {
             <div>
               <h2 className="text-lg font-bold">By weeks</h2>
               <p className="text-sm text-zinc-400">
-                Choose 2 weeks or any multiple of 2 weeks
+                Any 2-week block — or 4, 6, 8… weeks from a start date you choose
               </p>
             </div>
           </button>
-          <div className="flex flex-wrap gap-2">
-            {WEEK_OPTIONS.map((n) => {
-              const active = mode === "weeks" && weeks === n;
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => {
-                    setMode("weeks");
-                    setWeeks(n);
-                  }}
-                  className={`rounded-lg px-3 py-2 text-sm font-bold ${
-                    active
-                      ? "bg-orange-500 text-black"
-                      : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
-                  }`}
-                >
-                  {n} weeks
-                </button>
-              );
-            })}
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="week-start">Period starts on</Label>
+              <Input
+                id="week-start"
+                type="date"
+                className="w-full max-w-xs"
+                value={weekStart}
+                onChange={(e) => {
+                  setMode("weeks");
+                  setWeekStart(e.target.value);
+                }}
+                onFocus={() => setMode("weeks")}
+              />
+              <p className="text-xs text-zinc-500">
+                Ends on {addDaysYMD(weekStart, weeks * 7 - 1)} ({weeks * 7}{" "}
+                days)
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>How many weeks</Label>
+              <div className="flex flex-wrap gap-2">
+                {WEEK_OPTIONS.map((n) => {
+                  const active = mode === "weeks" && weeks === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        setMode("weeks");
+                        setWeeks(n);
+                      }}
+                      className={`rounded-lg px-3 py-2 text-sm font-bold ${
+                        active
+                          ? "bg-orange-500 text-black"
+                          : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                      }`}
+                    >
+                      {n} weeks
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -243,31 +300,56 @@ export default function ProfitLossPage() {
             <div>
               <h2 className="text-lg font-bold">By months</h2>
               <p className="text-sm text-zinc-400">
-                One month or several months together
+                Any month you pick — or several months in a row from that start
               </p>
             </div>
           </button>
-          <div className="flex flex-wrap gap-2">
-            {MONTH_OPTIONS.map((n) => {
-              const active = mode === "months" && months === n;
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => {
-                    setMode("months");
-                    setMonths(n);
-                  }}
-                  className={`rounded-lg px-3 py-2 text-sm font-bold ${
-                    active
-                      ? "bg-orange-500 text-black"
-                      : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
-                  }`}
-                >
-                  {n === 1 ? "1 month" : `${n} months`}
-                </button>
-              );
-            })}
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="month-start">Starting month</Label>
+              <Input
+                id="month-start"
+                type="month"
+                className="w-full max-w-xs"
+                value={monthStart}
+                onChange={(e) => {
+                  setMode("months");
+                  setMonthStart(e.target.value);
+                }}
+                onFocus={() => setMode("months")}
+              />
+              <p className="text-xs text-zinc-500">
+                {months === 1
+                  ? `Full month: ${formatMonthLabel(monthStart)}`
+                  : `Through ${formatMonthLabel(addMonthsYMD(`${monthStart}-01`, months - 1).slice(0, 7))}`}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>How many months</Label>
+              <div className="flex flex-wrap gap-2">
+                {MONTH_OPTIONS.map((n) => {
+                  const active = mode === "months" && months === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        setMode("months");
+                        setMonths(n);
+                      }}
+                      className={`rounded-lg px-3 py-2 text-sm font-bold ${
+                        active
+                          ? "bg-orange-500 text-black"
+                          : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                      }`}
+                    >
+                      {n === 1 ? "1 month" : `${n} months`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </Card>
       </div>
