@@ -53,6 +53,9 @@ export const PAYMENT_DETAILS = {
   jazzcashUssd: "*786*10#",
 } as const;
 
+/** WhatsApp number customers message for password reset (must match Meta business line). */
+export const PASSWORD_RESET_WHATSAPP = "03267274986";
+
 export const CART_STORAGE_KEY = "krunchies_cart";
 export const AUTH_STORAGE_KEY = "krunchies_auth";
 export const AUTH_TOKEN_STORAGE_KEY = "krunchies_customer_token";

@@ -1,3 +1,5 @@
+import { PASSWORD_RESET_WHATSAPP } from "@/lib/constants";
+
 /** Strip non-digits and ensure country code for wa.me links. */
 export function whatsAppDigits(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -7,7 +9,7 @@ export function whatsAppDigits(phone: string): string {
   return digits;
 }
 
-export function whatsAppResetHref(phone: string): string {
-  const to = whatsAppDigits(phone || "923001234567");
+export function whatsAppResetHref(phone: string = PASSWORD_RESET_WHATSAPP): string {
+  const to = whatsAppDigits(phone);
   return `https://wa.me/${to}?text=${encodeURIComponent("RESET")}`;
 }

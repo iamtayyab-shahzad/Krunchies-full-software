@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
-import { useSettings } from "@/hooks/use-settings";
+import { PASSWORD_RESET_WHATSAPP } from "@/lib/constants";
 import { whatsAppResetHref } from "@/lib/whatsapp";
 
 const phoneSchema = z
@@ -31,8 +31,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") ?? "/";
-  const { settings } = useSettings();
-  const resetHref = whatsAppResetHref(settings?.whatsapp ?? "");
+  const resetHref = whatsAppResetHref(PASSWORD_RESET_WHATSAPP);
 
   const {
     register,
