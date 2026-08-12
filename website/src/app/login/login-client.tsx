@@ -10,10 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
+import { useSettings } from "@/hooks/use-settings";
+import { whatsAppResetHref } from "@/lib/whatsapp";
+
+const phoneSchema = z
+  .string()
+  .min(11, "Enter an 11-digit mobile number")
+  .max(11, "Enter an 11-digit mobile number")
+  .regex(/^03\d{9}$/, "Use format 03XXXXXXXXX (11 digits)");
 
 const schema = z.object({
-  phone: z.string().min(10, "Enter a valid phone number"),
-  password: z.string().min(4, "Password must be at least 4 characters"),
+  phone: phoneSchema,
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -23,6 +31,8 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") ?? "/";
+  const { settings } = useSettings();
+  const resetHref = whatsAppResetHref(settings?.whatsapp ?? "");
 
   const {
     register,
@@ -51,7 +61,16 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" placeholder="03XXXXXXXXX" {...register("phone")} />
+          <Input
+            id="phone"
+            inputMode="numeric"
+            autoComplete="tel"
+            placeholder="03XXXXXXXXX"
+            {...register("phone")}
+          />
+          <p className="text-xs text-zinc-500">
+            Same number you used when registering
+          </p>
           {errors.phone && (
             <p className="text-xs text-red-400">{errors.phone.message}</p>
           )}
@@ -61,6 +80,7 @@ export default function LoginPage() {
           <Input
             id="password"
             type="password"
+            autoComplete="current-password"
             {...register("password")}
           />
           {errors.password && (
@@ -71,6 +91,21 @@ export default function LoginPage() {
           {isSubmitting ? "Signing in..." : "Sign In"}
         </Button>
       </form>
+      <p className="mt-4 text-center text-sm text-zinc-400">
+        Forgot password?{" "}
+        <a
+          href={resetHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-orange-400 hover:underline"
+        >
+          Reset via WhatsApp
+        </a>
+      </p>
+      <p className="mt-1 text-center text-xs text-zinc-500">
+        Opens WhatsApp with RESET — send it from your registered number to get a
+        reset link.
+      </p>
       <p className="mt-6 text-center text-sm text-zinc-400">
         New here?{" "}
         <Link href="/register" className="text-orange-400 hover:underline">

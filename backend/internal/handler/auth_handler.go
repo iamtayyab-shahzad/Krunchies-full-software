@@ -86,3 +86,24 @@ func (h *AuthHandler) CustomerLogin(c *gin.Context) {
 		"token":    token,
 	})
 }
+
+// CustomerResetPassword godoc
+// @Summary Reset customer password with WhatsApp token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param body body dto.CustomerResetPasswordRequest true "reset"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/auth/customers/reset-password [post]
+func (h *AuthHandler) CustomerResetPassword(c *gin.Context) {
+	var input dto.CustomerResetPasswordRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		utils.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.service.ResetPassword(input); err != nil {
+		HandleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "password updated", nil)
+}

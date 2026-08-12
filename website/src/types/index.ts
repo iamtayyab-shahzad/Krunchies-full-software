@@ -85,6 +85,8 @@ export interface Customer {
   id: string;
   name: string;
   phone: string;
+  default_address?: string;
+  default_location_id?: string | null;
 }
 
 export interface OrderItemPayload {

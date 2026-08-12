@@ -6,9 +6,11 @@ import (
 
 	"backend/internal/domain"
 	"backend/internal/dto"
+	"backend/internal/notify"
 	"backend/internal/repository"
 	"backend/internal/utils"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -94,4 +96,102 @@ func (s *AuthService) CustomerLogin(input dto.CustomerLoginRequest) (*domain.Cus
 		return nil, "", err
 	}
 	return customer, token, nil
+}
+
+func (s *AuthService) GetCustomer(id string) (*domain.Customer, error) {
+	customer, err := s.repo.GetCustomerByID(id)
+	if err != nil {
+		return nil, utils.NewAppError(http.StatusNotFound, "customer not found")
+	}
+	return customer, nil
+}
+
+func (s *AuthService) UpdateCustomerProfile(id string, input dto.UpdateCustomerProfileRequest) (*domain.Customer, error) {
+	updates := map[string]any{}
+	if input.Name != nil {
+		updates["name"] = *input.Name
+	}
+	if input.DefaultAddress != nil {
+		updates["default_address"] = *input.DefaultAddress
+	}
+	if input.DefaultLocationID != nil {
+		updates["default_location_id"] = *input.DefaultLocationID
+	}
+	if len(updates) == 0 {
+		return s.GetCustomer(id)
+	}
+	customer, err := s.repo.UpdateCustomer(id, updates)
+	if err != nil {
+		return nil, err
+	}
+	return customer, nil
+}
+
+const passwordResetTTL = time.Hour
+const passwordResetSiteURL = "https://krunchies.pk/reset?token="
+
+func (s *AuthService) HandleWhatsAppPasswordReset(senderPhone string) error {
+	customer, err := s.repo.GetCustomerByPhoneVariants(senderPhone)
+	if err != nil {
+		reply := "We couldn't find an account with this WhatsApp number. Please register at https://krunchies.pk/register"
+		return notify.SendWhatsAppText(senderPhone, reply)
+	}
+
+	user, err := s.repo.GetUserByUsername(customer.Phone)
+	if err != nil || user.Role != "customer" {
+		reply := "We couldn't find an account with this WhatsApp number. Please register at https://krunchies.pk/register"
+		return notify.SendWhatsAppText(senderPhone, reply)
+	}
+
+	token, err := s.createPasswordReset(user.ID)
+	if err != nil {
+		return err
+	}
+
+	link := passwordResetSiteURL + token
+	reply := "Reset your Krunchies password here (link expires in 1 hour):\n" + link
+	return notify.SendWhatsAppText(senderPhone, reply)
+}
+
+func (s *AuthService) ResetPassword(input dto.CustomerResetPasswordRequest) error {
+	tokenHash := utils.HashToken(input.Token)
+	reset, err := s.repo.GetValidPasswordReset(tokenHash, time.Now())
+	if err != nil {
+		return utils.NewAppError(http.StatusBadRequest, "invalid or expired reset link")
+	}
+
+	hashed, err := utils.HashPassword(input.Password)
+	if err != nil {
+		return err
+	}
+
+	tx := s.repo.DB().Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if err := s.repo.UpdateUserPassword(tx, reset.UserID.String(), hashed); err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := s.repo.MarkPasswordResetUsed(tx, reset.ID.String(), time.Now()); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
+}
+
+func (s *AuthService) createPasswordReset(userID uuid.UUID) (string, error) {
+	token, err := utils.GenerateSecureToken(32)
+	if err != nil {
+		return "", err
+	}
+	reset := &domain.PasswordReset{
+		UserID:    userID,
+		TokenHash: utils.HashToken(token),
+		ExpiresAt: time.Now().Add(passwordResetTTL),
+	}
+	if err := s.repo.CreatePasswordReset(reset); err != nil {
+		return "", err
+	}
+	return token, nil
 }

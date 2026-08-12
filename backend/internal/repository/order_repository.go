@@ -90,6 +90,25 @@ func (r *OrderRepository) List() ([]domain.Order, error) {
 	return r.ListPaged(50, 0)
 }
 
+// ListByCustomerID returns the customer's newest orders (capped), with items for reorder.
+func (r *OrderRepository) ListByCustomerID(customerID uuid.UUID, limit int) ([]domain.Order, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	if limit > 5 {
+		limit = 5
+	}
+	var orders []domain.Order
+	if err := listPreloads(r.db).
+		Where("customer_id = ?", customerID).
+		Order("created_at desc").
+		Limit(limit).
+		Find(&orders).Error; err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
 func (r *OrderRepository) ListByStatus(status string) ([]domain.Order, error) {
 	limit := 200
 	if status == "PENDING" {

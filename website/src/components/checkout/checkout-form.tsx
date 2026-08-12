@@ -59,7 +59,7 @@ interface CheckoutFormProps {
 export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
   const router = useRouter();
   const { items, subtotal, discount, payable, clearCart } = useCart();
-  const { customer, isAuthenticated } = useAuth();
+  const { customer, isAuthenticated, saveCheckoutDefaults } = useAuth();
   const [locations, setLocations] = useState<Location[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -104,6 +104,14 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
     if (!guestMode && customer) {
       setValue("customer_name", customer.name);
       setValue("phone", customer.phone);
+      if (customer.default_address) {
+        setValue("address", customer.default_address);
+      }
+      if (customer.default_location_id) {
+        setValue("location_id", customer.default_location_id, {
+          shouldValidate: true,
+        });
+      }
     }
   }, [customer, guestMode, setValue]);
 
@@ -164,6 +172,13 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
       };
       const order = await createOrder(payload);
       localStorage.setItem(LAST_ORDER_KEY, JSON.stringify(order));
+      if (isAuthenticated && !guestMode) {
+        void saveCheckoutDefaults({
+          name: values.customer_name,
+          address: values.address,
+          location_id: values.location_id,
+        });
+      }
       clearCart();
       toast.success(
         hours.isOpen

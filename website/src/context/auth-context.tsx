@@ -13,7 +13,12 @@ import {
   AUTH_STORAGE_KEY,
   AUTH_TOKEN_STORAGE_KEY,
 } from "@/lib/constants";
-import { loginCustomer, registerCustomer } from "@/services/api";
+import {
+  getMyProfile,
+  loginCustomer,
+  registerCustomer,
+  updateMyProfile,
+} from "@/services/api";
 import type { Customer, LoginPayload, RegisterPayload } from "@/types";
 
 interface AuthContextValue {
@@ -22,6 +27,12 @@ interface AuthContextValue {
   login: (payload: LoginPayload) => Promise<Customer>;
   register: (payload: RegisterPayload) => Promise<Customer>;
   logout: () => void;
+  refreshProfile: () => Promise<Customer | null>;
+  saveCheckoutDefaults: (input: {
+    name: string;
+    address: string;
+    location_id: string;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -50,6 +61,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [customer, hydrated]);
 
+  // Refresh profile from server once so default_address / location stay current.
+  useEffect(() => {
+    if (!hydrated || !customer) return;
+    const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    if (!token) return;
+    let active = true;
+    getMyProfile()
+      .then((fresh) => {
+        if (active) setCustomer(fresh);
+      })
+      .catch(() => {
+        /* keep cached profile if offline / 401 handled elsewhere */
+      });
+    return () => {
+      active = false;
+    };
+    // Only on first hydrate while logged in
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   const login = useCallback(async (payload: LoginPayload) => {
     const result = await loginCustomer(payload);
     setCustomer(result);
@@ -67,6 +98,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCustomer(null);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    if (!token) return null;
+    try {
+      const fresh = await getMyProfile();
+      setCustomer(fresh);
+      return fresh;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const saveCheckoutDefaults = useCallback(
+    async (input: { name: string; address: string; location_id: string }) => {
+      const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+      if (!token) return;
+      try {
+        const fresh = await updateMyProfile({
+          name: input.name,
+          default_address: input.address,
+          default_location_id: input.location_id,
+        });
+        setCustomer(fresh);
+      } catch {
+        /* non-blocking — order already placed */
+      }
+    },
+    [],
+  );
+
   const value = useMemo(
     () => ({
       customer,
@@ -74,8 +135,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      refreshProfile,
+      saveCheckoutDefaults,
     }),
-    [customer, login, register, logout],
+    [
+      customer,
+      login,
+      register,
+      logout,
+      refreshProfile,
+      saveCheckoutDefaults,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

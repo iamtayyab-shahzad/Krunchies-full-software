@@ -553,6 +553,10 @@ func (s *OrderService) ListOrders(limit, offset int) ([]domain.Order, error) {
 	return s.orderRepo.ListPaged(limit, offset)
 }
 
+func (s *OrderService) ListCustomerOrders(customerID uuid.UUID, limit int) ([]domain.Order, error) {
+	return s.orderRepo.ListByCustomerID(customerID, limit)
+}
+
 func (s *OrderService) ListPendingOrders() ([]domain.Order, error) {
 	return s.orderRepo.ListByStatus("PENDING")
 }

@@ -266,3 +266,41 @@ export async function registerCustomer(
   localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, result.token);
   return result.customer;
 }
+
+export async function getMyProfile(): Promise<Customer> {
+  return backendFetch<Customer>("/customers/me", {}, true);
+}
+
+export async function updateMyProfile(payload: {
+  name?: string;
+  default_address?: string;
+  default_location_id?: string;
+}): Promise<Customer> {
+  return backendFetch<Customer>(
+    "/customers/me",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    true,
+  );
+}
+
+/** Newest orders for the logged-in customer (server caps at 5). */
+export async function getMyOrders(limit = 5): Promise<Order[]> {
+  const q = limit !== 5 ? `?limit=${limit}` : "";
+  return backendFetch<Order[]>(`/customers/me/orders${q}`, {}, true);
+}
+
+export async function resetCustomerPassword(payload: {
+  token: string;
+  password: string;
+}): Promise<void> {
+  await backendFetch<null>(
+    "/auth/customers/reset-password",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}

@@ -96,3 +96,14 @@ type AuthCustomerResponse struct {
 	Customer any    `json:"customer"`
 	Token    string `json:"token"`
 }
+
+type UpdateCustomerProfileRequest struct {
+	Name              *string    `json:"name" binding:"omitempty,min=2,max=100"`
+	DefaultAddress    *string    `json:"default_address" binding:"omitempty,max=500"`
+	DefaultLocationID *uuid.UUID `json:"default_location_id"`
+}
+
+type CustomerResetPasswordRequest struct {
+	Token    string `json:"token" binding:"required,min=32,max=128"`
+	Password string `json:"password" binding:"required,min=6,max=72"`
+}

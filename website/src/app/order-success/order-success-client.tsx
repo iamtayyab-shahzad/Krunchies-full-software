@@ -88,6 +88,9 @@ export default function OrderSuccessClient() {
           <Link href="/menu">Order Again</Link>
         </Button>
         <Button asChild variant="outline">
+          <Link href="/account/orders">My Orders</Link>
+        </Button>
+        <Button asChild variant="outline">
           <Link href="/">Back Home</Link>
         </Button>
       </div>

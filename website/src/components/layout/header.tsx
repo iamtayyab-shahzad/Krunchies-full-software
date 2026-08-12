@@ -120,6 +120,9 @@ export function Header() {
 
           {isAuthenticated ? (
             <div className="hidden items-center gap-2 sm:flex">
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/account/orders">{t("nav_orders")}</Link>
+              </Button>
               <span className="max-w-[8rem] truncate text-sm text-zinc-400">
                 {customer?.name}
               </span>
@@ -174,20 +177,32 @@ export function Header() {
               </Link>
             ))}
             {isAuthenticated ? (
-              <button
-                type="button"
-                className={cn(
-                  "rounded-md px-2 py-3 text-left text-base font-medium text-zinc-300",
-                  locale === "ur" && "font-urdu text-right",
-                )}
-                onClick={() => {
-                  setOpen(false);
-                  logout();
-                }}
-              >
-                {t("nav_logout")}
-                {customer?.name ? ` (${customer.name})` : ""}
-              </button>
+              <>
+                <Link
+                  href="/account/orders"
+                  className={cn(
+                    "rounded-md px-2 py-3 text-base font-medium text-zinc-300",
+                    locale === "ur" && "font-urdu",
+                    pathname.startsWith("/account") && "text-orange-400",
+                  )}
+                >
+                  {t("nav_orders")}
+                </Link>
+                <button
+                  type="button"
+                  className={cn(
+                    "rounded-md px-2 py-3 text-left text-base font-medium text-zinc-300",
+                    locale === "ur" && "font-urdu text-right",
+                  )}
+                  onClick={() => {
+                    setOpen(false);
+                    logout();
+                  }}
+                >
+                  {t("nav_logout")}
+                  {customer?.name ? ` (${customer.name})` : ""}
+                </button>
+              </>
             ) : (
               <Link
                 href="/login"

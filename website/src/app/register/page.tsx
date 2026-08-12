@@ -11,11 +11,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
 
-const schema = z.object({
-  name: z.string().min(2, "Name is required"),
-  phone: z.string().min(10, "Enter a valid phone number"),
-  password: z.string().min(4, "Password must be at least 4 characters"),
-});
+const phoneSchema = z
+  .string()
+  .min(11, "Enter an 11-digit mobile number")
+  .max(11, "Enter an 11-digit mobile number")
+  .regex(/^03\d{9}$/, "Use format 03XXXXXXXXX (11 digits)");
+
+const schema = z
+  .object({
+    name: z.string().min(2, "Name is required"),
+    phone: phoneSchema,
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    confirmPassword: z.string().min(6, "Confirm your password"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -33,7 +45,11 @@ export default function RegisterPage() {
 
   const onSubmit = async (values: FormValues) => {
     try {
-      await registerUser(values);
+      await registerUser({
+        name: values.name,
+        phone: values.phone,
+        password: values.password,
+      });
       toast.success("Account created!");
       router.push("/");
     } catch (error) {
@@ -52,23 +68,52 @@ export default function RegisterPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="name">Full Name</Label>
-          <Input id="name" {...register("name")} />
+          <Input id="name" autoComplete="name" {...register("name")} />
           {errors.name && (
             <p className="text-xs text-red-400">{errors.name.message}</p>
           )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" placeholder="03XXXXXXXXX" {...register("phone")} />
+          <Input
+            id="phone"
+            inputMode="numeric"
+            autoComplete="tel"
+            placeholder="03XXXXXXXXX"
+            {...register("phone")}
+          />
+          <p className="text-xs text-zinc-500">
+            Pakistani mobile: 11 digits starting with 03
+          </p>
           {errors.phone && (
             <p className="text-xs text-red-400">{errors.phone.message}</p>
           )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" {...register("password")} />
+          <Input
+            id="password"
+            type="password"
+            autoComplete="new-password"
+            {...register("password")}
+          />
+          <p className="text-xs text-zinc-500">At least 6 characters</p>
           {errors.password && (
             <p className="text-xs text-red-400">{errors.password.message}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="confirmPassword">Confirm password</Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            {...register("confirmPassword")}
+          />
+          {errors.confirmPassword && (
+            <p className="text-xs text-red-400">
+              {errors.confirmPassword.message}
+            </p>
           )}
         </div>
         <Button type="submit" className="w-full" disabled={isSubmitting}>

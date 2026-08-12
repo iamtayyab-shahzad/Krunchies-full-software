@@ -35,10 +35,16 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	authHandler := handler.NewAuthHandler(services.Auth)
+	whatsappWebhookHandler := handler.NewWhatsAppWebhookHandler(services.Auth)
+
+	router.GET("/webhook/whatsapp", whatsappWebhookHandler.Verify)
+	router.POST("/webhook/whatsapp", whatsappWebhookHandler.Receive)
+
 	router.Static("/swagger", "./docs/swagger")
 	router.StaticFile("/openapi.yaml", "./docs/openapi.yaml")
 
-	authHandler := handler.NewAuthHandler(services.Auth)
+	customerHandler := handler.NewCustomerHandler(services.Auth, services.Orders)
 	categoryHandler := handler.NewCRUDHandler[domain.Category](services.Categories, "category")
 	productHandler := handler.NewCRUDHandler[domain.Product](services.Products, "product")
 	productSizeHandler := handler.NewCRUDHandler[domain.ProductSize](services.ProductSizes, "product size")
@@ -64,6 +70,15 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			auth.POST("/staff/login", authHandler.StaffLogin)
 			auth.POST("/customers/register", authHandler.CustomerRegister)
 			auth.POST("/customers/login", authHandler.CustomerLogin)
+			auth.POST("/customers/reset-password", authHandler.CustomerResetPassword)
+		}
+
+		customers := api.Group("/customers")
+		customers.Use(middleware.JWTAuth(jwtSecret, "customer"))
+		{
+			customers.GET("/me", customerHandler.GetMe)
+			customers.PATCH("/me", customerHandler.UpdateMe)
+			customers.GET("/me/orders", customerHandler.ListMyOrders)
 		}
 
 		// Public order creation (guest checkout supported)

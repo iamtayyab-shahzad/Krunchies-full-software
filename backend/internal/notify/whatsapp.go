@@ -8,10 +8,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"backend/internal/utils"
 
 	"github.com/google/uuid"
 )
@@ -21,10 +22,7 @@ const graphAPIBase = "https://graph.facebook.com/v21.0"
 // Always also notify this shop phone (03000128562) for website orders.
 const extraOwnerPhonePK = "923000128562"
 
-var (
-	nonDigit       = regexp.MustCompile(`\D+`)
-	missingEnvOnce sync.Once
-)
+var missingEnvOnce sync.Once
 
 // OrderAlert is the WhatsApp text payload for a new website order.
 type OrderAlert struct {
@@ -99,6 +97,27 @@ func notifyWebsiteOrder(alert OrderAlert) {
 		}
 		log.Printf("whatsapp notify: sent for order %s to %s", alert.OrderID, to)
 	}
+}
+
+// SendWhatsAppText sends a plain-text WhatsApp message to one recipient.
+func SendWhatsAppText(to, body string) error {
+	token := strings.TrimSpace(os.Getenv("WHATSAPP_TOKEN"))
+	phoneNumberID := strings.TrimSpace(os.Getenv("WHATSAPP_PHONE_NUMBER_ID"))
+	if token == "" || phoneNumberID == "" {
+		return fmt.Errorf("whatsapp not configured")
+	}
+	to = utils.NormalizePhone(to)
+	if to == "" {
+		return fmt.Errorf("invalid phone")
+	}
+	url := graphAPIBase + "/" + phoneNumberID + "/messages"
+	client := &http.Client{Timeout: 10 * time.Second}
+	return sendWhatsAppText(client, url, token, to, body)
+}
+
+// NormalizePhone converts local PK numbers to international digits for WhatsApp API.
+func NormalizePhone(raw string) string {
+	return normalizePhone(raw)
 }
 
 func sendWhatsAppText(client *http.Client, url, token, to, body string) error {
@@ -212,13 +231,5 @@ func ownerPhones() []string {
 }
 
 func normalizePhone(raw string) string {
-	digits := nonDigit.ReplaceAllString(strings.TrimSpace(raw), "")
-	if digits == "" {
-		return ""
-	}
-	// Local PK mobile 03XXXXXXXXX → 923XXXXXXXXX
-	if strings.HasPrefix(digits, "0") && len(digits) == 11 {
-		digits = "92" + digits[1:]
-	}
-	return digits
+	return utils.NormalizePhone(raw)
 }
