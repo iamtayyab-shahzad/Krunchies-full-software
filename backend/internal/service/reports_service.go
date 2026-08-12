@@ -92,45 +92,27 @@ func (s *ReportService) ProfitLossBetween(start, end time.Time) (*ProfitLoss, er
 	pl.CompletedOrders = agg.CompletedOrders
 	pl.CancelledOrders = agg.CancelledOrders
 
-	recipeCOGS, err := s.inventory.ConsumptionCostBetween(start, end)
-	if err != nil {
-		return nil, err
-	}
-	if pl.PurchasesSpend, err = s.inventory.PurchaseCostBetween(start, end); err != nil {
-		return nil, err
-	}
+	// Without recipe BOMs / stock tracking, food cost stays unused.
+	// Owner logs stock buys as Expenses (MONTHLY salaries prorate automatically).
+	pl.COGS = 0
+	pl.FoodCostSource = "none"
+	pl.GrossProfit = pl.Revenue
 
-	// Without recipe BOMs, recipe COGS stays ~0. Fall back to stock buys in the
-	// window so the owner still sees food outlay — never add both.
-	foodCost := recipeCOGS
-	pl.FoodCostSource = "cogs"
-	if recipeCOGS == 0 && pl.PurchasesSpend > 0 {
-		foodCost = pl.PurchasesSpend
-		pl.FoodCostSource = "purchases"
-	} else if recipeCOGS == 0 {
-		pl.FoodCostSource = "none"
-	}
-	pl.COGS = foodCost
-	pl.GrossProfit = pl.Revenue - pl.COGS
-
-	wastage, err := s.inventory.WastageCostBetween(start, end)
-	if err != nil {
-		return nil, err
-	}
-	pl.WastageCost = wastage
+	pl.WastageCost = 0
 
 	expenses, err := s.expenses.TotalBetween(start, end)
 	if err != nil {
 		return nil, err
 	}
 	pl.Expenses = expenses
-	pl.NetProfit = pl.GrossProfit - pl.Expenses - pl.WastageCost
-
-	if pl.Revenue > 0 {
-		pl.FoodCostPercent = (float64(pl.COGS) / float64(pl.Revenue)) * 100
-	}
+	// Simple owner model: Profit = Sales − Expenses (for the selected weeks/months).
+	pl.NetProfit = pl.Revenue - pl.Expenses
+	pl.FoodCostPercent = 0
 
 	if pl.InventoryValue, err = s.inventory.StockValue(); err != nil {
+		return nil, err
+	}
+	if pl.PurchasesSpend, err = s.inventory.PurchaseCostBetween(start, end); err != nil {
 		return nil, err
 	}
 

@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  Boxes,
   CalendarDays,
-  Percent,
+  CalendarRange,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -13,15 +11,17 @@ import {
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Card, StatCard } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { formatPrice } from "@/lib/utils";
 import {
   reportsApi,
   type ProfitLossReport,
 } from "@/services/api";
 
-type RangeKey = "week" | "month" | "today" | "custom";
+type Mode = "weeks" | "months";
+
+/** Only even week counts — 2 weeks and multiples of 2. */
+const WEEK_OPTIONS = [2, 4, 6, 8, 10, 12] as const;
+const MONTH_OPTIONS = [1, 2, 3, 4, 5, 6, 9, 12] as const;
 
 const emptyReport: ProfitLossReport = {
   start: "",
@@ -65,39 +65,82 @@ function normalizeReport(
   };
 }
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+/** Today as YYYY-MM-DD in Asia/Karachi. */
+function karachiTodayYMD(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Karachi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
-function daysAgoISO(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+function addDaysYMD(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
 }
 
-function foodCostLabel(source: string | undefined) {
-  if (source === "purchases") return "Stock buys (no recipes yet)";
-  if (source === "cogs") return "Recipe COGS";
-  return "Food cost (none logged)";
+function firstOfMonthYMD(ymd: string): string {
+  return `${ymd.slice(0, 7)}-01`;
+}
+
+function addMonthsYMD(ymd: string, months: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCMonth(dt.getUTCMonth() + months);
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Weeks mode: exactly `weeks` days ending today (inclusive), weeks ∈ {2,4,6…}.
+ * Months mode: from the 1st of (current month − (n−1)) through today.
+ */
+function periodBounds(
+  mode: Mode,
+  weeks: number,
+  months: number,
+): { start: string; end: string; label: string } {
+  const today = karachiTodayYMD();
+  if (mode === "weeks") {
+    const days = weeks * 7;
+    const start = addDaysYMD(today, -(days - 1));
+    return {
+      start,
+      end: today,
+      label: `${weeks} weeks (${days} days)`,
+    };
+  }
+  const start = firstOfMonthYMD(addMonthsYMD(today, -(months - 1)));
+  return {
+    start,
+    end: today,
+    label: months === 1 ? "This month" : `Last ${months} months`,
+  };
 }
 
 export default function ProfitLossPage() {
-  const [range, setRange] = useState<RangeKey>("week");
-  const [customStart, setCustomStart] = useState(daysAgoISO(30));
-  const [customEnd, setCustomEnd] = useState(todayISO());
+  const [mode, setMode] = useState<Mode>("weeks");
+  const [weeks, setWeeks] = useState<(typeof WEEK_OPTIONS)[number]>(2);
+  const [months, setMonths] = useState<(typeof MONTH_OPTIONS)[number]>(1);
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<ProfitLossReport>(emptyReport);
+
+  const bounds = useMemo(
+    () => periodBounds(mode, weeks, months),
+    [mode, weeks, months],
+  );
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
-        const params =
-          range === "custom"
-            ? { start: customStart, end: customEnd }
-            : { range };
-        const data = await reportsApi.profitLoss(params);
+        const data = await reportsApi.profitLoss({
+          start: bounds.start,
+          end: bounds.end,
+        });
         if (!cancelled) setReport(normalizeReport(data));
       } catch (e) {
         if (!cancelled) {
@@ -114,7 +157,7 @@ export default function ProfitLossPage() {
     return () => {
       cancelled = true;
     };
-  }, [range, customStart, customEnd]);
+  }, [bounds.start, bounds.end]);
 
   const expenseBreakdown = report.expense_breakdown ?? [];
   const bestSelling = report.best_selling ?? [];
@@ -136,57 +179,97 @@ export default function ProfitLossPage() {
     <div>
       <PageHeader
         title="Profit & Loss"
-        description="Week/month sales minus expenses (recurring bills allocated). Day averages come from the period total."
+        description="Sales minus expenses for 2-week blocks or full months. Monthly bills (salaries, rent) are split by days in the month."
       />
 
-      <div className="mb-6 flex flex-wrap items-end gap-3">
-        {(
-          [
-            ["week", "This week"],
-            ["month", "This month"],
-            ["today", "Today"],
-            ["custom", "Custom"],
-          ] as const
-        ).map(([key, label]) => {
-          const active = range === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setRange(key)}
-              className={`rounded-lg px-4 py-2 text-sm font-bold ${
-                active
-                  ? "bg-orange-500 text-black"
-                  : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-
-        {range === "custom" ? (
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs text-zinc-500">Start</Label>
-              <Input
-                type="date"
-                className="w-auto"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-              />
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <Card
+          className={
+            mode === "weeks"
+              ? "border-orange-500/60 bg-orange-500/5"
+              : "border-zinc-800"
+          }
+        >
+          <button
+            type="button"
+            onClick={() => setMode("weeks")}
+            className="mb-4 flex w-full items-center gap-2 text-left"
+          >
+            <CalendarRange className="h-5 w-5 text-orange-400" />
+            <div>
+              <h2 className="text-lg font-bold">By weeks</h2>
+              <p className="text-sm text-zinc-400">
+                Choose 2 weeks or any multiple of 2 weeks
+              </p>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-zinc-500">End</Label>
-              <Input
-                type="date"
-                className="w-auto"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-              />
-            </div>
+          </button>
+          <div className="flex flex-wrap gap-2">
+            {WEEK_OPTIONS.map((n) => {
+              const active = mode === "weeks" && weeks === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => {
+                    setMode("weeks");
+                    setWeeks(n);
+                  }}
+                  className={`rounded-lg px-3 py-2 text-sm font-bold ${
+                    active
+                      ? "bg-orange-500 text-black"
+                      : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                  }`}
+                >
+                  {n} weeks
+                </button>
+              );
+            })}
           </div>
-        ) : null}
+        </Card>
+
+        <Card
+          className={
+            mode === "months"
+              ? "border-orange-500/60 bg-orange-500/5"
+              : "border-zinc-800"
+          }
+        >
+          <button
+            type="button"
+            onClick={() => setMode("months")}
+            className="mb-4 flex w-full items-center gap-2 text-left"
+          >
+            <CalendarDays className="h-5 w-5 text-orange-400" />
+            <div>
+              <h2 className="text-lg font-bold">By months</h2>
+              <p className="text-sm text-zinc-400">
+                One month or several months together
+              </p>
+            </div>
+          </button>
+          <div className="flex flex-wrap gap-2">
+            {MONTH_OPTIONS.map((n) => {
+              const active = mode === "months" && months === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => {
+                    setMode("months");
+                    setMonths(n);
+                  }}
+                  className={`rounded-lg px-3 py-2 text-sm font-bold ${
+                    active
+                      ? "bg-orange-500 text-black"
+                      : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                  }`}
+                >
+                  {n === 1 ? "1 month" : `${n} months`}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
       </div>
 
       {loading ? (
@@ -195,61 +278,33 @@ export default function ProfitLossPage() {
         </div>
       ) : (
         <>
-          {(report.start || report.end) && (
-            <p className="mb-4 text-sm text-zinc-500">
-              Period: {report.start?.slice(0, 10) || "—"} →{" "}
-              {report.end?.slice(0, 10) || "—"} · {report.completed_orders}{" "}
-              completed orders
-              {report.period_complete ? " · complete" : " · in progress"}
-            </p>
-          )}
+          <p className="mb-4 text-sm text-zinc-500">
+            {bounds.label}: {bounds.start} → {bounds.end} ·{" "}
+            {report.completed_orders} completed orders
+            {report.period_complete ? " · complete" : " · in progress"}
+          </p>
 
-          <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <StatCard
-              label="Revenue"
+              label="Total sales"
               value={formatPrice(report.revenue)}
               icon={<TrendingUp className="h-5 w-5" />}
             />
             <StatCard
-              label="Food / stock cost"
-              value={formatPrice(report.cogs)}
-              hint={foodCostLabel(report.food_cost_source)}
-              icon={<Boxes className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Expenses"
+              label="Total expenses"
               value={formatPrice(report.expenses)}
-              hint="Includes weekly/monthly share"
+              hint="One-off + monthly share for this period"
               icon={<Wallet className="h-5 w-5" />}
             />
             <StatCard
-              label="Net Profit"
+              label="Profit"
               value={formatPrice(report.net_profit)}
               hint={
-                report.net_profit >= 0 ? "In the black" : "In the red"
+                report.net_profit >= 0
+                  ? "Sales − expenses"
+                  : "Expenses higher than sales"
               }
               icon={<TrendingDown className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Gross Profit"
-              value={formatPrice(report.gross_profit)}
-              icon={<TrendingUp className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Wastage"
-              value={formatPrice(report.wastage_cost)}
-              icon={<AlertTriangle className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Food Cost %"
-              value={`${Number(report.food_cost_percent || 0).toFixed(1)}%`}
-              icon={<Percent className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Stock buys (period)"
-              value={formatPrice(report.purchases_spend)}
-              hint={`On-hand value ${formatPrice(report.inventory_value)}`}
-              icon={<Boxes className="h-5 w-5" />}
             />
           </div>
 
@@ -277,9 +332,12 @@ export default function ProfitLossPage() {
 
           <div className="mt-6 grid gap-6 xl:grid-cols-2">
             <Card>
-              <h2 className="mb-4 text-lg font-bold">Expense Breakdown</h2>
+              <h2 className="mb-4 text-lg font-bold">Expense breakdown</h2>
               {expenseBreakdown.length === 0 ? (
-                <p className="text-zinc-400">No expenses in this period.</p>
+                <p className="text-zinc-400">
+                  No expenses in this period. Add bills on the Expenses page
+                  (use MONTHLY for salaries).
+                </p>
               ) : (
                 <div className="space-y-4">
                   {expenseBreakdown.map((item) => (
@@ -305,7 +363,7 @@ export default function ProfitLossPage() {
             </Card>
 
             <Card>
-              <h2 className="mb-4 text-lg font-bold">Best Selling</h2>
+              <h2 className="mb-4 text-lg font-bold">Best selling</h2>
               {bestSelling.length === 0 ? (
                 <p className="text-zinc-400">No sales in this period.</p>
               ) : (

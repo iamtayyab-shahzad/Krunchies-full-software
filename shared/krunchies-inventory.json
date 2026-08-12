@@ -1,25 +1,5 @@
 {
   "restaurant": "Krunchies Pizza",
-  "note": "Phase-1 kitchen inventory: cheese + toppings only (pizzas, loaded fries, tikka roll, pasta). Stock is in base units (g / ml / pcs). Re-run: go run ./cmd/seedinventory from backend/",
-  "items": [
-    { "name": "Onion", "category": "Vegetables", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 2000 },
-    { "name": "Tomato", "category": "Vegetables", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 2000 },
-    { "name": "Capsicum", "category": "Vegetables", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 1000 },
-
-    { "name": "Pineapple", "category": "Fruits", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 1000 },
-
-    { "name": "Chicken Topping", "category": "Meat", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 2000 },
-    { "name": "Chicken Kabab", "category": "Meat", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 1000 },
-    { "name": "Seekh Kabab", "category": "Meat", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 1000 },
-    { "name": "Chicken Boti", "category": "Meat", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 1000 },
-    { "name": "Pepperoni", "category": "Meat", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 500 },
-
-    { "name": "Mozzarella Cheese", "category": "Dairy", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 3000 },
-    { "name": "Cheese Slices", "category": "Dairy", "unit_kind": "COUNT", "purchase_unit": "pcs", "units_per_purchase": 1, "minimum_stock": 50 },
-
-    { "name": "Olives", "category": "Toppings", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 500 },
-    { "name": "Mushroom", "category": "Toppings", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 500 },
-    { "name": "Jalapenos", "category": "Toppings", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 500 },
-    { "name": "Sweet Corn", "category": "Toppings", "unit_kind": "WEIGHT", "purchase_unit": "KG", "units_per_purchase": 1000, "minimum_stock": 500 }
-  ]
+  "note": "Inventory items cleared for now — log stock buys on Expenses instead. When ready to track ingredients again, add items here and run: go run ./cmd/seedinventory from backend/",
+  "items": []
 }

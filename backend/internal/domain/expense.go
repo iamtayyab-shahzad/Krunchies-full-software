@@ -13,6 +13,7 @@ const (
 
 // DefaultExpenseCategories are the running costs a restaurant actually has.
 // They seed the category dropdown so the owner can log a bill in seconds.
+// Stock / ingredient buys are logged here too (inventory recipes are optional).
 var DefaultExpenseCategories = []string{
 	"Rent",
 	"Electricity",
@@ -20,6 +21,7 @@ var DefaultExpenseCategories = []string{
 	"Water",
 	"Internet",
 	"Salaries",
+	"Inventory / Stock",
 	"Cleaning",
 	"Packaging",
 	"Advertising",
@@ -31,9 +33,8 @@ var DefaultExpenseCategories = []string{
 	"Miscellaneous",
 }
 
-// Expense is any operating cost that is not the purchase of stock. Inventory
-// purchases are deliberately excluded here — they flow through COGS instead —
-// so profit is never double-counted.
+// Expense is any operating cost for the period, including salaries, rent, and
+// stock purchases. Monthly rows are prorated across the P&L window by day.
 type Expense struct {
 	BaseModel
 	Category      string    `gorm:"size:80;not null;index" json:"category"`

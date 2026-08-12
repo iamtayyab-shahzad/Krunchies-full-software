@@ -255,7 +255,7 @@ export default function ExpensesPage() {
     <div>
       <PageHeader
         title="Expenses"
-        description="Bills and running costs (not stock buys). Use WEEKLY/MONTHLY once — Profit & Loss shares them across days."
+        description="Log every cost here: salaries, rent, utilities, and stock buys. Use MONTHLY for salaries — Profit & Loss splits them by days in the month."
         action={
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" />
@@ -457,9 +457,9 @@ export default function ExpensesPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-zinc-500">
-                MONTHLY/WEEKLY: enter the bill once (e.g. rent). Do not also add
-                a separate one-off row for the same bill, or profit will count it
-                twice.
+                Salaries/rent: choose MONTHLY once. Stock buys: NONE on the
+                purchase day (category Inventory / Stock). Do not also add a
+                one-off row for the same monthly bill.
               </p>
             </div>
             <div className="space-y-2 sm:col-span-2">

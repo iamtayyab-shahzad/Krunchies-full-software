@@ -41,45 +41,28 @@ func TestProfitLossShape(t *testing.T) {
 		Start:       time.Now(),
 		End:         time.Now().Add(24 * time.Hour),
 		Revenue:     100000,
-		COGS:        30000,
-		GrossProfit: 70000,
+		COGS:        0,
+		GrossProfit: 100000,
 		Expenses:    20000,
-		WastageCost: 1000,
-		NetProfit:   49000,
+		WastageCost: 0,
+		NetProfit:   80000,
 	}
-	pl.FoodCostPercent = (float64(pl.COGS) / float64(pl.Revenue)) * 100
-	if pl.FoodCostPercent != 30 {
-		t.Fatalf("food cost %% = %v", pl.FoodCostPercent)
-	}
-	if pl.NetProfit != pl.GrossProfit-pl.Expenses-pl.WastageCost {
+	// Owner model: profit = sales − expenses (stock buys live in expenses).
+	if pl.NetProfit != pl.Revenue-pl.Expenses {
 		t.Fatal("net profit formula broken")
 	}
 }
 
-func TestFoodCostFallbackPrefersRecipeCOGS(t *testing.T) {
-	recipeCOGS := 10000
+func TestFoodCostSkippedWhenUsingExpenses(t *testing.T) {
+	recipeCOGS := 0
 	purchases := 25000
-	food := recipeCOGS
-	source := "cogs"
-	if recipeCOGS == 0 && purchases > 0 {
-		food = purchases
-		source = "purchases"
-	} else if recipeCOGS == 0 {
-		source = "none"
-	}
-	if food != 10000 || source != "cogs" {
-		t.Fatalf("should prefer recipe COGS, got food=%d source=%s", food, source)
-	}
-
-	recipeCOGS = 0
-	food = recipeCOGS
-	source = "cogs"
-	if recipeCOGS == 0 && purchases > 0 {
-		food = purchases
-		source = "purchases"
-	}
-	if food != 25000 || source != "purchases" {
-		t.Fatalf("should fall back to purchases, got food=%d source=%s", food, source)
+	// New model ignores purchase fallback — food cost stays unused.
+	food := 0
+	source := "none"
+	_ = recipeCOGS
+	_ = purchases
+	if food != 0 || source != "none" {
+		t.Fatalf("expected unused food cost, got food=%d source=%s", food, source)
 	}
 }
 
