@@ -119,7 +119,7 @@ async function fetchProductsRemote(): Promise<Product[]> {
 }
 
 async function fetchOrdersRemote(): Promise<Order[]> {
-  const rows = await apiFetch<Order[]>("/orders?limit=100");
+  const rows = await apiFetch<Order[]>("/orders?limit=200");
   await replaceOrdersPreservingUnsynced(rows);
   return listLocalOrders();
 }
@@ -318,7 +318,7 @@ export const customersRepo = {
     return localFirst(
       "customers",
       async () => {
-        const orders = await apiFetch<Order[]>("/orders?limit=100");
+        const orders = await apiFetch<Order[]>("/orders?limit=200");
         await replaceOrdersPreservingUnsynced(orders);
         return listLocalCustomers();
       },

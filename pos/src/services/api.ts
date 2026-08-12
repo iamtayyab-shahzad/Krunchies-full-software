@@ -1171,12 +1171,50 @@ async function localSalesTotals() {
   };
 }
 
+/**
+ * Prefer the higher of local vs cloud so a till with empty IndexedDB still
+ * shows completed sales that are already in the database (and a till with
+ * unsynced local completes is not undercounted by a stale cloud total).
+ */
+async function bestSalesFigure(
+  localTotal: number,
+  localCount: number,
+  fetchCloud: () => Promise<{ total: number; order_count?: number }>,
+): Promise<{ total: number; order_count: number }> {
+  if (!isOnline()) {
+    return { total: localTotal, order_count: localCount };
+  }
+  try {
+    const cloud = await fetchCloud();
+    const cloudTotal = Number(cloud.total) || 0;
+    const cloudCount = Number(cloud.order_count) || 0;
+    if (cloudTotal > localTotal) {
+      return {
+        total: cloudTotal,
+        order_count: cloudCount > 0 ? cloudCount : localCount,
+      };
+    }
+    if (localTotal > cloudTotal) {
+      return { total: localTotal, order_count: localCount };
+    }
+    return {
+      total: localTotal,
+      order_count: Math.max(localCount, cloudCount),
+    };
+  } catch {
+    return { total: localTotal, order_count: localCount };
+  }
+}
+
 export const analyticsApi = {
   todaySales: async () => {
     const { today, todayCount } = await localSalesTotals();
-    // POS till total is always local unique COMPLETED sales (Karachi day).
-    // Cloud is comparison only — never replace the till after a long outage.
-    return { total: today, order_count: todayCount };
+    return bestSalesFigure(today, todayCount, async () => {
+      const date = karachiYmd();
+      return apiFetch<{ total: number; order_count: number }>(
+        `/analytics/sales?date=${encodeURIComponent(date)}`,
+      );
+    });
   },
   cloudSalesForDay: (dayYmd?: string) => {
     const date = dayYmd || karachiYmd();
@@ -1215,15 +1253,27 @@ export const analyticsApi = {
   },
   yesterdaySales: async () => {
     const { yesterday } = await localSalesTotals();
-    return { total: yesterday };
+    const best = await bestSalesFigure(yesterday, 0, async () => {
+      const r = await apiFetch<{ total: number }>("/analytics/yesterday-sales");
+      return { total: r.total };
+    });
+    return { total: best.total };
   },
   weeklySales: async () => {
     const { weekly } = await localSalesTotals();
-    return { total: weekly };
+    const best = await bestSalesFigure(weekly, 0, async () => {
+      const r = await apiFetch<{ total: number }>("/analytics/weekly-sales");
+      return { total: r.total };
+    });
+    return { total: best.total };
   },
   monthlySales: async () => {
     const { monthly } = await localSalesTotals();
-    return { total: monthly };
+    const best = await bestSalesFigure(monthly, 0, async () => {
+      const r = await apiFetch<{ total: number }>("/analytics/monthly-sales");
+      return { total: r.total };
+    });
+    return { total: best.total };
   },
   /** Single day: { date } or range: { from, to } — Asia/Karachi calendar days. */
   salesForPeriod: (params: { date: string } | { from: string; to: string }) => {

@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { resetCustomerPassword } from "@/services/api";
 
@@ -78,7 +78,7 @@ export default function ResetClient() {
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="password">New password</Label>
-          <Input id="password" type="password" {...register("password")} />
+          <PasswordInput id="password" {...register("password")} />
           <p className="text-xs text-zinc-500">At least 6 characters</p>
           {errors.password && (
             <p className="text-xs text-red-400">{errors.password.message}</p>
@@ -86,9 +86,8 @@ export default function ResetClient() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm password</Label>
-          <Input
+          <PasswordInput
             id="confirmPassword"
-            type="password"
             {...register("confirmPassword")}
           />
           {errors.confirmPassword && (

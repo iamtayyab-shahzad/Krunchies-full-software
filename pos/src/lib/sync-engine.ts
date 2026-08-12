@@ -77,9 +77,21 @@ const DEFAULT_STATE: SyncEngineState = {
 let state: SyncEngineState = { ...DEFAULT_STATE };
 const listeners = new Set<Listener>();
 let syncPromise: Promise<void> | null = null;
-let backoffMs = 1000;
+let backoffMs = 500;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let drainTimer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
+
+/** Push remaining due queue items without waiting for the slow interval. */
+function scheduleDrainSoon() {
+  if (!isOnline()) return;
+  if (drainTimer) clearTimeout(drainTimer);
+  drainTimer = setTimeout(() => {
+    drainTimer = null;
+    if (!isOnline()) return;
+    void runSync("drain");
+  }, 50);
+}
 
 function emit() {
   for (const l of listeners) l(state);
@@ -158,7 +170,7 @@ function bumpBackoff() {
 }
 
 function resetBackoff() {
-  backoffMs = 1000;
+  backoffMs = 500;
 }
 
 async function resolveOrderId(id: string) {
@@ -623,7 +635,7 @@ export async function runSync(reason: string = "manual"): Promise<void> {
   syncPromise = (async () => {
     setState({ online: true, syncing: true, completed: 0, current_action: null });
     try {
-      if (reason === "online" || reason === "startup" || reason === "manual") {
+      if (reason === "online" || reason === "startup" || reason === "manual" || reason === "visible") {
         await reviveDeadActionsOnReconnect();
       }
       const pending = await listPendingActions();
@@ -710,9 +722,8 @@ export async function runSync(reason: string = "manual"): Promise<void> {
       await pruneSyncedActions(50);
       await pruneCacheKeys([]);
 
-      // Interval ticks only drain the queue — skip full catalog refresh unless
-      // something actually synced (or user/startup/online forced a pull).
-      // "skip" (e.g. COMPLETE waiting on CREATE) must not trigger a full pull.
+      // Keep order push fast: enqueue/drain only drain the queue. Full catalog
+      // pull runs on startup, reconnect, tab focus, manual sync, or interval.
       const stillPending = await listPendingActions();
       const stillIds = new Set(stillPending.map((a) => a.id));
       const syncedSomething = due.some((a) => !stillIds.has(a.id));
@@ -721,12 +732,13 @@ export async function runSync(reason: string = "manual"): Promise<void> {
         reason === "manual" ||
         reason === "startup" ||
         reason === "online" ||
-        syncedSomething;
+        reason === "visible" ||
+        (reason === "interval" && (syncedSomething || due.length === 0));
 
       if (shouldRefreshCatalog && (!hadFailure || reason === "manual")) {
         try {
           const [orders, inventory] = await Promise.all([
-            apiFetch<Order[]>("/orders?limit=100"),
+            apiFetch<Order[]>("/orders?limit=200"),
             apiFetch<InventoryItem[]>("/inventory"),
           ]);
           await replaceOrdersPreservingUnsynced(orders);
@@ -746,6 +758,17 @@ export async function runSync(reason: string = "manual"): Promise<void> {
         resetBackoff();
       }
       notifyClients();
+
+      // Completes enqueued while CREATE was in flight must not wait on interval.
+      // Only re-drain when this pass actually moved the queue (avoids a skip loop).
+      const nowMs = Date.now();
+      const dueLeft = stillPending.some((a) => {
+        if (!a.next_retry_at) return true;
+        return new Date(a.next_retry_at).getTime() <= nowMs;
+      });
+      if (syncedSomething && dueLeft && isOnline()) {
+        scheduleDrainSoon();
+      }
     } finally {
       await refreshPendingCount();
       setState({ syncing: false, current_action: null });
@@ -787,25 +810,43 @@ export function startSyncEngine() {
       clearTimeout(retryTimer);
       retryTimer = null;
     }
+    if (drainTimer) {
+      clearTimeout(drainTimer);
+      drainTimer = null;
+    }
   };
   window.addEventListener("online", onOnline);
   window.addEventListener("offline", onOffline);
   const onConnectivity = (e: Event) => {
-    const online = Boolean((e as CustomEvent<{ online?: boolean }>).detail?.online);
+    const online = Boolean(
+      (e as CustomEvent<{ online?: boolean }>).detail?.online,
+    );
     setState({ online });
+    // API reachable again after a forced-offline cooldown — push immediately.
+    if (online) {
+      resetBackoff();
+      void runSync("online");
+    }
   };
   window.addEventListener(POS_CONNECTIVITY_EVENT, onConnectivity);
+
+  const onVisible = () => {
+    if (document.hidden) return;
+    if (!isOnline()) return;
+    void runSync("visible");
+  };
+  document.addEventListener("visibilitychange", onVisible);
+
   setState({ online: isOnline() });
 
   const interval = setInterval(() => {
-    // Never thrash while the tab is in the background or we're offline.
     if (typeof document !== "undefined" && document.hidden) return;
     if (!isOnline()) {
       void refreshPendingCount();
       return;
     }
     void runSync("interval");
-  }, 90_000);
+  }, 15_000);
 
   if (isOnline()) void runSync("startup");
 
@@ -813,8 +854,10 @@ export function startSyncEngine() {
     window.removeEventListener("online", onOnline);
     window.removeEventListener("offline", onOffline);
     window.removeEventListener(POS_CONNECTIVITY_EVENT, onConnectivity);
+    document.removeEventListener("visibilitychange", onVisible);
     clearInterval(interval);
     if (retryTimer) clearTimeout(retryTimer);
+    if (drainTimer) clearTimeout(drainTimer);
     started = false;
   };
 }
@@ -824,6 +867,16 @@ export async function enqueueAndTrack(
 ) {
   const item = await enqueueAction(action);
   await refreshPendingCount();
-  if (isOnline()) void runSync("enqueue");
+  if (!isOnline()) return item;
+  // If CREATE is already syncing, wait then start another pass so immediate
+  // COMPLETE is not stuck until the next interval tick.
+  if (syncPromise) {
+    try {
+      await syncPromise;
+    } catch {
+      /* ignore */
+    }
+  }
+  void runSync("enqueue");
   return item;
 }
