@@ -176,7 +176,7 @@ export default function CartPage() {
             </div>
             {discount > 0 ? (
               <div className="flex justify-between text-emerald-400">
-                <span>{weekendPromoLabel() || "Promo discount"}</span>
+                <span>{weekendPromoLabel(items) || "Promo discount"}</span>
                 <span>-{formatPrice(discount, currency)}</span>
               </div>
             ) : null}

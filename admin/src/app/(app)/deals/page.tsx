@@ -177,8 +177,8 @@ export default function DealsPage() {
           onClick={() => setTab("marketing")}
           className={`rounded-lg px-4 py-2 text-sm font-semibold ${
             tab === "marketing"
-              ? "bg-orange-500/20 text-orange-200"
-              : "text-zinc-400 hover:text-white"
+              ? "bg-orange-100 text-orange-900"
+              : "text-zinc-500 hover:text-zinc-900"
           }`}
         >
           Marketing deals
@@ -188,8 +188,8 @@ export default function DealsPage() {
           onClick={() => setTab("discounts")}
           className={`rounded-lg px-4 py-2 text-sm font-semibold ${
             tab === "discounts"
-              ? "bg-orange-500/20 text-orange-200"
-              : "text-zinc-400 hover:text-white"
+              ? "bg-orange-100 text-orange-900"
+              : "text-zinc-500 hover:text-zinc-900"
           }`}
         >
           Discount rules

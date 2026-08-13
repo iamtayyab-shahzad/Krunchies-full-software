@@ -1,7 +1,9 @@
 /** Thin wrappers — discount math comes from cached Admin rules. */
 
 import {
+  anyRuleMatchesToday,
   bestDiscountLabel,
+  bestMatchingRule,
   discountFromRules,
   eligiblePromoSubtotal,
   isDealLineName,
@@ -45,20 +47,47 @@ function rulesOrLegacy(): DiscountRule[] {
   return cachedRules.length ? cachedRules : legacyFallbackRules();
 }
 
+export type ActivePromoInfo = {
+  name: string;
+  min_subtotal: number;
+  percent: number;
+};
+
+/** Rule that applies (or would apply) today for UI labels / hints. */
+export function activePromoInfo(
+  lines?: PromoLine[],
+  date = new Date(),
+): ActivePromoInfo | null {
+  const rule = bestMatchingRule(rulesOrLegacy(), date, lines);
+  if (!rule?.name) return null;
+  return {
+    name: rule.name,
+    min_subtotal: rule.min_subtotal || 0,
+    percent: rule.percent,
+  };
+}
+
 export function isWeekendPromoDay(date = new Date()): boolean {
-  return (
-    discountFromRules(rulesOrLegacy(), [{ price: 2000, quantity: 1 }], date) > 0
-  );
+  return anyRuleMatchesToday(rulesOrLegacy(), date);
 }
 
 export function weekendDiscount(lines: PromoLine[], date = new Date()): number {
   return discountFromRules(rulesOrLegacy(), lines, date);
 }
 
-export function weekendPromoLabel(date = new Date()): string | null {
-  return bestDiscountLabel(
-    rulesOrLegacy(),
-    [{ price: 2000, quantity: 1, product_name: "Pizza" }],
-    date,
-  );
+export function weekendPromoLabel(
+  linesOrDate?: PromoLine[] | Date,
+  date = new Date(),
+): string | null {
+  if (linesOrDate instanceof Date) {
+    return activePromoInfo(undefined, linesOrDate)?.name || null;
+  }
+  if (Array.isArray(linesOrDate)) {
+    return (
+      bestDiscountLabel(rulesOrLegacy(), linesOrDate, date) ||
+      activePromoInfo(linesOrDate, date)?.name ||
+      null
+    );
+  }
+  return activePromoInfo(undefined, date)?.name || null;
 }

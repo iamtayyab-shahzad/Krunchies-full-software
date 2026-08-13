@@ -41,7 +41,7 @@ import {
   WALKIN_LOCATION_ID,
 } from "@/lib/utils";
 import { printCustomerReceipt, printKitchenReceipt, encodeKitchenInstructions } from "@/lib/receipt";
-import { weekendPromoLabel } from "@/lib/weekend-promo";
+import { activePromoInfo, weekendPromoLabel } from "@/lib/weekend-promo";
 import { deleteDraft } from "@/lib/offline-db";
 import { ordersShareIdentity } from "@/lib/order-identity";
 import { PhoneSuggest } from "@/components/phone-suggest";
@@ -849,21 +849,30 @@ export default function NewOrderPage() {
           </div>
 
           <div className="space-y-1 rounded-lg border border-zinc-800 p-3 text-sm">
-            {weekendPromoLabel() ? (
-              <p className="mb-2 rounded-md bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400">
-                {weekendPromoLabel()}
-                {bill.discount <= 0
-                  ? " — add Rs 1,000+ of non-deal items to apply"
-                  : null}
-              </p>
-            ) : null}
+            {(() => {
+              const promo = activePromoInfo(bill.items);
+              if (!promo) return null;
+              const minLabel = promo.min_subtotal.toLocaleString("en-PK");
+              return (
+                <p className="mb-2 rounded-md bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400">
+                  {promo.name}
+                  {bill.discount <= 0
+                    ? ` — add Rs ${minLabel}+ of non-deal items to apply`
+                    : null}
+                </p>
+              );
+            })()}
             <div className="flex justify-between text-zinc-400">
               <span>Subtotal</span>
               <span>{formatPrice(bill.subtotal, currency)}</span>
             </div>
             {bill.discount > 0 ? (
               <div className="flex justify-between text-emerald-400">
-                <span>Fri & Sun 10% off</span>
+                <span>
+                  {weekendPromoLabel(bill.items) ||
+                    activePromoInfo(bill.items)?.name ||
+                    "Promo discount"}
+                </span>
                 <span>-{formatPrice(bill.discount, currency)}</span>
               </div>
             ) : null}

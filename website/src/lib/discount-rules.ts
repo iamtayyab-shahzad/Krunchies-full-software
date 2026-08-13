@@ -155,15 +155,50 @@ export function bestDiscountLabel(
   lines: PromoLine[],
   date = new Date(),
 ): string | null {
-  let best = 0;
-  let label: string | null = null;
+  return bestMatchingRule(rules, date, lines)?.name || null;
+}
+
+/**
+ * Winning rule for the cart (max Rs), or if nothing qualifies yet,
+ * the strongest schedule-matching rule today (highest %).
+ */
+export function bestMatchingRule(
+  rules: DiscountRule[],
+  date = new Date(),
+  lines?: PromoLine[],
+): DiscountRule | null {
+  if (lines && lines.length > 0) {
+    let bestAmt = 0;
+    let winner: DiscountRule | null = null;
+    for (const rule of rules) {
+      if (!rule.active || !ruleMatchesSchedule(rule, date)) continue;
+      const amt = amountForRule(rule, eligibleForRule(rule, lines));
+      if (amt > bestAmt) {
+        bestAmt = amt;
+        winner = rule;
+      }
+    }
+    if (winner) return winner;
+  }
+
+  let best: DiscountRule | null = null;
   for (const rule of rules) {
     if (!rule.active || !ruleMatchesSchedule(rule, date)) continue;
-    const amt = amountForRule(rule, eligibleForRule(rule, lines));
-    if (amt > best) {
-      best = amt;
-      label = rule.name || null;
+    if (
+      !best ||
+      rule.percent > best.percent ||
+      (rule.percent === best.percent &&
+        (rule.min_subtotal || 0) < (best.min_subtotal || 0))
+    ) {
+      best = rule;
     }
   }
-  return label;
+  return best;
+}
+
+export function anyRuleMatchesToday(
+  rules: DiscountRule[],
+  date = new Date(),
+): boolean {
+  return rules.some((r) => r.active && ruleMatchesSchedule(r, date));
 }

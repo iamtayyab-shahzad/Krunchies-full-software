@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bestDiscountLabel,
+  bestMatchingRule,
   discountFromRules,
   ruleMatchesSchedule,
   type DiscountRule,
@@ -91,5 +92,31 @@ describe("discount-rules", () => {
     expect(ruleMatchesSchedule(rule, new Date("2026-08-21T12:00:00+05:00"))).toBe(
       false,
     );
+  });
+
+  it("picks strongest schedule-matching rule when cart below min", () => {
+    const day = new Date("2026-08-13T12:00:00+05:00");
+    const rules: DiscountRule[] = [
+      {
+        name: "Azaadi Discount",
+        active: true,
+        percent: 20,
+        min_subtotal: 2000,
+        schedule_type: "always",
+        exclude_deals: true,
+      },
+      {
+        name: "Fri & Sun 10% off",
+        active: true,
+        percent: 10,
+        min_subtotal: 1000,
+        schedule_type: "weekdays",
+        weekdays_json: "[5,0]",
+        exclude_deals: true,
+      },
+    ];
+    const winner = bestMatchingRule(rules, day);
+    expect(winner?.name).toBe("Azaadi Discount");
+    expect(winner?.min_subtotal).toBe(2000);
   });
 });
