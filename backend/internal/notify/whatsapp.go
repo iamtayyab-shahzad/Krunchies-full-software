@@ -19,12 +19,15 @@ import (
 
 const graphAPIBase = "https://graph.facebook.com/v21.0"
 
+const websiteOrderTemplateName = "website_order_alert"
+const websiteOrderTemplateLang = "en_US"
+
 // Always also notify this shop phone (03000128562) for website orders.
 const extraOwnerPhonePK = "923000128562"
 
 var missingEnvOnce sync.Once
 
-// OrderAlert is the WhatsApp text payload for a new website order.
+// OrderAlert is the WhatsApp payload for a new website order.
 type OrderAlert struct {
 	OrderID       uuid.UUID
 	OrderNumber   string
@@ -59,6 +62,33 @@ type textMessagePayload struct {
 	} `json:"text"`
 }
 
+type templateMessagePayload struct {
+	MessagingProduct string               `json:"messaging_product"`
+	To               string               `json:"to"`
+	Type             string               `json:"type"`
+	Template         templateMessageBody  `json:"template"`
+}
+
+type templateMessageBody struct {
+	Name       string              `json:"name"`
+	Language   templateLanguage    `json:"language"`
+	Components []templateComponent `json:"components"`
+}
+
+type templateLanguage struct {
+	Code string `json:"code"`
+}
+
+type templateComponent struct {
+	Type       string              `json:"type"`
+	Parameters []templateParameter `json:"parameters"`
+}
+
+type templateParameter struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
 // NotifyWebsiteOrderAsync sends a detailed WhatsApp alert to all configured owner phones.
 // Safe after commit: goroutine, never fails the order, no-ops if Meta env is missing.
 func NotifyWebsiteOrderAsync(alert OrderAlert) {
@@ -86,12 +116,11 @@ func notifyWebsiteOrder(alert OrderAlert) {
 		return
 	}
 
-	body := formatOrderAlert(alert)
 	url := graphAPIBase + "/" + phoneNumberID + "/messages"
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	for _, to := range phones {
-		if err := sendWhatsAppText(client, url, token, to, body); err != nil {
+		if err := sendWebsiteOrderTemplate(client, url, token, to, alert); err != nil {
 			log.Printf("whatsapp notify: send failed for order %s to %s: %v", alert.OrderID, to, err)
 			continue
 		}
@@ -100,6 +129,7 @@ func notifyWebsiteOrder(alert OrderAlert) {
 }
 
 // SendWhatsAppText sends a plain-text WhatsApp message to one recipient.
+// Used for password-reset replies (not order alerts).
 func SendWhatsAppText(to, body string) error {
 	token := strings.TrimSpace(os.Getenv("WHATSAPP_TOKEN"))
 	phoneNumberID := strings.TrimSpace(os.Getenv("WHATSAPP_PHONE_NUMBER_ID"))
@@ -127,6 +157,75 @@ func SendWhatsAppText(to, body string) error {
 // NormalizePhone converts local PK numbers to international digits for WhatsApp API.
 func NormalizePhone(raw string) string {
 	return normalizePhone(raw)
+}
+
+func sendWebsiteOrderTemplate(client *http.Client, url, token, to string, alert OrderAlert) error {
+	payload := buildWebsiteOrderTemplatePayload(to, alert)
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	log.Printf("whatsapp notify: sending template payload: %s", string(raw))
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("graph API %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return nil
+}
+
+func buildWebsiteOrderTemplatePayload(to string, alert OrderAlert) templateMessagePayload {
+	orderRef := strings.TrimSpace(alert.OrderNumber)
+	if orderRef == "" {
+		orderRef = alert.OrderID.String()
+	}
+	payment := strings.TrimSpace(alert.PaymentMethod)
+	if payment != "" {
+		payment = strings.ToUpper(payment)
+	}
+
+	return templateMessagePayload{
+		MessagingProduct: "whatsapp",
+		To:               to,
+		Type:             "template",
+		Template: templateMessageBody{
+			Name:     websiteOrderTemplateName,
+			Language: templateLanguage{Code: websiteOrderTemplateLang},
+			Components: []templateComponent{{
+				Type: "body",
+				Parameters: []templateParameter{
+					{Type: "text", Text: waParam(orderRef)},
+					{Type: "text", Text: waParam(alert.CustomerName)},
+					{Type: "text", Text: waParam(alert.Phone)},
+					{Type: "text", Text: waParam(alert.Address)},
+					{Type: "text", Text: waParam(alert.LocationName)},
+					{Type: "text", Text: waParam(payment)},
+					{Type: "text", Text: waParam(formatItemsTotalsNotesBlock(alert))},
+				},
+			}},
+		},
+	}
+}
+
+// waParam ensures Meta body parameters are never empty (empty → API reject).
+func waParam(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 func sendWhatsAppText(client *http.Client, url, token, to, body string) error {
@@ -182,6 +281,13 @@ func formatOrderAlert(a OrderAlert) string {
 	if a.PaymentMethod != "" {
 		b.WriteString(fmt.Sprintf("Payment: %s\n", strings.ToUpper(a.PaymentMethod)))
 	}
+	b.WriteString(formatItemsTotalsNotesBlock(a))
+	return b.String()
+}
+
+// formatItemsTotalsNotesBlock is template body parameter 7: items, money, notes.
+func formatItemsTotalsNotesBlock(a OrderAlert) string {
+	var b strings.Builder
 	if len(a.Items) > 0 {
 		b.WriteString("Items:\n")
 		for _, it := range a.Items {

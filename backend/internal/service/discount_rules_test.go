@@ -8,6 +8,27 @@ import (
 	"backend/internal/domain"
 )
 
+func TestParseFlexibleCalendarDay_YMDAndRFC3339(t *testing.T) {
+	ymd, err := ParseFlexibleCalendarDay("2026-06-01")
+	if err != nil || ymd == nil {
+		t.Fatalf("ymd: %v %v", ymd, err)
+	}
+	if ymd.Format("2006-01-02") != "2026-06-01" {
+		t.Fatalf("ymd day=%s", ymd.Format("2006-01-02"))
+	}
+	rfc, err := ParseFlexibleCalendarDay("2026-08-14T00:00:00+05:00")
+	if err != nil || rfc == nil {
+		t.Fatalf("rfc: %v %v", rfc, err)
+	}
+	if rfc.Format("2006-01-02") != "2026-08-14" {
+		t.Fatalf("rfc day=%s", rfc.Format("2006-01-02"))
+	}
+	empty, err := ParseFlexibleCalendarDay("")
+	if err != nil || empty != nil {
+		t.Fatalf("empty: %v %v", empty, err)
+	}
+}
+
 func TestRuleMatchesSchedule_Weekdays(t *testing.T) {
 	end := time.Date(2026, 8, 31, 0, 0, 0, 0, karachiLoc)
 	weekdays, _ := json.Marshal([]int{int(time.Friday), int(time.Sunday)})

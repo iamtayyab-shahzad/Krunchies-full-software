@@ -23,16 +23,17 @@ func NewDiscountRuleHandler(service *service.DiscountRuleService) *DiscountRuleH
 }
 
 type discountRuleRequest struct {
-	Name         string     `json:"name"`
-	Active       *bool      `json:"active"`
-	Percent      int        `json:"percent"`
-	MinSubtotal  int        `json:"min_subtotal"`
-	ScheduleType string     `json:"schedule_type"`
-	StartDate    *time.Time `json:"start_date"`
-	EndDate      *time.Time `json:"end_date"`
-	Weekdays     []int      `json:"weekdays"`
-	WeekdaysJSON string     `json:"weekdays_json"`
-	ExcludeDeals *bool      `json:"exclude_deals"`
+	Name         string `json:"name"`
+	Active       *bool  `json:"active"`
+	Percent      int    `json:"percent"`
+	MinSubtotal  int    `json:"min_subtotal"`
+	ScheduleType string `json:"schedule_type"`
+	// Dates as strings so Admin can send YYYY-MM-DD (Create) — Update already accepts both.
+	StartDate    *string `json:"start_date"`
+	EndDate      *string `json:"end_date"`
+	Weekdays     []int   `json:"weekdays"`
+	WeekdaysJSON string  `json:"weekdays_json"`
+	ExcludeDeals *bool   `json:"exclude_deals"`
 }
 
 func (h *DiscountRuleHandler) List(c *gin.Context) {
@@ -73,7 +74,11 @@ func (h *DiscountRuleHandler) Create(c *gin.Context) {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	rule := requestToRule(req)
+	rule, err := requestToRule(req)
+	if err != nil {
+		utils.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := h.service.Create(&rule); err != nil {
 		HandleError(c, err)
 		return
@@ -138,7 +143,7 @@ func (h *DiscountRuleHandler) Disable(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "discount rule disabled", nil)
 }
 
-func requestToRule(req discountRuleRequest) domain.DiscountRule {
+func requestToRule(req discountRuleRequest) (domain.DiscountRule, error) {
 	active := true
 	if req.Active != nil {
 		active = *req.Active
@@ -155,15 +160,38 @@ func requestToRule(req discountRuleRequest) domain.DiscountRule {
 	if weekdaysJSON == "" {
 		weekdaysJSON = "[]"
 	}
+	start, err := parseOptionalRuleDate(req.StartDate)
+	if err != nil {
+		return domain.DiscountRule{}, errInvalidRuleDate("start_date")
+	}
+	end, err := parseOptionalRuleDate(req.EndDate)
+	if err != nil {
+		return domain.DiscountRule{}, errInvalidRuleDate("end_date")
+	}
 	return domain.DiscountRule{
 		Name:         req.Name,
 		Active:       active,
 		Percent:      req.Percent,
 		MinSubtotal:  req.MinSubtotal,
 		ScheduleType: req.ScheduleType,
-		StartDate:    req.StartDate,
-		EndDate:      req.EndDate,
+		StartDate:    start,
+		EndDate:      end,
 		WeekdaysJSON: weekdaysJSON,
 		ExcludeDeals: exclude,
+	}, nil
+}
+
+func parseOptionalRuleDate(raw *string) (*time.Time, error) {
+	if raw == nil {
+		return nil, nil
 	}
+	day, err := service.ParseFlexibleCalendarDay(*raw)
+	if err != nil {
+		return nil, err
+	}
+	return day, nil
+}
+
+func errInvalidRuleDate(field string) error {
+	return utils.NewAppError(http.StatusBadRequest, "invalid "+field)
 }

@@ -75,3 +75,45 @@ func TestFormatOrderAlert_IncludesDetails(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildWebsiteOrderTemplatePayload(t *testing.T) {
+	alert := OrderAlert{
+		OrderNumber:   "KR-TEST123",
+		CustomerName:  "Ali",
+		Phone:         "03001234567",
+		Address:       "Street 1",
+		LocationName:  "Cantt",
+		PaymentMethod: "cod",
+		OrderNotes:    "ring bell",
+		Subtotal:      2000,
+		Discount:      200,
+		Delivery:      100,
+		GrandTotal:    1900,
+		Items: []OrderAlertItem{
+			{Name: "Chicken Tikka", Size: "Large", Quantity: 1, LineTotal: 1500},
+		},
+	}
+	payload := buildWebsiteOrderTemplatePayload("923001234567", alert)
+	if payload.Type != "template" {
+		t.Fatalf("type=%s", payload.Type)
+	}
+	if payload.Template.Name != websiteOrderTemplateName {
+		t.Fatalf("template name=%s", payload.Template.Name)
+	}
+	if payload.Template.Language.Code != websiteOrderTemplateLang {
+		t.Fatalf("lang=%s", payload.Template.Language.Code)
+	}
+	params := payload.Template.Components[0].Parameters
+	if len(params) != 7 {
+		t.Fatalf("expected 7 params, got %d", len(params))
+	}
+	if params[0].Text != "KR-TEST123" || params[5].Text != "COD" {
+		t.Fatalf("unexpected params: %+v", params)
+	}
+	block := params[6].Text
+	for _, want := range []string{"Chicken Tikka", "Subtotal: Rs.2000", "Total: Rs.1900", "ring bell"} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("param7 missing %q:\n%s", want, block)
+		}
+	}
+}

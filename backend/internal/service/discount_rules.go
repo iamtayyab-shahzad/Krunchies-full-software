@@ -42,6 +42,32 @@ func karachiDateOnly(t time.Time) time.Time {
 	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
 }
 
+// ParseFlexibleCalendarDay accepts RFC3339 or plain YYYY-MM-DD and returns
+// a Karachi calendar-day timestamp (midnight). Empty string → (nil, nil).
+func ParseFlexibleCalendarDay(raw string) (*time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		ymd := raw
+		if len(raw) >= 10 {
+			ymd = raw[:10]
+		}
+		loc := karachiLoc
+		if loc == nil {
+			loc = time.FixedZone("PKT", 5*3600)
+		}
+		t, err = time.ParseInLocation("2006-01-02", ymd, loc)
+	}
+	if err != nil {
+		return nil, err
+	}
+	day := karachiDateOnly(t)
+	return &day, nil
+}
+
 // RuleMatchesSchedule reports whether saleTime falls in the rule window (Asia/Karachi).
 func RuleMatchesSchedule(rule domain.DiscountRule, saleTime time.Time) bool {
 	day := karachiDateOnly(saleTime)

@@ -86,25 +86,15 @@ func (s *DiscountRuleService) Update(id uuid.UUID, updates map[string]any) error
 			continue
 		}
 		if s, ok := raw.(string); ok {
-			s = strings.TrimSpace(s)
-			if s == "" {
-				updates[key] = nil
-				continue
-			}
-			t, err := time.Parse(time.RFC3339, s)
-			if err != nil {
-				ymd := s
-				if len(s) > 10 {
-					ymd = s[:10]
-				}
-				t, err = time.ParseInLocation("2006-01-02", ymd, karachiLoc)
-			}
+			day, err := ParseFlexibleCalendarDay(s)
 			if err != nil {
 				return utils.NewAppError(http.StatusBadRequest, "invalid "+key)
 			}
-			// Always store calendar day in Karachi (avoids UTC day-shift in admin UI).
-			day := karachiDateOnly(t)
-			updates[key] = day
+			if day == nil {
+				updates[key] = nil
+			} else {
+				updates[key] = *day
+			}
 		}
 	}
 	return s.crud.Update(id, updates)
