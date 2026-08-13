@@ -18,6 +18,10 @@ const SPECIAL_PIZZA_CATEGORY_IDS = new Set([
   "10000000-0000-4000-8000-000000000010",
   "10000000-0000-4000-8000-000000000011",
 ]);
+/** Flyer/combo deals category — any new product in this category is a deal. */
+const DEALS_CATEGORY_IDS = new Set([
+  "10000000-0000-4000-8000-000000000012",
+]);
 
 const SIZE_ALIASES: Record<string, PizzaSizeCode> = {
   small: "S",
@@ -59,6 +63,8 @@ export function parseDealPizzaSlots(description: string): DealPizzaSlot[] {
 }
 
 export function isDealProduct(product: Product) {
+  const catId = product.category_id || product.category?.id;
+  if (catId && DEALS_CATEGORY_IDS.has(catId)) return true;
   const name = (product.category?.name || "").toLowerCase();
   if (name.includes("deal")) return true;
   const productName = (product.name || "").toLowerCase();

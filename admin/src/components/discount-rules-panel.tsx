@@ -216,8 +216,9 @@ export function DiscountRulesPanel() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-zinc-400">
           These rules change real cart/POS totals (% off above a minimum).
-          Website and POS pick them up from the server — no shop code update
-          needed after the first POS rebuild with this feature.
+          By default combo/flyer deals are excluded — use the switch on each
+          rule if you want deals included. Website and POS pick rules up from
+          the server after sync.
         </p>
         <Button onClick={openCreate}>
           <Plus className="h-4 w-4" />
@@ -240,13 +241,20 @@ export function DiscountRulesPanel() {
               <p className="text-lg font-black text-white">{r.name}</p>
               <p className="mt-1 text-sm text-zinc-400">
                 {r.percent}% off · min Rs {r.min_subtotal} · {scheduleSummary(r)}
-                {r.exclude_deals ? " · deals excluded" : ""}
+                {r.exclude_deals !== false
+                  ? " · combo deals excluded"
+                  : " · combo deals included"}
               </p>
-              <div className="mt-2 flex gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 <Badge tone={r.active ? "success" : "danger"}>
                   {r.active ? "Active" : "Off"}
                 </Badge>
                 <Badge tone="orange">{r.schedule_type}</Badge>
+                <Badge tone={r.exclude_deals !== false ? "warning" : "success"}>
+                  {r.exclude_deals !== false
+                    ? "Deals excluded"
+                    : "Deals included"}
+                </Badge>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -399,17 +407,19 @@ export function DiscountRulesPanel() {
                 onCheckedChange={(v) => setForm({ ...form, active: v })}
               />
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-3">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-3 py-3">
               <div>
-                <Label>Exclude flyer deals</Label>
-                <p className="text-xs text-zinc-500">
-                  Same as current weekend promo — deals already have savings
+                <Label>Include combo / flyer deals</Label>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Off (recommended): % discount never applies to products in the
+                  Deals category — including any new deals you add later. On:
+                  deals also get this discount.
                 </p>
               </div>
               <Switch
-                checked={form.exclude_deals}
-                onCheckedChange={(v) =>
-                  setForm({ ...form, exclude_deals: v })
+                checked={!form.exclude_deals}
+                onCheckedChange={(include) =>
+                  setForm({ ...form, exclude_deals: !include })
                 }
               />
             </div>

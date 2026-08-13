@@ -733,7 +733,7 @@ func loadCatalogMaps(
 	}
 	if len(productIDs) > 0 {
 		var products []domain.Product
-		if err := tx.Where("id IN ?", productIDs).Find(&products).Error; err != nil {
+		if err := tx.Preload("Category").Where("id IN ?", productIDs).Find(&products).Error; err != nil {
 			return nil, nil, err
 		}
 		for _, product := range products {

@@ -67,6 +67,15 @@ func (s *DiscountRuleService) Update(id uuid.UUID, updates map[string]any) error
 	if v, ok := updates["weekdays_json"].(string); ok && v == "" {
 		updates["weekdays_json"] = "[]"
 	}
+	// Accept exclude_deals as bool (JSON) — default stay true when omitted.
+	if raw, ok := updates["exclude_deals"]; ok {
+		switch v := raw.(type) {
+		case bool:
+			updates["exclude_deals"] = v
+		case string:
+			updates["exclude_deals"] = strings.EqualFold(v, "true") || v == "1"
+		}
+	}
 	for _, key := range []string{"start_date", "end_date"} {
 		raw, ok := updates[key]
 		if !ok {
@@ -84,7 +93,11 @@ func (s *DiscountRuleService) Update(id uuid.UUID, updates map[string]any) error
 			}
 			t, err := time.Parse(time.RFC3339, s)
 			if err != nil {
-				t, err = time.ParseInLocation("2006-01-02", s[:min(len(s), 10)], karachiLoc)
+				ymd := s
+				if len(s) > 10 {
+					ymd = s[:10]
+				}
+				t, err = time.ParseInLocation("2006-01-02", ymd, karachiLoc)
 			}
 			if err != nil {
 				return utils.NewAppError(http.StatusBadRequest, "invalid "+key)

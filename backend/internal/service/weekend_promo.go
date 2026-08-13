@@ -44,7 +44,13 @@ func WeekendPromoActive(now time.Time) bool {
 }
 
 func isDealProduct(p domain.Product) bool {
+	// Known seeded Deals category id (legacy menu).
 	if p.CategoryID == dealsCategoryID {
+		return true
+	}
+	// Any category whose name contains "deal" (covers renamed/new Deals categories).
+	cat := strings.ToLower(strings.TrimSpace(p.Category.Name))
+	if strings.Contains(cat, "deal") {
 		return true
 	}
 	name := strings.ToLower(p.Name)
