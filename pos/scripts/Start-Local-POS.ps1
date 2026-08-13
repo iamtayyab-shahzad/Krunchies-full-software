@@ -8,10 +8,20 @@ $AppUrl = "http://127.0.0.1:$Port/orders/new"
 $HealthUrl = "http://127.0.0.1:$Port/"
 $DataRoot = Join-Path $env:LOCALAPPDATA "KrunchiesPOS"
 $LogRoot = Join-Path $DataRoot "logs"
-$ChromeProfile = Join-Path $DataRoot "chrome-profile"
+$ChromeProfile = (Join-Path $DataRoot "chrome-profile" | Resolve-Path -ErrorAction SilentlyContinue)
+if (-not $ChromeProfile) {
+  $ChromeProfile = Join-Path $DataRoot "chrome-profile"
+}
 
 New-Item -ItemType Directory -Force -Path $LogRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $ChromeProfile | Out-Null
+
+# Ensure this Windows user can write the POS Chrome profile (usernames with spaces).
+try {
+  & icacls $DataRoot /grant "${env:USERNAME}:(OI)(CI)F" /T 2>&1 | Out-Null
+} catch {
+  # Non-fatal — Chrome may still work if permissions are already OK.
+}
 
 function Test-PosReady {
   try {
@@ -23,7 +33,6 @@ function Test-PosReady {
       -ErrorAction Stop | Out-Null
     return $true
   } catch {
-    # A redirect still proves that the local Next server is answering.
     if ($_.Exception.Response) {
       return $true
     }
@@ -39,6 +48,31 @@ function Show-PosError([string]$Message) {
     [System.Windows.MessageBoxButton]::OK,
     [System.Windows.MessageBoxImage]::Error
   ) | Out-Null
+}
+
+function Start-ChromePosApp {
+  param(
+    [string]$ChromeExe,
+    [string]$ProfileDir,
+    [string]$Url
+  )
+  # ProcessStartInfo.Arguments must quote paths that contain spaces — otherwise
+  # Chrome treats C:\Users\krunchies pizza\... as two tokens (C:\Users\krunchies).
+  $profileQuoted = $ProfileDir -replace '"', '\"'
+  $args = @(
+    "--user-data-dir=`"$profileQuoted`""
+    "--no-first-run"
+    "--disable-session-crashed-bubble"
+    "--kiosk-printing"
+    "--disable-print-preview"
+    "--app=$Url"
+  ) -join " "
+
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $ChromeExe
+  $psi.Arguments = $args
+  $psi.UseShellExecute = $false
+  [void][System.Diagnostics.Process]::Start($psi)
 }
 
 if (-not (Test-Path (Join-Path $PosRoot ".next\BUILD_ID"))) {
@@ -87,8 +121,13 @@ if (-not $Chrome) {
 
 # If POS Chrome is already running with this profile, focus it instead of
 # opening a second app window (two windows share IndexedDB and can double-sync).
+$profileNeedle = "KrunchiesPOS"
 $existing = Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.CommandLine -and $_.CommandLine -like "*KrunchiesPOS\chrome-profile*" }
+  Where-Object {
+    $_.CommandLine -and
+    $_.CommandLine -like "*$profileNeedle*" -and
+    $_.CommandLine -like "*chrome-profile*"
+  }
 if ($existing) {
   $activate = New-Object -ComObject WScript.Shell
   $null = $activate.AppActivate("Krunchies POS")
@@ -98,13 +137,4 @@ if ($existing) {
   exit 0
 }
 
-Start-Process `
-  -FilePath $Chrome `
-  -ArgumentList @(
-    "--user-data-dir=$ChromeProfile",
-    "--no-first-run",
-    "--disable-session-crashed-bubble",
-    "--kiosk-printing",
-    "--disable-print-preview",
-    "--app=$AppUrl"
-  )
+Start-ChromePosApp -ChromeExe $Chrome -ProfileDir $ChromeProfile -Url $AppUrl
