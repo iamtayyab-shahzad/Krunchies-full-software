@@ -20,7 +20,7 @@ import (
 const graphAPIBase = "https://graph.facebook.com/v21.0"
 
 const websiteOrderTemplateName = "website_order_alert"
-const websiteOrderTemplateLang = "en_US"
+const websiteOrderTemplateLang = "en"
 
 // Always also notify this shop phone (03000128562) for website orders.
 const extraOwnerPhonePK = "923000128562"
