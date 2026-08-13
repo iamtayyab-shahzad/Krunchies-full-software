@@ -410,15 +410,15 @@ export function buildKitchenReceiptHtml(order: Order) {
         ? `<div class="size">${escapeHtml(size)}</div>`
         : "";
       return `
-      <div class="item">
-        <div class="row">
-          <span class="name">${escapeHtml(itemName(item))}</span>
-          <span class="qty">${item.quantity}</span>
-        </div>
-        ${sizeHtml}
-        ${dealContentsHtml(item)}
-        ${mods}
-      </div>`;
+      <tr>
+        <td class="col-item">
+          <div class="name">${escapeHtml(itemName(item))}</div>
+          ${sizeHtml}
+          ${dealContentsHtml(item)}
+          ${mods}
+        </td>
+        <td class="col-qty">${item.quantity}</td>
+      </tr>`;
     })
     .join("");
 
@@ -428,7 +428,7 @@ export function buildKitchenReceiptHtml(order: Order) {
 <meta charset="utf-8" />
 <title>KITCHEN ${escapeHtml(order.order_number || order.id)}</title>
 <style>
-  @page { size: 80mm auto; margin: 3mm 2mm; }
+  @page { size: 80mm auto; margin: 2mm 5mm 2mm 2mm; }
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
@@ -436,9 +436,12 @@ export function buildKitchenReceiptHtml(order: Order) {
     font-weight: 400;
     line-height: 1.35;
     color: #000;
-    width: 72mm;
-    max-width: 72mm;
-    margin: 0 auto;
+    /* Same safe width as customer ticket — 80mm heads clip the far right. */
+    width: 62mm;
+    max-width: 62mm;
+    margin: 0;
+    padding: 0 4mm 0 0;
+    overflow: hidden;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -463,39 +466,43 @@ export function buildKitchenReceiptHtml(order: Order) {
     font-size: 12px;
     font-weight: 400;
     margin-bottom: 6px;
+    word-break: break-word;
   }
   .meta div { margin: 1px 0; }
-  .head {
-    display: flex;
-    justify-content: space-between;
+  table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+  col.col-item { width: auto; }
+  col.col-qty { width: 10mm; }
+  thead td {
+    font-weight: 600;
+    font-size: 12px;
     border-top: 1px solid #000;
     border-bottom: 1px solid #000;
     padding: 3px 0;
-    font-size: 12px;
-    font-weight: 600;
   }
-  .item { padding: 4px 0; }
-  .row {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
+  tbody td {
+    padding: 4px 0;
+    vertical-align: top;
     font-weight: 400;
     font-size: 13px;
   }
-  .name { flex: 1; padding-right: 4px; }
-  .qty { min-width: 12px; text-align: right; }
+  .col-qty { text-align: right; }
+  .name { word-break: break-word; }
   .size {
     font-weight: 400;
     font-size: 12px;
     margin-top: 1px;
   }
   .inc {
-    margin: 2px 0 0 8px;
+    margin: 2px 0 0 6px;
     font-size: 12px;
     font-weight: 400;
   }
   .mod {
-    margin: 1px 0 0 8px;
+    margin: 1px 0 0 6px;
     font-size: 12px;
     font-weight: 400;
   }
@@ -512,6 +519,14 @@ export function buildKitchenReceiptHtml(order: Order) {
     margin-top: 6px;
     font-weight: 400;
     font-size: 12px;
+    word-break: break-word;
+  }
+  .write-space {
+    margin-top: 8px;
+    border-top: 1px dashed #000;
+    padding-top: 4px;
+    min-height: 18mm;
+    font-size: 11px;
   }
 </style>
 </head>
@@ -523,14 +538,31 @@ export function buildKitchenReceiptHtml(order: Order) {
     <div>Bill Date : ${escapeHtml(date)} ${escapeHtml(time)}</div>
     <div>Customer : ${escapeHtml(order.customer_name || "—")}</div>
   </div>
-  <div class="head"><span>Item</span><span>Quantity</span></div>
-  ${itemsHtml || `<div class="item">No items</div>`}
+  <table>
+    <colgroup>
+      <col class="col-item" />
+      <col class="col-qty" />
+    </colgroup>
+    <thead>
+      <tr>
+        <td class="col-item">Item</td>
+        <td class="col-qty">Qty</td>
+      </tr>
+    </thead>
+    <tbody>
+      ${
+        itemsHtml ||
+        `<tr><td class="col-item" colspan="2">No items</td></tr>`
+      }
+    </tbody>
+  </table>
   <div class="foot"><span>Items : ${itemCount}</span><span>Qty : ${qtyTotal}</span></div>
   ${
     orderNotes
       ? `<div class="notes">Notes: ${escapeHtml(orderNotes)}</div>`
       : ""
   }
+  <div class="write-space">Staff notes:</div>
 </body>
 </html>`;
 }
@@ -727,9 +759,11 @@ export function buildCustomerReceiptHtml(
     border-top: 1px solid #000;
   }
   .web svg {
-    width: 26mm;
-    height: 26mm;
+    width: 28mm;
+    height: 28mm;
     display: block;
+    padding: 2mm;
+    box-sizing: content-box;
     background: #fff;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -739,6 +773,13 @@ export function buildCustomerReceiptHtml(
     font-size: 11px;
     font-weight: 400;
     line-height: 1.25;
+  }
+  .write-space {
+    margin-top: 8px;
+    border-top: 1px dashed #000;
+    padding-top: 4px;
+    min-height: 18mm;
+    font-size: 11px;
   }
 </style>
 </head>
@@ -785,6 +826,7 @@ export function buildCustomerReceiptHtml(
     ${WEBSITE_QR_SVG}
     <p>Order online &amp; skip the queue<br/>www.krunchies.pk</p>
   </div>
+  <div class="write-space">Staff notes:</div>
 </body>
 </html>`;
 }

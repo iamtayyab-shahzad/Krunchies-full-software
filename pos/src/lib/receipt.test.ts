@@ -161,10 +161,13 @@ describe("kitchen ticket layout", () => {
     );
     const html = buildKitchenReceiptHtml(order);
     expect(html).toContain("Item");
-    expect(html).toContain("Quantity");
+    expect(html).toContain("Qty");
     expect(html).toMatch(
-      /class="name">TIKKA ROLL<\/span>\s*<span class="qty">4<\/span>/,
+      /class="name">TIKKA ROLL<\/div>[\s\S]*?class="col-qty">4<\/td>/,
     );
+    expect(html).toContain("Staff notes:");
+    expect(html).toContain("write-space");
+    expect(html).toContain("width: 62mm");
     expect(html).not.toMatch(/class="qty">4x/);
     expect(html).not.toContain("font-weight: 800");
     expect(html).not.toContain("www.krunchies.pk");
@@ -241,7 +244,8 @@ describe("kitchen ticket layout", () => {
     expect(customer).toContain("viewBox=\"0 0 33 33\"");
     expect(customer).toContain('fill="#000"');
     expect(customer).not.toContain('stroke="#000"');
-    expect(customer).toContain("width: 26mm");
+    expect(customer).toContain("width: 28mm");
+    expect(customer).toContain("Staff notes:");
     expect(customer).not.toContain("font-weight: 800");
   });
 });

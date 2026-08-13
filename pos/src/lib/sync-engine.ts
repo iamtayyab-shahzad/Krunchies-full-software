@@ -146,6 +146,156 @@ export async function logConflict(
   return entry;
 }
 
+/** Clear the conflict log only (does not touch the order queue). */
+export async function clearSyncConflicts() {
+  await cacheSet(CONFLICTS_KEY, []);
+  setState({ conflicts: [] });
+}
+
+const OBSOLETE_ORDER_SYNC_ERROR =
+  /only pending orders can be edited|order already processed|already completed|already cancelled|no fields to update/i;
+
+function isObsoleteOrderUpdateError(err: unknown) {
+  if (!(err instanceof ApiError)) return false;
+  if (err.status === 409) return true;
+  return OBSOLETE_ORDER_SYNC_ERROR.test(err.message || "");
+}
+
+/**
+ * Drop queue items that cannot (and must not) change the server anymore.
+ * Safe: only clears CREATE when local→server id is already known, UPDATE when
+ * the order is already COMPLETED/CANCELLED locally, and duplicate CREATEs.
+ * Real unsynced sales are kept.
+ */
+export async function clearObsoleteOrderQueue(): Promise<number> {
+  const [pending, dead, locals] = await Promise.all([
+    listPendingActions(),
+    listDeadActions(),
+    listLocalOrders(),
+  ]);
+  const idMap =
+    (await cacheGet<Record<string, string>>("order_id_map")) || {};
+  let cleared = 0;
+
+  const localByKey = new Map<string, Order>();
+  for (const o of locals) {
+    localByKey.set(o.id, o);
+    if (o.client_order_id) localByKey.set(o.client_order_id, o);
+  }
+
+  const markClear = async (id: string) => {
+    await markActionSynced(id);
+    cleared += 1;
+  };
+
+  // Duplicate CREATE_ORDER for the same ticket → keep oldest only.
+  const createsByTicket = new Map<string, OfflineAction[]>();
+  for (const action of [...pending, ...dead]) {
+    if (action.type !== "CREATE_ORDER") continue;
+    const p = action.payload as {
+      localId?: string;
+      input?: { client_order_id?: string };
+    };
+    const key = p.input?.client_order_id || p.localId;
+    if (!key) continue;
+    const list = createsByTicket.get(key) || [];
+    list.push(action);
+    createsByTicket.set(key, list);
+  }
+  for (const list of createsByTicket.values()) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    for (const dup of list.slice(1)) {
+      await markClear(dup.id);
+    }
+  }
+
+  for (const action of [...pending, ...dead]) {
+    if (action.type === "CREATE_ORDER") {
+      const p = action.payload as {
+        localId?: string;
+        input?: { client_order_id?: string };
+      };
+      const localId = p.localId;
+      const clientId = p.input?.client_order_id || localId;
+      if (localId && idMap[localId]) {
+        await markClear(action.id);
+        continue;
+      }
+      if (clientId && idMap[clientId]) {
+        await markClear(action.id);
+        continue;
+      }
+      const local =
+        (localId && localByKey.get(localId)) ||
+        (clientId ? localByKey.get(clientId) : undefined);
+      // Local row already remapped to a server UUID and marked synced.
+      if (
+        local &&
+        local.sync_status === "synced" &&
+        localId &&
+        local.id !== localId &&
+        !String(local.id).startsWith("LOCAL-")
+      ) {
+        await markClear(action.id);
+        continue;
+      }
+      if (
+        action.dead &&
+        action.error &&
+        OBSOLETE_ORDER_SYNC_ERROR.test(action.error)
+      ) {
+        await markClear(action.id);
+      }
+      continue;
+    }
+
+    if (action.type === "UPDATE_ORDER") {
+      const id = (action.payload as { id?: string }).id;
+      if (!id) continue;
+      const serverId = idMap[id] || id;
+      const local =
+        localByKey.get(id) ||
+        localByKey.get(serverId) ||
+        locals.find(
+          (o) =>
+            o.id === id ||
+            o.id === serverId ||
+            o.client_order_id === id ||
+            o.client_order_id === serverId,
+        );
+      if (
+        local &&
+        (local.order_status === "COMPLETED" ||
+          local.order_status === "CANCELLED")
+      ) {
+        await markClear(action.id);
+        continue;
+      }
+      if (
+        action.dead &&
+        action.error &&
+        OBSOLETE_ORDER_SYNC_ERROR.test(action.error)
+      ) {
+        await markClear(action.id);
+      }
+      continue;
+    }
+
+    if (
+      (action.type === "COMPLETE_ORDER" || action.type === "CANCEL_ORDER") &&
+      action.dead &&
+      action.error &&
+      OBSOLETE_ORDER_SYNC_ERROR.test(action.error)
+    ) {
+      await markClear(action.id);
+    }
+  }
+
+  await refreshPendingCount();
+  return cleared;
+}
+
 export async function refreshPendingCount() {
   const [pending, dead] = await Promise.all([
     listPendingActions(),
@@ -195,6 +345,53 @@ async function processAction(
         orderType: "walkin" | "phone" | "website";
         localId?: string;
       };
+      // Already created earlier (id map) — do not POST again; drain follow-ups.
+      if (p.localId) {
+        const mapped = await resolveOrderId(p.localId);
+        if (mapped && mapped !== p.localId && !mapped.startsWith("LOCAL-")) {
+          const followUps = (await listPendingActions()).filter((follow) => {
+            if (follow.id === action.id) return false;
+            const fid = (follow.payload as { id?: string })?.id;
+            return fid === p.localId;
+          });
+          for (const follow of followUps) {
+            if (follow.type === "COMPLETE_ORDER") {
+              try {
+                await apiFetch(`/orders/${mapped}/complete`, {
+                  method: "PATCH",
+                });
+              } catch (err) {
+                if (!isObsoleteOrderUpdateError(err)) throw err;
+              }
+              await markActionSynced(follow.id);
+            }
+            if (follow.type === "CANCEL_ORDER") {
+              try {
+                await apiFetch(`/orders/${mapped}/cancel`, { method: "PATCH" });
+              } catch (err) {
+                if (!isObsoleteOrderUpdateError(err)) throw err;
+              }
+              await markActionSynced(follow.id);
+            }
+            if (follow.type === "UPDATE_ORDER") {
+              const updates = (
+                follow.payload as { updates: Record<string, unknown> }
+              ).updates;
+              try {
+                await apiFetch(`/orders/${mapped}`, {
+                  method: "PUT",
+                  body: JSON.stringify(updates),
+                });
+              } catch (err) {
+                if (!isObsoleteOrderUpdateError(err)) throw err;
+              }
+              await markActionSynced(follow.id);
+            }
+          }
+          notifyOrdersChanged();
+          return "ok";
+        }
+      }
       const path =
         p.orderType === "phone"
           ? "/orders/phone"
@@ -266,7 +463,19 @@ async function processAction(
         }
         for (const follow of followUps) {
           if (follow.type === "COMPLETE_ORDER") {
-            await apiFetch(`/orders/${order.id}/complete`, { method: "PATCH" });
+            try {
+              await apiFetch(`/orders/${order.id}/complete`, { method: "PATCH" });
+            } catch (err) {
+              if (
+                !(
+                  err instanceof ApiError &&
+                  (err.status === 409 ||
+                    /already|completed|not pending/i.test(err.message))
+                )
+              ) {
+                throw err;
+              }
+            }
             await markActionSynced(follow.id);
             await upsertLocalOrder({
               ...syncedOrder,
@@ -276,7 +485,19 @@ async function processAction(
             });
           }
           if (follow.type === "CANCEL_ORDER") {
-            await apiFetch(`/orders/${order.id}/cancel`, { method: "PATCH" });
+            try {
+              await apiFetch(`/orders/${order.id}/cancel`, { method: "PATCH" });
+            } catch (err) {
+              if (
+                !(
+                  err instanceof ApiError &&
+                  (err.status === 409 ||
+                    /already|cancelled|not pending/i.test(err.message))
+                )
+              ) {
+                throw err;
+              }
+            }
             await markActionSynced(follow.id);
             await upsertLocalOrder({
               ...syncedOrder,
@@ -288,10 +509,15 @@ async function processAction(
           if (follow.type === "UPDATE_ORDER") {
             const updates = (follow.payload as { updates: Record<string, unknown> })
               .updates;
-            await apiFetch(`/orders/${order.id}`, {
-              method: "PUT",
-              body: JSON.stringify(updates),
-            });
+            try {
+              await apiFetch(`/orders/${order.id}`, {
+                method: "PUT",
+                body: JSON.stringify(updates),
+              });
+            } catch (err) {
+              // Order may already be completed — edit is obsolete.
+              if (!isObsoleteOrderUpdateError(err)) throw err;
+            }
             await markActionSynced(follow.id);
           }
         }
@@ -602,10 +828,16 @@ async function processAction(
       );
       if (waiting) return "skip";
       const serverId = await resolveOrderId(p.id);
-      await apiFetch(`/orders/${serverId}`, {
-        method: "PUT",
-        body: JSON.stringify(p.updates),
-      });
+      try {
+        await apiFetch(`/orders/${serverId}`, {
+          method: "PUT",
+          body: JSON.stringify(p.updates),
+        });
+      } catch (err) {
+        // Completed/cancelled tickets cannot be edited — drop the stale update.
+        if (isObsoleteOrderUpdateError(err)) return "ok";
+        throw err;
+      }
       return "ok";
     }
     default:
@@ -620,6 +852,11 @@ async function reviveDeadActionsOnReconnect() {
   const dead = await listDeadActions();
   for (const action of dead) {
     if (action.error && PERMANENT_DEAD_ERROR.test(action.error)) continue;
+    // Do not revive edits/completes that can never succeed again.
+    if (action.error && OBSOLETE_ORDER_SYNC_ERROR.test(action.error)) {
+      await markActionSynced(action.id);
+      continue;
+    }
     await reviveDeadAction(action.id);
   }
 }
@@ -637,6 +874,12 @@ export async function runSync(reason: string = "manual"): Promise<void> {
     try {
       if (reason === "online" || reason === "startup" || reason === "manual" || reason === "visible") {
         await reviveDeadActionsOnReconnect();
+      }
+      // Drop stale CREATE/UPDATE items before hammering the API.
+      try {
+        await clearObsoleteOrderQueue();
+      } catch {
+        /* ignore prune failures */
       }
       const pending = await listPendingActions();
       const now = Date.now();

@@ -26,9 +26,118 @@ import type { Location, Offer } from "@/types";
 import {
   discardAction,
   listDeadActions,
+  listPendingActions,
   reviveDeadAction,
 } from "@/lib/offline-db";
-import { runSync } from "@/lib/sync-engine";
+import {
+  clearObsoleteOrderQueue,
+  clearSyncConflicts,
+  getSyncState,
+  runSync,
+  subscribeSync,
+} from "@/lib/sync-engine";
+
+function SyncHealthPanel() {
+  const [busy, setBusy] = useState(false);
+  const [pendingPreview, setPendingPreview] = useState<
+    { type: string; count: number }[]
+  >([]);
+  const [sync, setSync] = useState(getSyncState());
+
+  useEffect(() => subscribeSync(setSync), []);
+
+  const refreshPreview = async () => {
+    const pending = await listPendingActions();
+    const counts = new Map<string, number>();
+    for (const a of pending) {
+      counts.set(a.type, (counts.get(a.type) || 0) + 1);
+    }
+    setPendingPreview(
+      [...counts.entries()]
+        .map(([type, count]) => ({ type, count }))
+        .sort((a, b) => b.count - a.count),
+    );
+  };
+
+  useEffect(() => {
+    void refreshPreview();
+  }, [sync.pending_count, sync.syncing]);
+
+  return (
+    <section className="mb-8 rounded-xl border border-orange-500/40 bg-zinc-950 p-5">
+      <h2 className="text-xl font-bold text-orange-300">Sync health (this PC)</h2>
+      <p className="mt-1 text-sm text-zinc-400">
+        Queue and conflicts are stored only on this browser. Orders already in
+        the cloud (visible on another PC) can leave stale CREATE/UPDATE jobs
+        here — clear those safely below, then sync.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <span className="rounded bg-orange-500/20 px-2 py-1 text-orange-200">
+          {sync.pending_count} pending
+        </span>
+        <span className="rounded bg-amber-500/20 px-2 py-1 text-amber-200">
+          {sync.conflicts.length} conflicts
+        </span>
+        <span className="rounded bg-zinc-800 px-2 py-1 text-zinc-300">
+          {sync.dead_count} failed
+        </span>
+      </div>
+      {pendingPreview.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-sm text-zinc-400">
+          {pendingPreview.map((row) => (
+            <li key={row.type}>
+              {row.type}: <span className="text-zinc-200">{row.count}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-emerald-400">Queue is empty.</p>
+      )}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const n = await clearObsoleteOrderQueue();
+              await clearSyncConflicts();
+              toast.success(
+                n > 0
+                  ? `Cleared ${n} obsolete sync item(s) + conflict log`
+                  : "No obsolete items; conflict log cleared",
+              );
+              await refreshPreview();
+              void runSync("manual");
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Clear failed");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Clear obsolete order sync (safe)
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy || sync.syncing}
+          onClick={() => {
+            void runSync("manual");
+            toast.message("Sync started");
+          }}
+        >
+          Sync now
+        </Button>
+      </div>
+      <p className="mt-3 text-xs text-zinc-500">
+        Safe clear removes duplicate/stale CREATE and UPDATE jobs when the order
+        is already on the server or already completed. It does not delete sales
+        from the database.
+      </p>
+    </section>
+  );
+}
 
 function FailedSyncPanel() {
   const [items, setItems] = useState<
@@ -244,6 +353,9 @@ export default function SettingsPage() {
     <div className="h-full overflow-y-auto p-6">
       <h1 className="mb-6 text-3xl font-black">Settings</h1>
 
+      <SyncHealthPanel />
+      <FailedSyncPanel />
+
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="mb-2 text-xl font-bold">Display</h2>
         <p className="mb-4 text-sm text-zinc-400">
@@ -354,8 +466,6 @@ export default function SettingsPage() {
           Save Flavors
         </Button>
       </section>
-
-      <FailedSyncPanel />
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         <div className="mb-4 flex items-center justify-between">
