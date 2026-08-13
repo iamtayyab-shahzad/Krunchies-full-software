@@ -63,14 +63,25 @@ function parseWeekdays(raw: string): number[] {
   }
 }
 
+/** Calendar day in Asia/Karachi — never slice UTC ISO (that shifts the day back). */
 function ymd(iso: string | null | undefined): string {
   if (!iso) return "";
-  return iso.slice(0, 10);
+  const trimmed = iso.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return trimmed.slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Karachi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
 }
 
-function toIsoDate(ymd: string): string | null {
-  if (!ymd) return null;
-  return `${ymd}T00:00:00+05:00`;
+/** Send plain YYYY-MM-DD so the API stores the exact calendar day. */
+function toIsoDate(day: string): string | null {
+  if (!day) return null;
+  return day.slice(0, 10);
 }
 
 function scheduleSummary(r: DiscountRuleRow): string {

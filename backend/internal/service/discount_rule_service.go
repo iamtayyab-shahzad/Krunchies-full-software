@@ -102,7 +102,9 @@ func (s *DiscountRuleService) Update(id uuid.UUID, updates map[string]any) error
 			if err != nil {
 				return utils.NewAppError(http.StatusBadRequest, "invalid "+key)
 			}
-			updates[key] = t
+			// Always store calendar day in Karachi (avoids UTC day-shift in admin UI).
+			day := karachiDateOnly(t)
+			updates[key] = day
 		}
 	}
 	return s.crud.Update(id, updates)
@@ -167,6 +169,14 @@ func normalizeDiscountRule(model *domain.DiscountRule) error {
 	}
 	if model.WeekdaysJSON == "" {
 		model.WeekdaysJSON = "[]"
+	}
+	if model.StartDate != nil {
+		d := karachiDateOnly(*model.StartDate)
+		model.StartDate = &d
+	}
+	if model.EndDate != nil {
+		d := karachiDateOnly(*model.EndDate)
+		model.EndDate = &d
 	}
 	if model.ScheduleType == ScheduleDateRange && (model.StartDate == nil || model.EndDate == nil) {
 		return utils.NewAppError(http.StatusBadRequest, "date_range requires start_date and end_date")

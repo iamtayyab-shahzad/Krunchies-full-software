@@ -67,8 +67,11 @@ function parseWeekdays(rule: DiscountRule): number[] {
 
 function ymdOnly(iso: string | null | undefined): string | null {
   if (!iso) return null;
-  // Accept full ISO or YYYY-MM-DD
-  return iso.slice(0, 10);
+  const trimmed = iso.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return trimmed.slice(0, 10);
+  return karachiYmd(d);
 }
 
 export function ruleMatchesSchedule(
