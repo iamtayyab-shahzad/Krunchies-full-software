@@ -286,36 +286,38 @@ func formatOrderAlert(a OrderAlert) string {
 }
 
 // formatItemsTotalsNotesBlock is template body parameter 7: items, money, notes.
+// Meta rejects newlines in template parameters, so segments are joined with " | ".
 func formatItemsTotalsNotesBlock(a OrderAlert) string {
-	var b strings.Builder
+	parts := make([]string, 0, 8)
 	if len(a.Items) > 0 {
-		b.WriteString("Items:\n")
+		itemBits := make([]string, 0, len(a.Items)*2)
 		for _, it := range a.Items {
 			label := it.Name
 			if it.Size != "" {
 				label += " (" + it.Size + ")"
 			}
-			b.WriteString(fmt.Sprintf("- %dx %s - Rs.%d\n", it.Quantity, label, it.LineTotal))
+			itemBits = append(itemBits, fmt.Sprintf("%dx %s - Rs.%d", it.Quantity, label, it.LineTotal))
 			if strings.TrimSpace(it.Instructions) != "" {
-				b.WriteString(fmt.Sprintf("  note: %s\n", strings.TrimSpace(it.Instructions)))
+				itemBits = append(itemBits, "note: "+strings.TrimSpace(it.Instructions))
 			}
 		}
+		parts = append(parts, "Items: "+strings.Join(itemBits, " | "))
 	}
-	b.WriteString(fmt.Sprintf("Subtotal: Rs.%d\n", a.Subtotal))
+	parts = append(parts, fmt.Sprintf("Subtotal: Rs.%d", a.Subtotal))
 	if a.Discount > 0 {
-		b.WriteString(fmt.Sprintf("Discount: -Rs.%d\n", a.Discount))
+		parts = append(parts, fmt.Sprintf("Discount: -Rs.%d", a.Discount))
 	}
 	if a.Delivery > 0 {
-		b.WriteString(fmt.Sprintf("Delivery: Rs.%d\n", a.Delivery))
+		parts = append(parts, fmt.Sprintf("Delivery: Rs.%d", a.Delivery))
 	}
 	if a.CODFee > 0 {
-		b.WriteString(fmt.Sprintf("COD fee: Rs.%d\n", a.CODFee))
+		parts = append(parts, fmt.Sprintf("COD fee: Rs.%d", a.CODFee))
 	}
-	b.WriteString(fmt.Sprintf("Total: Rs.%d", a.GrandTotal))
+	parts = append(parts, fmt.Sprintf("Total: Rs.%d", a.GrandTotal))
 	if strings.TrimSpace(a.OrderNotes) != "" {
-		b.WriteString(fmt.Sprintf("\nNotes: %s", strings.TrimSpace(a.OrderNotes)))
+		parts = append(parts, "Notes: "+strings.TrimSpace(a.OrderNotes))
 	}
-	return b.String()
+	return strings.Join(parts, " | ")
 }
 
 // ownerPhones = WHATSAPP_OWNER_PHONE (comma-separated) + always 03000128562.

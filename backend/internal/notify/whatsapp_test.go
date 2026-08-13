@@ -111,7 +111,16 @@ func TestBuildWebsiteOrderTemplatePayload(t *testing.T) {
 		t.Fatalf("unexpected params: %+v", params)
 	}
 	block := params[6].Text
-	for _, want := range []string{"Chicken Tikka", "Subtotal: Rs.2000", "Total: Rs.1900", "ring bell"} {
+	if strings.Contains(block, "\n") {
+		t.Fatalf("param7 must be single-line, got:\n%s", block)
+	}
+	for _, want := range []string{
+		"Items: 1x Chicken Tikka (Large) - Rs.1500",
+		"Subtotal: Rs.2000",
+		"Total: Rs.1900",
+		"Notes: ring bell",
+		" | ",
+	} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("param7 missing %q:\n%s", want, block)
 		}
