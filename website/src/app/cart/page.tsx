@@ -11,6 +11,7 @@ import { useCart } from "@/context/cart-context";
 import { useSettings } from "@/hooks/use-settings";
 import { getProducts } from "@/services/api";
 import { cn, formatPrice } from "@/lib/utils";
+import { weekendPromoLabel } from "@/lib/weekend-promo";
 import type { Product, ProductSize } from "@/types";
 import { AfterHoursNotice } from "@/components/checkout/after-hours-notice";
 
@@ -175,7 +176,7 @@ export default function CartPage() {
             </div>
             {discount > 0 ? (
               <div className="flex justify-between text-emerald-400">
-                <span>Fri & Sun 10% off</span>
+                <span>{weekendPromoLabel() || "Promo discount"}</span>
                 <span>-{formatPrice(discount, currency)}</span>
               </div>
             ) : null}

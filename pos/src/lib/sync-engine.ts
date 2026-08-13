@@ -737,12 +737,30 @@ export async function runSync(reason: string = "manual"): Promise<void> {
 
       if (shouldRefreshCatalog && (!hadFailure || reason === "manual")) {
         try {
-          const [orders, inventory] = await Promise.all([
+          const [orders, inventory, discountRules] = await Promise.all([
             apiFetch<Order[]>("/orders?limit=200"),
             apiFetch<InventoryItem[]>("/inventory"),
+            apiFetch<
+              {
+                id: string;
+                name: string;
+                active: boolean;
+                percent: number;
+                min_subtotal: number;
+                schedule_type: string;
+                start_date?: string | null;
+                end_date?: string | null;
+                weekdays_json?: string;
+                exclude_deals?: boolean;
+              }[]
+            >("/discount-rules/active").catch(() => []),
           ]);
           await replaceOrdersPreservingUnsynced(orders);
           await replaceInventory(inventory);
+          const { setDiscountRulesCache } = await import("@/lib/weekend-promo");
+          const { cacheSet } = await import("@/lib/offline-db");
+          setDiscountRulesCache(discountRules || []);
+          await cacheSet("discount_rules", discountRules || []);
         } catch {
           /* ignore refresh failures */
         }
@@ -795,7 +813,19 @@ export function startSyncEngine() {
   if (started || typeof window === "undefined") return;
   started = true;
   bindConnectivityListeners();
-  void loadMeta().then(() => refreshPendingCount());
+  void loadMeta().then(async () => {
+    await refreshPendingCount();
+    try {
+      const { cacheGet } = await import("@/lib/offline-db");
+      const { setDiscountRulesCache } = await import("@/lib/weekend-promo");
+      const cached = await cacheGet<Parameters<typeof setDiscountRulesCache>[0]>(
+        "discount_rules",
+      );
+      if (cached?.length) setDiscountRulesCache(cached);
+    } catch {
+      /* ignore */
+    }
+  });
 
   const onOnline = () => {
     clearForcedOffline();

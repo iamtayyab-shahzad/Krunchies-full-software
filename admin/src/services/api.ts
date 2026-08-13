@@ -421,6 +421,39 @@ export const offersApi = {
   },
 };
 
+export type DiscountRuleRow = {
+  id: string;
+  name: string;
+  active: boolean;
+  percent: number;
+  min_subtotal: number;
+  schedule_type: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  weekdays_json: string;
+  exclude_deals: boolean;
+};
+
+export const discountRulesApi = {
+  list: () => apiFetch<DiscountRuleRow[]>("/discount-rules"),
+  create: (payload: Record<string, unknown>) =>
+    apiFetch<DiscountRuleRow>("/discount-rules", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  update: (id: string, updates: Record<string, unknown>) =>
+    apiFetch<unknown>(`/discount-rules/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    }),
+  remove: (id: string) =>
+    apiFetch<unknown>(`/discount-rules/${id}`, { method: "DELETE" }),
+  enable: (id: string) =>
+    apiFetch<unknown>(`/discount-rules/${id}/enable`, { method: "PATCH" }),
+  disable: (id: string) =>
+    apiFetch<unknown>(`/discount-rules/${id}/disable`, { method: "PATCH" }),
+};
+
 export type DeliveryLocationRow = {
   id: string;
   name: string;

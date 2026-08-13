@@ -65,6 +65,7 @@ function makeCartItemId(
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [rulesTick, setRulesTick] = useState(0);
 
   useEffect(() => {
     try {
@@ -86,6 +87,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setItems([]);
     }
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    void import("@/services/api")
+      .then(({ getActiveDiscountRules }) => getActiveDiscountRules())
+      .then(() => setRulesTick((n) => n + 1))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const onRules = () => setRulesTick((n) => n + 1);
+    window.addEventListener("discount-rules-updated", onRules);
+    return () => window.removeEventListener("discount-rules-updated", onRules);
   }, []);
 
   useEffect(() => {
@@ -225,7 +239,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       discount,
       payable: Math.max(0, subtotal - discount),
     };
-  }, [items]);
+  }, [items, rulesTick]);
 
   const actions = useMemo<CartActionsValue>(
     () => ({

@@ -22,6 +22,7 @@ type OrderService struct {
 	orderRepo     *repository.OrderRepository
 	inventoryRepo *repository.InventoryRepository
 	paymentRepo   *repository.PaymentRepository
+	discountRules *DiscountRuleService
 }
 
 func NewOrderService(db *gorm.DB) *OrderService {
@@ -30,7 +31,16 @@ func NewOrderService(db *gorm.DB) *OrderService {
 		orderRepo:     repository.NewOrderRepository(db),
 		inventoryRepo: repository.NewInventoryRepository(db),
 		paymentRepo:   repository.NewPaymentRepository(db),
+		discountRules: NewDiscountRuleService(db),
 	}
+}
+
+func (s *OrderService) activeDiscount(saleTime time.Time, allSubtotal, nonDealSubtotal int) int {
+	rules, err := s.discountRules.ListActive()
+	if err != nil || len(rules) == 0 {
+		return WeekendDiscount(saleTime, nonDealSubtotal)
+	}
+	return DiscountFromRules(rules, saleTime, allSubtotal, nonDealSubtotal)
 }
 
 var phonePattern = regexp.MustCompile(`^[0-9+()[:space:]-]{7,20}$`)
@@ -195,7 +205,7 @@ func (s *OrderService) CreateOrder(
 		})
 	}
 
-	discount := WeekendDiscount(saleTime, eligibleSubtotal)
+	discount := s.activeDiscount(saleTime, subtotal, eligibleSubtotal)
 	order.Subtotal = subtotal
 	order.Discount = discount
 	order.GrandTotal = subtotal - discount + location.DeliveryCharge + codFee
@@ -405,7 +415,7 @@ func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) e
 				SpecialInstructions: strings.TrimSpace(item.SpecialInstructions),
 			})
 		}
-		discount := WeekendDiscount(current.CreatedAt, eligibleSubtotal)
+		discount := s.activeDiscount(current.CreatedAt, subtotal, eligibleSubtotal)
 		updates["subtotal"] = subtotal
 		updates["discount"] = discount
 		updates["grand_total"] = subtotal - discount + location.DeliveryCharge + codFee

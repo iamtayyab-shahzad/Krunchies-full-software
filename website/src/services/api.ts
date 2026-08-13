@@ -292,6 +292,30 @@ export async function getMyOrders(limit = 5): Promise<Order[]> {
   return backendFetch<Order[]>(`/customers/me/orders${q}`, {}, true);
 }
 
+export async function getActiveDiscountRules() {
+  const { setDiscountRulesCache } = await import("@/lib/weekend-promo");
+  try {
+    const rules = await backendFetch<
+      {
+        id: string;
+        name: string;
+        active: boolean;
+        percent: number;
+        min_subtotal: number;
+        schedule_type: string;
+        start_date?: string | null;
+        end_date?: string | null;
+        weekdays_json?: string;
+        exclude_deals?: boolean;
+      }[]
+    >("/discount-rules/active");
+    setDiscountRulesCache(rules || []);
+    return rules || [];
+  } catch {
+    return [];
+  }
+}
+
 export async function resetCustomerPassword(payload: {
   token: string;
   password: string;

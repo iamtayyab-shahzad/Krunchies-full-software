@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { DiscountRulesPanel } from "@/components/discount-rules-panel";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,10 @@ const empty = (): Omit<Deal, "id"> => ({
   discountLabel: "DEAL",
 });
 
+type Tab = "marketing" | "discounts";
+
 export default function DealsPage() {
+  const [tab, setTab] = useState<Tab>("marketing");
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -39,6 +43,7 @@ export default function DealsPage() {
   const [form, setForm] = useState(empty());
 
   useEffect(() => {
+    if (tab !== "marketing") return;
     let cancelled = false;
     const load = async () => {
       setLoading(true);
@@ -54,7 +59,7 @@ export default function DealsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [tab]);
 
   const openCreate = () => {
     setEditing(null);
@@ -151,27 +156,55 @@ export default function DealsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[320px] items-center justify-center text-zinc-400">
-        Loading deals...
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader
         title="Deals & Offers"
-        description="Create promotions, popups, and homepage deals"
+        description="Marketing flyers and cart/POS % discount rules"
         action={
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            Create Deal
-          </Button>
+          tab === "marketing" ? (
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Create Deal
+            </Button>
+          ) : null
         }
       />
 
+      <div className="mb-6 flex gap-2 border-b border-zinc-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setTab("marketing")}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+            tab === "marketing"
+              ? "bg-orange-500/20 text-orange-200"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          Marketing deals
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("discounts")}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+            tab === "discounts"
+              ? "bg-orange-500/20 text-orange-200"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          Discount rules
+        </button>
+      </div>
+
+      {tab === "discounts" ? <DiscountRulesPanel /> : null}
+
+      {tab === "marketing" && loading ? (
+        <div className="flex min-h-[320px] items-center justify-center text-zinc-400">
+          Loading deals...
+        </div>
+      ) : null}
+
+      {tab === "marketing" && !loading ? (
       <div className="grid gap-4 lg:grid-cols-2">
         {deals.map((deal) => (
           <div
@@ -249,6 +282,7 @@ export default function DealsPage() {
           </div>
         ))}
       </div>
+      ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-xl">

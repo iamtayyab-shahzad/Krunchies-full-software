@@ -144,6 +144,13 @@ function toPendingDraft(state: BillState): PendingDraft {
 export function BillProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<BillState>(defaults);
   const [cartRecovered, setCartRecovered] = useState(false);
+  const [rulesTick, setRulesTick] = useState(0);
+
+  useEffect(() => {
+    const onRules = () => setRulesTick((n) => n + 1);
+    window.addEventListener("discount-rules-updated", onRules);
+    return () => window.removeEventListener("discount-rules-updated", onRules);
+  }, []);
   const hydrated = useRef(false);
   const skipPersist = useRef(true);
 
@@ -438,7 +445,7 @@ export function BillProvider({ children }: { children: ReactNode }) {
         }));
       },
     };
-  }, [state, addProduct, cartRecovered]);
+  }, [state, addProduct, cartRecovered, rulesTick]);
 
   return <BillContext.Provider value={value}>{children}</BillContext.Provider>;
 }

@@ -50,6 +50,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 	productSizeHandler := handler.NewCRUDHandler[domain.ProductSize](services.ProductSizes, "product size")
 	locationHandler := handler.NewCRUDHandler[domain.Location](services.Locations, "location")
 	offerHandler := handler.NewOfferHandler(services.Offers)
+	discountRuleHandler := handler.NewDiscountRuleHandler(services.DiscountRules)
 	inventoryHandler := handler.NewInventoryHandler(services.Inventory)
 	inventoryTxHandler := handler.NewInventoryTransactionHandler(services.InventoryTransactions)
 	recipeHandler := handler.NewRecipeHandler(services.Recipes)
@@ -102,6 +103,7 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 		api.GET("/locations/:id", locationHandler.GetByID)
 		api.GET("/offers", offerHandler.List)
 		api.GET("/offers/:id", offerHandler.GetByID)
+		api.GET("/discount-rules/active", discountRuleHandler.ListActive)
 
 		staff := api.Group("")
 		staff.Use(middleware.JWTAuth(jwtSecret, "staff"))
@@ -128,6 +130,14 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 			staff.DELETE("/offers/:id", offerHandler.Delete)
 			staff.PATCH("/offers/:id/enable", offerHandler.Enable)
 			staff.PATCH("/offers/:id/disable", offerHandler.Disable)
+
+			staff.GET("/discount-rules", discountRuleHandler.List)
+			staff.POST("/discount-rules", discountRuleHandler.Create)
+			staff.GET("/discount-rules/:id", discountRuleHandler.GetByID)
+			staff.PUT("/discount-rules/:id", discountRuleHandler.Update)
+			staff.DELETE("/discount-rules/:id", discountRuleHandler.Delete)
+			staff.PATCH("/discount-rules/:id/enable", discountRuleHandler.Enable)
+			staff.PATCH("/discount-rules/:id/disable", discountRuleHandler.Disable)
 
 			// Inventory & operations
 			staff.GET("/inventory", inventoryHandler.List)

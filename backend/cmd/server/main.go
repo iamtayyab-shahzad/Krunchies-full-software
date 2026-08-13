@@ -39,6 +39,9 @@ func main() {
 	logger.Info("database_connected", nil)
 
 	services := service.NewAppServices(db, cfg.JWT.Secret)
+	if err := services.DiscountRules.SeedDefaultWeekendRule(); err != nil {
+		logger.Error("discount_rule_seed_failed", map[string]any{"error": err.Error()})
+	}
 	router := routes.SetupRouter(services, cfg.JWT.Secret)
 
 	logger.Info("server_starting", map[string]any{"port": cfg.Port})

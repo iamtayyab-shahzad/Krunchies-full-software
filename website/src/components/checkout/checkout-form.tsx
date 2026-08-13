@@ -25,6 +25,7 @@ import { useAuth } from "@/context/auth-context";
 import { useCart } from "@/context/cart-context";
 import { LAST_ORDER_KEY, PAYMENT_METHODS } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
+import { weekendPromoLabel } from "@/lib/weekend-promo";
 import { createOrder, getLocations, getSettings } from "@/services/api";
 import type { Location, PaymentMethod, Settings } from "@/types";
 import { AfterHoursNotice } from "@/components/checkout/after-hours-notice";
@@ -373,7 +374,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             </div>
             {discount > 0 ? (
               <div className="flex justify-between text-emerald-400">
-                <span>Fri & Sun 10% off</span>
+                <span>{weekendPromoLabel() || "Promo discount"}</span>
                 <span>-{formatPrice(discount, currency)}</span>
               </div>
             ) : null}
