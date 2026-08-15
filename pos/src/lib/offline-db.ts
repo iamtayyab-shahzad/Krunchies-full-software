@@ -1,4 +1,4 @@
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { openDB, type DBSchema, type IDBPDatabase, type StoreNames } from "idb";
 import type {
   Category,
   Customer,
@@ -135,11 +135,13 @@ function getDb() {
   return dbPromise;
 }
 
-async function getAllSafe<Name extends keyof PosDB>(
+type PosStoreName = StoreNames<PosDB>;
+
+async function getAllSafe<Name extends PosStoreName>(
   store: Name,
 ): Promise<PosDB[Name]["value"][]> {
   const db = await getDb();
-  const all = await db.getAll(store);
+  const all = await db.getAll<Name>(store);
   return (all || []).filter(
     (row): row is PosDB[Name]["value"] =>
       row != null && typeof row === "object",
