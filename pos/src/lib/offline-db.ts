@@ -379,11 +379,8 @@ export async function pruneCacheKeys(keepKeys: string[]) {
   ];
   for (const row of all) {
     if (!isValidCacheRow(row)) {
-      const key = isValidCacheRow(row)
-        ? row.key
-        : typeof (row as { key?: unknown })?.key === "string"
-          ? String((row as { key: string }).key)
-          : "";
+      const maybeKey = (row as { key?: unknown }).key;
+      const key = typeof maybeKey === "string" ? maybeKey : "";
       if (key) {
         logStorageHeal("deleting malformed cache row during prune", { key });
         await db.delete("cache", key);
