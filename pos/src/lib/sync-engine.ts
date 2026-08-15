@@ -338,6 +338,10 @@ function syncActionPriority(type: string): number {
 async function processAction(
   action: OfflineAction,
 ): Promise<"ok" | "retry" | "skip" | "dead"> {
+  if (!action || typeof action.type !== "string") return "dead";
+  if (action.payload == null || typeof action.payload !== "object") {
+    return "dead";
+  }
   switch (action.type) {
     case "CREATE_ORDER": {
       const p = action.payload as {
@@ -345,6 +349,7 @@ async function processAction(
         orderType: "walkin" | "phone" | "website";
         localId?: string;
       };
+      if (!p.input || typeof p.input !== "object") return "dead";
       // Already created earlier (id map) — do not POST again; drain follow-ups.
       if (p.localId) {
         const mapped = await resolveOrderId(p.localId);
@@ -908,6 +913,10 @@ export async function runSync(reason: string = "manual"): Promise<void> {
           if (result === "ok") {
             await markActionSynced(action.id);
             setState({ completed: state.completed + 1 });
+          } else if (result === "dead") {
+            await markActionError(action.id, "Malformed sync payload", {
+              dead: true,
+            });
           } else if (result === "skip" && collectSkips) {
             skipped.push(action);
           }
@@ -963,7 +972,11 @@ export async function runSync(reason: string = "manual"): Promise<void> {
       }
 
       await pruneSyncedActions(50);
-      await pruneCacheKeys([]);
+      try {
+        await pruneCacheKeys([]);
+      } catch (err) {
+        console.warn("[pos-sync] cache prune skipped", err);
+      }
 
       // Keep order push fast: enqueue/drain only drain the queue. Full catalog
       // pull runs on startup, reconnect, tab focus, manual sync, or interval.
@@ -998,12 +1011,18 @@ export async function runSync(reason: string = "manual"): Promise<void> {
               }[]
             >("/discount-rules/active").catch(() => []),
           ]);
-          await replaceOrdersPreservingUnsynced(orders);
-          await replaceInventory(inventory);
+          if (Array.isArray(orders)) {
+            await replaceOrdersPreservingUnsynced(orders);
+          }
+          if (Array.isArray(inventory)) {
+            await replaceInventory(inventory);
+          }
           const { setDiscountRulesCache } = await import("@/lib/weekend-promo");
           const { cacheSet } = await import("@/lib/offline-db");
-          setDiscountRulesCache(discountRules || []);
-          await cacheSet("discount_rules", discountRules || []);
+          if (Array.isArray(discountRules)) {
+            setDiscountRulesCache(discountRules);
+            await cacheSet("discount_rules", discountRules);
+          }
         } catch {
           /* ignore refresh failures */
         }
@@ -1057,6 +1076,12 @@ export function startSyncEngine() {
   started = true;
   bindConnectivityListeners();
   void loadMeta().then(async () => {
+    try {
+      const { healIndexedDb } = await import("@/lib/offline-db");
+      await healIndexedDb();
+    } catch (err) {
+      console.warn("[pos-storage-heal] startup scan failed", err);
+    }
     await refreshPendingCount();
     try {
       const { cacheGet } = await import("@/lib/offline-db");

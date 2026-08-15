@@ -25,6 +25,7 @@ import { locationsApi, offersApi, settingsApi } from "@/services/api";
 import type { Location, Offer } from "@/types";
 import {
   discardAction,
+  healIndexedDb,
   listDeadActions,
   listPendingActions,
   reviveDeadAction,
@@ -175,6 +176,7 @@ function FailedSyncPanel() {
           variant="secondary"
           disabled={loading || items.length === 0}
           onClick={async () => {
+            await healIndexedDb();
             for (const item of items) await reviveDeadAction(item.id);
             toast.success("Retrying failed sync…");
             await refresh();
@@ -230,6 +232,53 @@ function FailedSyncPanel() {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+function StorageHealthPanel() {
+  const [busy, setBusy] = useState(false);
+  const [last, setLast] = useState<string | null>(null);
+
+  return (
+    <section className="mb-8 rounded-xl border border-zinc-700 bg-zinc-950 p-5">
+      <h2 className="text-xl font-bold text-zinc-100">Storage Health</h2>
+      <p className="mt-1 text-sm text-zinc-400">
+        This till stores orders in the browser. A corrupted cache row can freeze
+        sync and show Rs 0 sales. Clean now deletes only empty/broken rows — it
+        does not delete real orders.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const report = await healIndexedDb();
+              const n = report.removed.length;
+              setLast(
+                n
+                  ? `Removed ${n} broken row${n === 1 ? "" : "s"}`
+                  : "Storage looks healthy",
+              );
+              toast.success(
+                n
+                  ? `Cleaned ${n} broken storage row${n === 1 ? "" : "s"}`
+                  : "No broken rows found",
+              );
+              void runSync("manual");
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Clean failed");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Clean now
+        </Button>
+        {last ? <span className="text-xs text-zinc-500">{last}</span> : null}
+      </div>
     </section>
   );
 }
@@ -355,6 +404,7 @@ export default function SettingsPage() {
 
       <SyncHealthPanel />
       <FailedSyncPanel />
+      <StorageHealthPanel />
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="mb-2 text-xl font-bold">Display</h2>

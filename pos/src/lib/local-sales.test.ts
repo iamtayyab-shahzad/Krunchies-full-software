@@ -130,4 +130,20 @@ describe("local sales for offline dashboard", () => {
     expect(total).toBeGreaterThanOrEqual(100);
     expect(total).toBeLessThan(350); // excludes the oldest 50 for sure if outside window
   });
+
+  it("one null/malformed row does not zero today's sales", () => {
+    const now = new Date("2026-08-15T18:00:00+05:00");
+    const rows = [
+      null,
+      undefined,
+      order({
+        id: "good",
+        order_status: "COMPLETED",
+        grand_total: 2500,
+        created_at: "2026-08-15T12:00:00+05:00",
+      }),
+      { id: null, order_status: "COMPLETED", grand_total: 9999 },
+    ] as unknown as Order[];
+    expect(localTodaySales(rows, now)).toBe(2500);
+  });
 });

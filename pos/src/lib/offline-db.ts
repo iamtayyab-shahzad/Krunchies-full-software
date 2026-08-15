@@ -9,6 +9,17 @@ import type {
   Product,
   Settings,
 } from "@/types";
+import {
+  compactOrders,
+  compactQueueActions,
+  isOrderSyncActionType,
+  isValidCacheRow,
+  isValidOrderRow,
+  isValidQueueAction,
+  orderIdsFromSyncAction,
+  shouldWriteCacheData,
+  type HealReport,
+} from "@/lib/storage-health";
 
 export type CachedSession = {
   username: string;
@@ -124,6 +135,33 @@ function getDb() {
   return dbPromise;
 }
 
+async function getAllSafe<Name extends keyof PosDB>(
+  store: Name,
+): Promise<PosDB[Name]["value"][]> {
+  const db = await getDb();
+  const all = await db.getAll(store);
+  return (all || []).filter(
+    (row): row is PosDB[Name]["value"] =>
+      row != null && typeof row === "object",
+  );
+}
+
+function logStorageHeal(message: string, extra?: Record<string, unknown>) {
+  try {
+    console.warn("[pos-storage-heal]", message, extra || {});
+  } catch {
+    /* ignore */
+  }
+}
+
+function isUnsyncedOrder(order: Order): boolean {
+  return (
+    order.sync_status === "pending_sync" ||
+    order.sync_status === "local" ||
+    order.sync_status === "sync_failed"
+  );
+}
+
 /** Cart drafts (bill in progress) */
 export async function saveDraft(draft: PendingDraft) {
   const db = await getDb();
@@ -133,8 +171,7 @@ export async function saveDraft(draft: PendingDraft) {
 export const saveCartDraft = saveDraft;
 
 export async function listDrafts() {
-  const db = await getDb();
-  return db.getAll("pending_drafts");
+  return getAllSafe("pending_drafts");
 }
 
 export const listCartDrafts = listDrafts;
@@ -152,6 +189,9 @@ export async function deleteDraft(id: string) {
 export async function enqueueAction(
   action: Omit<OfflineAction, "id" | "created_at" | "synced">,
 ) {
+  if (!action?.type) {
+    throw new Error("Cannot enqueue a sync action without a type");
+  }
   const db = await getDb();
   const item: OfflineAction = {
     id: crypto.randomUUID(),
@@ -159,21 +199,22 @@ export async function enqueueAction(
     synced: false,
     ...action,
   };
+  if (!isValidQueueAction(item)) {
+    throw new Error("Cannot enqueue a malformed sync action");
+  }
   await db.put("offline_queue", item);
   return item;
 }
 
 export async function listPendingActions() {
-  const db = await getDb();
-  const all = await db.getAll("offline_queue");
+  const all = compactQueueActions(await getAllSafe("offline_queue"));
   return all
     .filter((a) => !a.synced && !a.dead)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
 export async function listDeadActions() {
-  const db = await getDb();
-  const all = await db.getAll("offline_queue");
+  const all = compactQueueActions(await getAllSafe("offline_queue"));
   return all.filter((a) => a.dead && !a.synced);
 }
 
@@ -209,23 +250,41 @@ export async function markActionError(
 ) {
   const db = await getDb();
   const item = await db.get("offline_queue", id);
-  if (!item) return;
+  if (!item || !isValidQueueAction(item)) return;
   item.error = error;
   if (extra?.attempts != null) item.attempts = extra.attempts;
   if (extra?.next_retry_at) item.next_retry_at = extra.next_retry_at;
   if (extra?.dead) item.dead = true;
   await db.put("offline_queue", item);
+  if (extra?.dead && isOrderSyncActionType(item.type)) {
+    await markRelatedOrdersSyncFailed(item);
+    try {
+      const { notifyOrdersChanged } = await import("@/lib/offline-events");
+      notifyOrdersChanged();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export async function reviveDeadAction(id: string) {
   const db = await getDb();
   const item = await db.get("offline_queue", id);
-  if (!item) return;
+  if (!item || !isValidQueueAction(item)) return;
   item.dead = false;
   item.attempts = 0;
   delete item.next_retry_at;
   delete item.error;
   await db.put("offline_queue", item);
+  if (isOrderSyncActionType(item.type)) {
+    await restoreRelatedOrdersPendingSync(item);
+    try {
+      const { notifyOrdersChanged } = await import("@/lib/offline-events");
+      notifyOrdersChanged();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export async function discardAction(id: string) {
@@ -235,7 +294,7 @@ export async function discardAction(id: string) {
 
 export async function pruneSyncedActions(keepLast = 50) {
   const db = await getDb();
-  const all = await db.getAll("offline_queue");
+  const all = compactQueueActions(await getAllSafe("offline_queue"));
   const synced = all
     .filter((a) => a.synced)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -298,26 +357,38 @@ export async function resolveServerOrderId(id: string): Promise<string> {
 
 export async function pruneCacheKeys(keepKeys: string[]) {
   const db = await getDb();
-  const all = await db.getAll("cache");
+  const all = await getAllSafe("cache");
   const keep = new Set(keepKeys);
+  const operational = [
+    "products",
+    "categories",
+    "orders",
+    "inventory",
+    "settings",
+    "session",
+    "customers",
+    "locations",
+    "offers",
+    "recipes",
+    "sync_meta",
+    "sync_conflicts",
+    "order_id_map",
+    "discount_rules",
+  ];
   for (const row of all) {
+    if (!isValidCacheRow(row)) {
+      const key = isValidCacheRow(row)
+        ? row.key
+        : typeof (row as { key?: unknown })?.key === "string"
+          ? String((row as { key: string }).key)
+          : "";
+      if (key) {
+        logStorageHeal("deleting malformed cache row during prune", { key });
+        await db.delete("cache", key);
+      }
+      continue;
+    }
     if (!keep.has(row.key) && !row.key.startsWith("sync_")) {
-      // keep known operational keys
-      const operational = [
-        "products",
-        "categories",
-        "orders",
-        "inventory",
-        "settings",
-        "session",
-        "customers",
-        "locations",
-        "offers",
-        "recipes",
-        "sync_meta",
-        "sync_conflicts",
-        "order_id_map",
-      ];
       if (!operational.includes(row.key)) {
         await db.delete("cache", row.key);
       }
@@ -326,7 +397,12 @@ export async function pruneCacheKeys(keepKeys: string[]) {
 }
 
 export async function cacheSet(key: string, data: unknown) {
+  if (!key) return;
   const db = await getDb();
+  if (!shouldWriteCacheData(data)) {
+    await db.delete("cache", key);
+    return;
+  }
   await db.put("cache", {
     key,
     data,
@@ -337,51 +413,204 @@ export async function cacheSet(key: string, data: unknown) {
 export async function cacheGet<T>(key: string): Promise<T | null> {
   const db = await getDb();
   const row = await db.get("cache", key);
-  return (row?.data as T) ?? null;
+  if (!isValidCacheRow(row)) return null;
+  return (row.data as T) ?? null;
+}
+
+/**
+ * Delete null/malformed IndexedDB rows that crash sync and sales totals.
+ * Safe to run on every POS startup and from Settings → Clean now.
+ */
+export async function healIndexedDb(): Promise<HealReport> {
+  const report: HealReport = { removed: [], cacheRows: 0, queueRows: 0 };
+  const db = await getDb();
+
+  const cacheTx = db.transaction("cache", "readwrite");
+  let cacheCursor = await cacheTx.store.openCursor();
+  while (cacheCursor) {
+    const value = cacheCursor.value as unknown;
+    report.cacheRows += 1;
+    if (!isValidCacheRow(value)) {
+      const key =
+        value &&
+        typeof value === "object" &&
+        typeof (value as { key?: unknown }).key === "string"
+          ? (value as { key: string }).key
+          : String(cacheCursor.key);
+      report.removed.push({
+        store: "cache",
+        key,
+        reason: "null or malformed cache row",
+      });
+      await cacheCursor.delete();
+    }
+    cacheCursor = await cacheCursor.continue();
+  }
+  await cacheTx.done;
+
+  const queueTx = db.transaction("offline_queue", "readwrite");
+  let queueCursor = await queueTx.store.openCursor();
+  while (queueCursor) {
+    const value = queueCursor.value as unknown;
+    report.queueRows += 1;
+    if (!isValidQueueAction(value)) {
+      const key =
+        value &&
+        typeof value === "object" &&
+        typeof (value as { id?: unknown }).id === "string"
+          ? (value as { id: string }).id
+          : String(queueCursor.key);
+      report.removed.push({
+        store: "offline_queue",
+        key,
+        reason: "null or malformed queue row",
+      });
+      await queueCursor.delete();
+    }
+    queueCursor = await queueCursor.continue();
+  }
+  await queueTx.done;
+
+  const orderTx = db.transaction("orders", "readwrite");
+  let orderCursor = await orderTx.store.openCursor();
+  while (orderCursor) {
+    const value = orderCursor.value as unknown;
+    if (!isValidOrderRow(value)) {
+      report.removed.push({
+        store: "orders",
+        key: String(orderCursor.key),
+        reason: "null or malformed order row",
+      });
+      await orderCursor.delete();
+    }
+    orderCursor = await orderCursor.continue();
+  }
+  await orderTx.done;
+
+  if (report.removed.length) {
+    logStorageHeal("removed malformed IndexedDB rows", {
+      count: report.removed.length,
+      rows: report.removed,
+    });
+  }
+  return report;
+}
+
+export async function countSyncFailedOrders() {
+  const orders = await listLocalOrders();
+  return orders.filter((o) => o.sync_status === "sync_failed").length;
+}
+
+export async function listSyncFailedOrders() {
+  const orders = await listLocalOrders();
+  return orders.filter((o) => o.sync_status === "sync_failed");
+}
+
+async function markRelatedOrdersSyncFailed(action: OfflineAction) {
+  const ids = new Set(orderIdsFromSyncAction(action));
+  if (!ids.size) return;
+  const locals = await listLocalOrders();
+  const now = new Date().toISOString();
+  for (const order of locals) {
+    if (
+      !ids.has(order.id) &&
+      !(order.client_order_id && ids.has(order.client_order_id))
+    ) {
+      continue;
+    }
+    await upsertLocalOrder({
+      ...order,
+      updated_at: now,
+      sync_status: "sync_failed",
+    });
+  }
+}
+
+async function restoreRelatedOrdersPendingSync(action: OfflineAction) {
+  const ids = new Set(orderIdsFromSyncAction(action));
+  if (!ids.size) return;
+  const locals = await listLocalOrders();
+  const now = new Date().toISOString();
+  for (const order of locals) {
+    if (
+      !ids.has(order.id) &&
+      !(order.client_order_id && ids.has(order.client_order_id))
+    ) {
+      continue;
+    }
+    if (order.sync_status !== "sync_failed") continue;
+    await upsertLocalOrder({
+      ...order,
+      updated_at: now,
+      sync_status: "pending_sync",
+    });
+  }
+}
+
+/** Test-only: close the cached IDB connection so suites can rebuild a dirty DB. */
+export async function closePosDbForTests() {
+  if (!dbPromise) return;
+  const db = await dbPromise;
+  db.close();
+  dbPromise = null;
+}
+
+/** Test-only: write a cache row the production app would now refuse (data: null). */
+export async function putRawCacheRowForTests(key: string, data: unknown) {
+  const db = await getDb();
+  await db.put("cache", {
+    key,
+    data,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export async function replaceProducts(products: Product[]) {
+  if (!Array.isArray(products)) return;
+  const clean = products.filter((p) => p && typeof p.id === "string");
   const db = await getDb();
   const tx = db.transaction("products", "readwrite");
   await tx.store.clear();
-  for (const p of products) await tx.store.put(p);
+  for (const p of clean) await tx.store.put(p);
   await tx.done;
-  await cacheSet("products", products);
+  await cacheSet("products", clean);
 }
 
 export async function listLocalProducts() {
-  const db = await getDb();
-  const rows = await db.getAll("products");
+  const rows = (await getAllSafe("products")).filter(
+    (p) => p && typeof p.id === "string",
+  );
   if (rows.length) return rows;
-  return (await cacheGet<Product[]>("products")) || [];
+  const cached = await cacheGet<Product[]>("products");
+  return Array.isArray(cached) ? cached.filter((p) => p && typeof p.id === "string") : [];
 }
 
 export async function replaceCategories(categories: Category[]) {
+  if (!Array.isArray(categories)) return;
+  const clean = categories.filter((c) => c && typeof c.id === "string");
   const db = await getDb();
   const tx = db.transaction("categories", "readwrite");
   await tx.store.clear();
-  for (const c of categories) await tx.store.put(c);
+  for (const c of clean) await tx.store.put(c);
   await tx.done;
-  await cacheSet("categories", categories);
+  await cacheSet("categories", clean);
 }
 
 export async function listLocalCategories() {
-  const db = await getDb();
-  const rows = await db.getAll("categories");
+  const rows = (await getAllSafe("categories")).filter(
+    (c) => c && typeof c.id === "string",
+  );
   if (rows.length) return rows;
-  return (await cacheGet<Category[]>("categories")) || [];
+  const cached = await cacheGet<Category[]>("categories");
+  return Array.isArray(cached) ? cached.filter((c) => c && typeof c.id === "string") : [];
 }
 
 function capOrdersKeepingUnsynced(orders: Order[], limit = 2000): Order[] {
-  const sorted = orders
+  const sorted = compactOrders(orders)
     .slice()
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const unsynced = sorted.filter(
-    (o) => o.sync_status === "pending_sync" || o.sync_status === "local",
-  );
-  const rest = sorted.filter(
-    (o) => o.sync_status !== "pending_sync" && o.sync_status !== "local",
-  );
+    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+  const unsynced = sorted.filter(isUnsyncedOrder);
+  const rest = sorted.filter((o) => !isUnsyncedOrder(o));
   const kept = [...unsynced];
   const seen = new Set(kept.map((o) => o.id));
   for (const row of rest) {
@@ -394,11 +623,15 @@ function capOrdersKeepingUnsynced(orders: Order[], limit = 2000): Order[] {
 }
 
 export async function replaceOrders(orders: Order[]) {
+  if (!Array.isArray(orders)) return;
   const db = await getDb();
   const capped = capOrdersKeepingUnsynced(orders);
   const tx = db.transaction("orders", "readwrite");
   await tx.store.clear();
-  for (const o of capped) await tx.store.put(o);
+  for (const o of capped) {
+    if (!isValidOrderRow(o)) continue;
+    await tx.store.put(o);
+  }
   await tx.done;
   await cacheSet("orders", capped);
   await rebuildCustomersFromOrders(capped);
@@ -418,14 +651,16 @@ function orderCreatedMs(order: Order): number {
  *   (otherwise dashboard/history sales silently shrink on busy days)
  */
 export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
+  if (!Array.isArray(serverOrders)) return;
   const { findOrderByIdentity, ordersShareIdentity, preferEarlierCreatedAt } =
     await import("@/lib/order-identity");
   const existing = await listLocalOrders();
   const idMap =
     (await cacheGet<Record<string, string>>(ID_MAP_KEY)) || {};
-  const serverIds = new Set(serverOrders.map((r) => r.id));
+  const cleanServer = compactOrders(serverOrders);
+  const serverIds = new Set(cleanServer.map((r) => r.id));
   const serverClientIds = new Set(
-    serverOrders
+    cleanServer
       .map((r) => r.client_order_id)
       .filter((id): id is string => Boolean(id)),
   );
@@ -435,8 +670,7 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
     Date.now() - PRESERVE_COMPLETED_DAYS * 24 * 60 * 60 * 1000;
 
   const unsynced = existing.filter((o) => {
-    const pendingLocal =
-      o.sync_status === "pending_sync" || o.sync_status === "local";
+    const pendingLocal = isUnsyncedOrder(o);
     if (!pendingLocal) return false;
     // Drop LOCAL-* once server already has the same client_order_id.
     if (o.client_order_id && serverClientIds.has(o.client_order_id)) {
@@ -465,7 +699,7 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
   });
 
   const byId = new Map<string, Order>();
-  for (const s of serverOrders) {
+  for (const s of cleanServer) {
     const loc = findOrderByIdentity(existing, s, idMap);
     const createdAt = loc
       ? preferEarlierCreatedAt(loc.created_at, s.created_at)
@@ -474,7 +708,7 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
       s.client_order_id || loc?.client_order_id || loc?.id || undefined;
     if (
       loc &&
-      loc.sync_status === "pending_sync" &&
+      (loc.sync_status === "pending_sync" || loc.sync_status === "sync_failed") &&
       (loc.order_status === "COMPLETED" || loc.order_status === "CANCELLED")
     ) {
       byId.set(s.id, {
@@ -482,7 +716,7 @@ export async function replaceOrdersPreservingUnsynced(serverOrders: Order[]) {
         client_order_id: clientOrderId,
         created_at: createdAt,
         order_status: loc.order_status,
-        sync_status: "pending_sync",
+        sync_status: loc.sync_status,
       });
     } else {
       byId.set(s.id, {
@@ -516,7 +750,7 @@ export async function mergeOrders(orders: Order[]) {
     preferEarlierCreatedAt,
   } = await import("@/lib/order-identity");
   const db = await getDb();
-  const existing = await db.getAll("orders");
+  const existing = compactOrders(await getAllSafe("orders"));
   const byId = new Map(existing.map((o) => [o.id, o]));
 
   for (const incoming of orders) {
@@ -579,15 +813,21 @@ export async function mergeOrders(orders: Order[]) {
   );
   const tx = db.transaction("orders", "readwrite");
   await tx.store.clear();
-  for (const o of merged) await tx.store.put(o);
+  for (const o of merged) {
+    if (!isValidOrderRow(o)) continue;
+    await tx.store.put(o);
+  }
   await tx.done;
   await cacheSet("orders", merged);
 }
 
 export async function upsertLocalOrder(order: Order) {
+  if (!isValidOrderRow(order)) {
+    throw new Error("Cannot save an order without an id");
+  }
   const { ordersShareIdentity } = await import("@/lib/order-identity");
   const db = await getDb();
-  const all = await db.getAll("orders");
+  const all = compactOrders(await getAllSafe("orders"));
   for (const row of all) {
     if (row.id !== order.id && ordersShareIdentity(row, order)) {
       await db.delete("orders", row.id);
@@ -597,7 +837,8 @@ export async function upsertLocalOrder(order: Order) {
     (row) => row.id === order.id || ordersShareIdentity(row, order),
   );
   await db.put("orders", order);
-  const cached = (await cacheGet<Order[]>("orders")) || [];
+  const cachedRaw = await cacheGet<Order[]>("orders");
+  const cached = compactOrders(Array.isArray(cachedRaw) ? cachedRaw : []);
   const next = [
     order,
     ...cached.filter(
@@ -611,7 +852,8 @@ export async function upsertLocalOrder(order: Order) {
 export async function deleteLocalOrder(id: string) {
   const db = await getDb();
   await db.delete("orders", id);
-  const cached = (await cacheGet<Order[]>("orders")) || [];
+  const cachedRaw = await cacheGet<Order[]>("orders");
+  const cached = compactOrders(Array.isArray(cachedRaw) ? cachedRaw : []);
   await cacheSet(
     "orders",
     cached.filter((o) => o.id !== id),
@@ -620,11 +862,10 @@ export async function deleteLocalOrder(id: string) {
 
 export async function listLocalOrders() {
   const { dedupeOrdersByIdentity } = await import("@/lib/order-identity");
-  const db = await getDb();
-  const rows = await db.getAll("orders");
-  const source = rows.length
-    ? rows
-    : (await cacheGet<Order[]>("orders")) || [];
+  const rows = compactOrders(await getAllSafe("orders"));
+  const cachedRaw = await cacheGet<Order[]>("orders");
+  const cached = compactOrders(Array.isArray(cachedRaw) ? cachedRaw : []);
+  const source = rows.length ? rows : cached;
   return dedupeOrdersByIdentity(source);
 }
 
@@ -634,22 +875,29 @@ export async function listLocalPendingOrders() {
 }
 
 export async function replaceInventory(items: InventoryItem[]) {
+  if (!Array.isArray(items)) return;
+  const clean = items.filter((item) => item && typeof item.id === "string");
   const db = await getDb();
   const tx = db.transaction("inventory", "readwrite");
   await tx.store.clear();
-  for (const item of items) await tx.store.put(item);
+  for (const item of clean) await tx.store.put(item);
   await tx.done;
-  await cacheSet("inventory", items);
+  await cacheSet("inventory", clean);
 }
 
 export async function listLocalInventory() {
-  const db = await getDb();
-  const rows = await db.getAll("inventory");
+  const rows = (await getAllSafe("inventory")).filter(
+    (item) => item && typeof item.id === "string",
+  );
   if (rows.length) return rows;
-  return (await cacheGet<InventoryItem[]>("inventory")) || [];
+  const cached = await cacheGet<InventoryItem[]>("inventory");
+  return Array.isArray(cached)
+    ? cached.filter((item) => item && typeof item.id === "string")
+    : [];
 }
 
 export async function saveLocalSettings(settings: Settings) {
+  if (!settings || typeof settings !== "object") return;
   const db = await getDb();
   await db.put("settings", { ...settings, id: settings.id || "default" });
   await cacheSet("settings", settings);
@@ -665,6 +913,7 @@ export async function getLocalSettings() {
 }
 
 export async function saveSession(session: CachedSession) {
+  if (!session?.token) return;
   const db = await getDb();
   await db.put("session", { ...session, id: "current" });
   await cacheSet("session", session);
@@ -687,23 +936,29 @@ export async function getSession() {
 export async function clearSession() {
   const db = await getDb();
   await db.delete("session", "current");
-  await cacheSet("session", null);
+  await db.delete("cache", "session");
 }
 
 export async function replaceCustomers(customers: Customer[]) {
+  if (!Array.isArray(customers)) return;
+  const clean = customers.filter((c) => c && typeof c.id === "string");
   const db = await getDb();
   const tx = db.transaction("customers", "readwrite");
   await tx.store.clear();
-  for (const c of customers) await tx.store.put(c);
+  for (const c of clean) await tx.store.put(c);
   await tx.done;
-  await cacheSet("customers", customers);
+  await cacheSet("customers", clean);
 }
 
 export async function listLocalCustomers() {
-  const db = await getDb();
-  const rows = await db.getAll("customers");
+  const rows = (await getAllSafe("customers")).filter(
+    (c) => c && typeof c.id === "string",
+  );
   if (rows.length) return rows;
-  return (await cacheGet<Customer[]>("customers")) || [];
+  const cached = await cacheGet<Customer[]>("customers");
+  return Array.isArray(cached)
+    ? cached.filter((c) => c && typeof c.id === "string")
+    : [];
 }
 
 async function upsertCustomerFromOrder(order: Order, isNewOrder: boolean) {
@@ -734,7 +989,9 @@ async function upsertCustomerFromOrder(order: Order, isNewOrder: boolean) {
       : existing?.last_location_id,
   };
   await db.put("customers", customer);
-  const all = await db.getAll("customers");
+  const all = (await getAllSafe("customers")).filter(
+    (c) => c && typeof c.id === "string",
+  );
   await cacheSet("customers", all);
 }
 
@@ -837,6 +1094,8 @@ export async function upsertCustomersFromLookup(
     };
     await db.put("customers", customer);
   }
-  const all = await db.getAll("customers");
+  const all = (await getAllSafe("customers")).filter(
+    (c) => c && typeof c.id === "string",
+  );
   await cacheSet("customers", all);
 }

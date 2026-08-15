@@ -122,7 +122,8 @@ export interface Order extends BaseEntity {
   discount?: number;
   grand_total: number;
   items?: OrderItem[];
-  sync_status?: "local" | "pending_sync" | "synced";
+  /** sync_failed = cloud push permanently died; ticket still shows locally. */
+  sync_status?: "local" | "pending_sync" | "synced" | "sync_failed";
 }
 
 export interface Settings extends BaseEntity {

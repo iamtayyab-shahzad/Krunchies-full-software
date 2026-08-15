@@ -293,9 +293,18 @@ export default function PendingOrdersPage() {
                       {order.order_number}
                     </p>
                     {(order.order_number.startsWith("LOCAL-") ||
-                      order.sync_status === "pending_sync") && (
-                      <span className="rounded border border-orange-500/40 bg-orange-500/15 px-2 py-0.5 text-xs font-bold text-orange-300">
-                        Pending sync
+                      order.sync_status === "pending_sync" ||
+                      order.sync_status === "sync_failed") && (
+                      <span
+                        className={
+                          order.sync_status === "sync_failed"
+                            ? "rounded border border-red-500/40 bg-red-500/15 px-2 py-0.5 text-xs font-bold text-red-300"
+                            : "rounded border border-orange-500/40 bg-orange-500/15 px-2 py-0.5 text-xs font-bold text-orange-300"
+                        }
+                      >
+                        {order.sync_status === "sync_failed"
+                          ? "Sync failed"
+                          : "Pending sync"}
                       </span>
                     )}
                     <span

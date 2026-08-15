@@ -39,14 +39,25 @@ export function completedSalesInRange(
 ): { total: number; orderCount: number } {
   let total = 0;
   let orderCount = 0;
-  for (const order of dedupeOrdersByIdentity(orders)) {
-    if (!isCompletedSale(order)) continue;
-    const t = Date.parse(order.created_at || "");
-    if (!Number.isFinite(t) || t < startMs || t >= endMs) continue;
-    const amount = Number(order.grand_total);
-    if (!Number.isFinite(amount)) continue;
-    total += amount;
-    orderCount += 1;
+  const source = Array.isArray(orders) ? orders : [];
+  let unique: Order[] = [];
+  try {
+    unique = dedupeOrdersByIdentity(source.filter((o) => o && o.id));
+  } catch {
+    unique = source.filter((o) => o && o.id);
+  }
+  for (const order of unique) {
+    try {
+      if (!isCompletedSale(order)) continue;
+      const t = Date.parse(order.created_at || "");
+      if (!Number.isFinite(t) || t < startMs || t >= endMs) continue;
+      const amount = Number(order.grand_total);
+      if (!Number.isFinite(amount)) continue;
+      total += amount;
+      orderCount += 1;
+    } catch {
+      /* one bad row must not zero the till total */
+    }
   }
   return { total, orderCount };
 }

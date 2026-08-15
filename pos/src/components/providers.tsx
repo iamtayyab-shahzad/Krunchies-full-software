@@ -103,8 +103,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // Local cashier mutations: paint from IndexedDB immediately — never wait on API.
     const onOrdersChanged = () => {
       void hydrateOrdersFromIdb(client);
-      // Dashboard / Analytics today+weekly totals come from local COMPLETED orders.
       void client.invalidateQueries({ queryKey: ["analytics"] });
+      void client.invalidateQueries({ queryKey: ["orders", "sync-failed"] });
     };
     const onSync = () => {
       // Soft refresh from IDB first, then let localFirst revalidate in background.

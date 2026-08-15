@@ -153,6 +153,11 @@ export default function OrderHistoryPage() {
                     >
                       {order.order_status}
                     </span>
+                    {order.sync_status === "sync_failed" ? (
+                      <span className="ml-2 rounded bg-red-500/20 px-2 py-0.5 text-xs font-bold text-red-300">
+                        Sync failed
+                      </span>
+                    ) : null}
                   </p>
                   <p className="text-sm text-zinc-400">
                     {order.order_type} · {order.phone} · {order.payment_method} ·{" "}

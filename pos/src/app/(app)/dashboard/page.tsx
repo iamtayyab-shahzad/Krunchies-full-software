@@ -10,6 +10,7 @@ import {
   ordersApi,
   settingsApi,
 } from "@/services/api";
+import { listSyncFailedOrders } from "@/lib/offline-db";
 
 export default function DashboardPage() {
   const { data: settings } = useQuery({
@@ -40,10 +41,16 @@ export default function DashboardPage() {
     queryKey: ["inventory"],
     queryFn: inventoryApi.list,
   });
+  const { data: failedOrders = [] } = useQuery({
+    queryKey: ["orders", "sync-failed"],
+    queryFn: listSyncFailedOrders,
+    staleTime: 5_000,
+  });
 
   const currency = settings?.currency || "Rs";
   const pending = pendingOrders.length;
   const lowStock = inventory.filter((i) => i.stock <= i.minimum_stock).length;
+  const failedCount = failedOrders.length;
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -53,7 +60,22 @@ export default function DashboardPage() {
           <Link href="/orders/new">Start New Order</Link>
         </Button>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {failedCount > 0 ? (
+        <div className="mb-4 rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-3">
+          <p className="text-sm font-bold text-red-300">
+            {failedCount} order{failedCount === 1 ? "" : "s"} failed to sync to
+            the cloud — they still look completed on this till.
+          </p>
+          <p className="mt-1 text-xs text-red-200/80">
+            Open Settings → Failed sync items → Retry all. Do not assume the
+            office PC has these tickets until sync succeeds.
+          </p>
+          <Button asChild size="sm" className="mt-3" variant="secondary">
+            <Link href="/settings">Open Settings</Link>
+          </Button>
+        </div>
+      ) : null}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Stat
           label="Today's Sales"
           value={formatPrice(today?.total || 0, currency)}
@@ -64,6 +86,11 @@ export default function DashboardPage() {
         />
         <Stat label="Pending Orders" value={String(pending)} />
         <Stat label="Low Stock Items" value={String(lowStock)} warn={lowStock > 0} />
+        <Stat
+          label="Sync failed"
+          value={String(failedCount)}
+          warn={failedCount > 0}
+        />
       </div>
       {recon &&
       recon.cloud_total != null &&

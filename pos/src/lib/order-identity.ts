@@ -83,7 +83,8 @@ function statusRank(status: Order["order_status"]) {
 }
 
 function syncRank(status: Order["sync_status"] | undefined) {
-  if (status === "pending_sync" || status === "local") return 2;
+  if (status === "pending_sync" || status === "local" || status === "sync_failed")
+    return 2;
   if (status === "synced") return 1;
   return 0;
 }
@@ -119,6 +120,7 @@ export function dedupeOrdersByIdentity(orders: Order[]): Order[] {
   const groups: Order[][] = [];
 
   for (const order of orders) {
+    if (!order || !order.id) continue;
     let matched = false;
     for (const group of groups) {
       if (group.some((existing) => ordersShareIdentity(existing, order))) {
@@ -213,7 +215,11 @@ export function reconcilePendingOrders(
           local.client_order_id || row.client_order_id || local.id,
         order_status: local.order_status,
         sync_status:
-          local.sync_status === "synced" ? "synced" : "pending_sync",
+          local.sync_status === "synced"
+            ? "synced"
+            : local.sync_status === "sync_failed"
+              ? "sync_failed"
+              : "pending_sync",
         updated_at: local.updated_at || new Date().toISOString(),
       };
       remember(overlay);

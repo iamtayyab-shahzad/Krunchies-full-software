@@ -1148,6 +1148,7 @@ async function cachedAnalytics<T>(
     analyticsRefreshAt.set(cacheKey, Date.now());
     void fetchRemote()
       .then(async (data) => {
+        if (data === null || data === undefined) return;
         await cacheSet(cacheKey, data);
         notifyCacheUpdated(["analytics"]);
       })
