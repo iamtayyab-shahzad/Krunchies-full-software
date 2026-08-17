@@ -2,7 +2,7 @@
 
 This document covers architecture, synchronization, IndexedDB, offline workflows, scaling, deployment, maintenance, limitations, security, and production readiness for the **POS** application.
 
-Website and Admin are separate apps and are intentionally **online-only** for customer/admin workflows. The POS is the offline-first surface.
+Website and Admin are separate apps and are **online-only** (Vercel) for customer/admin workflows. The shop till is **local-first**: a production Next.js build on the cashier PC (`127.0.0.1`) with **IndexedDB** as the working copy of orders, catalog, and sales. The cloud API is for login and background sync. Optional Vercel POS is emergency fallback only. See [`LOCAL-POS-PHASE-1.md`](./LOCAL-POS-PHASE-1.md).
 
 ---
 
@@ -25,7 +25,7 @@ Website and Admin are separate apps and are intentionally **online-only** for cu
 ┌──────────────────────┐      ┌──────────────────────────────┐
 │  Repository layer    │      │  Sync Engine                 │
 │  lib/repos           │      │  lib/sync-engine.ts          │
-│  online-first read   │      │  outbox + backoff + remap    │
+│  IndexedDB-first read│      │  outbox + backoff + remap    │
 └──────────┬───────────┘      └──────────────┬───────────────┘
            │                                 │
            ▼                                 ▼
@@ -41,9 +41,9 @@ Website and Admin are separate apps and are intentionally **online-only** for cu
 |-------|----------------|
 | **UI** | Capture cashier intent, show offline toasts, print receipts |
 | **API facade** | Normalize online/offline outcomes; enqueue writes |
-| **Repos** | Online-first reads with IndexedDB fallback |
+| **Repos** | IndexedDB-first reads; background API refresh when online |
 | **Sync engine** | Drain queue, remap IDs, conflicts, dead-letter |
-| **IndexedDB** | Local source of truth while offline |
+| **IndexedDB** | Local working copy for the till (orders store, catalog, session) |
 | **Service Worker** | App shell + static assets only (never API bodies) |
 
 ### Key principles
@@ -61,7 +61,7 @@ Website and Admin are separate apps and are intentionally **online-only** for cu
 
 - App startup (if online)
 - Browser `online` event
-- Interval (~15s)
+- Interval (~45s)
 - Manual “Sync now”
 - After enqueue (opportunistic)
 
@@ -108,7 +108,7 @@ Website and Admin are separate apps and are intentionally **online-only** for cu
 | `cache` | `key` | KV: settings mirror, locations, sync_meta, order_id_map, conflicts |
 | `products` | `id` | Catalog (+ sizes embedded) |
 | `categories` | `id` | Categories |
-| `orders` | `id` | Local/history (capped ~500 newest) |
+| `orders` | `id` | Local till history (capped ~2000 newest; unsynced rows kept) |
 | `inventory` | `id` | Stock rows |
 | `settings` | `id` (`default`) | Restaurant settings |
 | `session` | `id` (`current`) | Cached JWT session |
@@ -122,7 +122,7 @@ Website and Admin are separate apps and are intentionally **online-only** for cu
 
 - Synced queue: keep last 50
 - Dead-letter: keep last 30
-- Orders store: keep newest 500
+- Orders store: keep newest 2000 (unsynced rows kept)
 - ID map: trim above 500 entries
 - SW runtime cache: max 80 entries (v3)
 
@@ -152,7 +152,8 @@ Products, categories, search, cart, checkout, cash payments, order create/comple
 ### What needs internet
 
 - First-time login (no prior session)
-- Analytics / dashboard live metrics
+- Pulling website/phone orders from the cloud into local Pending
+- Cloud sales compare / reconcile (dashboard still shows IndexedDB totals offline)
 - Recipe create
 - Product size create against server (product row can be queued)
 
@@ -175,18 +176,18 @@ Products, categories, search, cart, checkout, cash payments, order create/comple
 
 See also root `DEPLOYMENT.md` for full stack.
 
-### POS (Vercel)
+### POS (shop till — local)
 
-1. Project root: `pos`
-2. Env:
+Daily production is the **Krunchies POS** desktop shortcut on the cashier PC, not Vercel.
 
-```text
-NEXT_PUBLIC_API_URL=https://YOUR-API.onrender.com/api/v1
-```
+1. Copy/pull the repo onto the shop PC
+2. Run `pos\scripts\Setup-Local-POS.bat` (writes `NEXT_PUBLIC_API_URL` into `pos/.env.local` and builds)
+3. Open the shortcut once online, sign in, wait for a successful sidebar sync
+4. Smoke test: New Order, Pending, History, print; then the same with Wi-Fi off
 
-3. Deploy after backend migration that adds `client_order_id` (AutoMigrate on API boot).
-4. Confirm HTTPS (required for PWA install + service worker).
-5. Smoke test: login → New Order → DevTools → Application → Service Workers + IndexedDB.
+IndexedDB lives in the dedicated Chrome profile (`%LOCALAPPDATA%\KrunchiesPOS\chrome-profile`). Rebuilds do not wipe it.
+
+Optional **Vercel POS** is emergency remote fallback (`pos\scripts\Launch-POS.bat`). If you still deploy it: project root `pos`, same `NEXT_PUBLIC_API_URL`, HTTPS for that URL only.
 
 ### Backend requirement
 
@@ -197,7 +198,7 @@ Redeploy API so Postgres gets unique `client_order_id`. Without it, duplicate pr
 - [ ] `/health` OK  
 - [ ] Staff login OK  
 - [ ] Menu cached after login  
-- [ ] Install PWA on Android Chrome / desktop Chromium  
+- [ ] Shop shortcut opens `127.0.0.1` Chrome app (or optional cloud POS as fallback)  
 - [ ] Airplane mode: create + complete cash order + print  
 - [ ] Restore network: queue drains, order appears in Admin/history  
 - [ ] Duplicate offline submit does not create two server orders  
@@ -213,7 +214,7 @@ Redeploy API so Postgres gets unique `client_order_id`. Without it, duplicate pr
 
 ### Weekly
 
-- Confirm PWA update banner appears after deploy; staff tap Refresh once.
+- After a shop rebuild (`Setup-Local-POS.bat`), confirm the shortcut still opens and syncs. Cloud POS: PWA update banner / Refresh if you still use it.
 - Spot-check inventory conflicts if stock is adjusted both online and offline.
 
 ### After menu changes (Admin)
@@ -234,21 +235,21 @@ Change default `staff` / `admin` passwords in production. Demo credentials are *
 
 | Limitation | Impact | Mitigation |
 |------------|--------|------------|
-| Analytics/dashboard online-only | Blank/error offline | Use History for offline sales awareness |
+| Dashboard/analytics prefer cloud when it is higher | Offline or unsynced completes still count from IndexedDB | History + Storage Health if totals look wrong |
 | Recipes require internet | Cannot add recipes offline | Plan recipe edits while online |
 | JWT in localStorage/IDB | XSS can steal token | CSP, no untrusted HTML, rotate JWT secret |
 | Browser print only | Thermal printer UX varies | Train staff / future ESC/POS |
 | Single-device outbox | Two tablets can race inventory | Inventory conflict logging; server wins stock |
 | Service worker ≠ data sync | Offline data is IndexedDB, not Cache API | Documented; intentional |
 | Edit-pending mid-refresh | Edit context not persisted | Finish edits before closing tab |
-| Large history capped at 500 local | Older local rows drop | Server remains source for history when online |
+| Large history capped at ~2000 local | Older local rows drop | Server remains source for history when online |
 
 ---
 
 ## 9. Security recommendations
 
 1. **Rotate JWT_SECRET** and default staff passwords before go-live.
-2. **HTTPS only** for POS URL (Vercel default).
+2. Shop till is `127.0.0.1` (no public HTTPS). Website/admin/optional cloud POS stay on Vercel HTTPS.
 3. Set restrictive **Content-Security-Policy** headers if not already at edge.
 4. Do not enable `NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS` in production.
 5. Ensure SW never caches authenticated API responses (current design: cross-origin API not intercepted).
@@ -264,7 +265,7 @@ Change default `staff` / `admin` passwords in production. Demo credentials are *
 
 ### Verdict
 
-**Ready for a single-shop pizza POS** with staff trained on: install PWA, work offline, reconnect to sync, tap Refresh on updates, escalate failed sync badges.
+**Ready for a single-shop pizza POS** with staff trained on: use the desktop shortcut, work offline, reconnect to sync, escalate failed sync badges. Owner rebuilds via `Setup-Local-POS.bat` when shipping POS changes.
 
 ### Implemented for production
 
@@ -293,7 +294,7 @@ Change default `staff` / `admin` passwords in production. Demo credentials are *
 5. Double-submit same offline order → one server row  
 6. Offline inventory edit + online stock change → conflict logged, server stock kept  
 7. Logout / login / continue offline  
-8. Install PWA + force SW update  
+8. Rebuild/reopen the local shortcut (or force SW update on optional cloud POS)
 
 ### Residual risk (acceptable with process)
 
@@ -302,4 +303,4 @@ Change default `staff` / `admin` passwords in production. Demo credentials are *
 
 ---
 
-*Last updated: production hardening phase for Krunchies POS.*
+*Last updated: local-first shop till (IndexedDB) with optional Vercel fallback.*

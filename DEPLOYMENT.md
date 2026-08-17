@@ -6,9 +6,9 @@ This guide deploys the full stack for **$0** using:
 |-------|---------|
 | Customer website | [Vercel](https://vercel.com) |
 | Admin dashboard | Vercel (2nd project) |
-| POS | Vercel (3rd project) |
+| POS (shop till) | **Local production build** on the cashier PC (`127.0.0.1`), IndexedDB for offline orders. Optional Vercel POS is emergency fallback only. |
 | Go API | [Render](https://render.com) (Docker free web service) |
-| PostgreSQL | [Neon](https://neon.tech) |
+| PostgreSQL | [Neon](https://neon.tech) / Supabase |
 
 ---
 
@@ -22,10 +22,10 @@ Recommended domain layout (optional):
 
 - `www.yourdomain.com` → website  
 - `admin.yourdomain.com` → admin  
-- `pos.yourdomain.com` → POS  
+- Shop POS → desktop shortcut **Krunchies POS** (local `127.0.0.1:3001`)  
 - `api.yourdomain.com` → backend  
 
-Free SSL is automatic on Vercel and Render.
+Website and Admin use Vercel HTTPS. The shop till does **not** depend on Vercel for daily use.
 
 ---
 
@@ -111,9 +111,9 @@ Default seed logins (change immediately):
 
 ---
 
-## 4. Deploy frontends (Vercel × 3)
+## 4. Deploy frontends
 
-Create **three** Vercel projects from the same GitHub repo.
+Create **two** Vercel projects (website + admin) from the same GitHub repo. A third Vercel project for POS is optional emergency fallback only — cashiers use the local shop till.
 
 ### A) Website
 
@@ -143,7 +143,17 @@ NEXT_PUBLIC_POS_URL=https://YOUR-POS.vercel.app
 NEXT_PUBLIC_APP_NAME=Krunchies Admin
 ```
 
-### C) POS
+### C) POS (optional cloud fallback)
+
+Cashiers at the shop should use the **local** production POS, not this Vercel URL, for daily work:
+
+1. Copy the repo onto the shop PC  
+2. Run `pos\scripts\Setup-Local-POS.bat`  
+3. Double-click the **Krunchies POS** desktop shortcut  
+
+See [`pos/docs/LOCAL-POS-PHASE-1.md`](./pos/docs/LOCAL-POS-PHASE-1.md).
+
+A Vercel POS project is optional as an emergency remote fallback (`pos\scripts\Launch-POS.bat`). If you still deploy it:
 
 | Root Directory | `pos` |
 
@@ -165,13 +175,13 @@ If `website` or `pos` fail to build because of `shared/krunchies-menu.json`:
 ## 5. CORS / HTTPS
 
 - Backend already allows browser calls from any origin (`*`) with Bearer tokens.  
-- Vercel and Render terminate HTTPS for you — no cert files needed.
+- Vercel and Render terminate HTTPS for website, admin, API, and optional cloud POS. The shop till on `127.0.0.1` does not need a public certificate.
 
 ---
 
 ## 6. Custom domains (optional)
 
-### Vercel (website / admin / pos)
+### Vercel (website / admin; optional cloud POS)
 
 1. Project → Settings → Domains → add domain  
 2. Add the DNS records Vercel shows (CNAME or A)  
@@ -184,7 +194,7 @@ If `website` or `pos` fail to build because of `shared/krunchies-menu.json`:
 3. Add CNAME to your Render hostname  
 4. SSL provisions automatically  
 
-Then update all three frontends:
+Then update website, admin, shop `pos/.env.local` (rerun setup or rebuild), and the optional Vercel POS if you still use it:
 
 ```text
 NEXT_PUBLIC_API_URL=https://api.yourdomain.com/api/v1
@@ -199,7 +209,7 @@ and redeploy.
 1. Open website → menu loads from API  
 2. Place a guest order  
 3. Admin login → analytics / products / settings save  
-4. POS login → pending orders appear  
+4. POS login on the **shop PC shortcut** → pending/history work from IndexedDB; internet is for login/sync  
 5. Settings phone/address appear on website footer  
 
 ---
@@ -249,9 +259,11 @@ cd admin && npm run dev      # :3002
 
 | Variable | Apps |
 |----------|------|
-| `NEXT_PUBLIC_API_URL` | website, admin, pos |
+| `NEXT_PUBLIC_API_URL` | website, admin, pos (cloud fallback) |
 | `NEXT_PUBLIC_POS_URL` | admin |
 | `NEXT_PUBLIC_APP_NAME` | optional |
+
+Shop local POS uses the same `NEXT_PUBLIC_API_URL` written into `pos/.env.local` by `Setup-Local-POS.bat`.
 
 ---
 
@@ -259,13 +271,13 @@ cd admin && npm run dev      # :3002
 
 | Problem | Fix |
 |---------|-----|
-| Frontend calls localhost | Set `NEXT_PUBLIC_API_URL` and **redeploy** |
+| Frontend calls localhost | Set `NEXT_PUBLIC_API_URL` then rebuild (shop: `Setup-Local-POS.bat`; website/admin: Vercel redeploy) |
 | API 502 / cold start | Wait and retry; Render free sleeps |
 | DB auth failed | Check Neon URL encoding of password special chars |
 | Settings save 500 | Ensure latest backend (WhatsApp column fix) is deployed |
 | Build can’t find `shared/` | Confirm Root Directory and monorepo layout on Vercel |
+| POS won’t install as PWA | Cloud fallback only; shop till uses the desktop Chrome app shortcut |
 | Offline POS duplicates orders | Redeploy API so `client_order_id` unique column exists |
-| POS won’t install as PWA | Must be HTTPS; check Application → Manifest |
 
 ---
 

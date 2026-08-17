@@ -60,7 +60,7 @@ Repeated clicks do not start duplicate servers.
 - Emergency remote launcher:
   `pos\scripts\Launch-POS.bat`
 
-The Vercel POS remains an emergency fallback during the Phase 1 shop trial.
+The Vercel POS remains an emergency fallback. Daily till work is this local shortcut and IndexedDB — not the Vercel URL.
 
 ## Updating Phase 1
 

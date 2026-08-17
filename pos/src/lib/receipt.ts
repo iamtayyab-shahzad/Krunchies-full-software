@@ -842,20 +842,3 @@ export function printCustomerReceipt(
     `Receipt ${order.order_number || order.id}`,
   );
 }
-
-/** @deprecated use printCustomerReceipt */
-export function printReceipt(
-  order: Order,
-  settings: Settings | null,
-  reprint = false,
-): Promise<boolean> {
-  return printCustomerReceipt(order, settings, reprint);
-}
-
-export function buildReceiptHtml(
-  order: Order,
-  settings: Settings | null,
-  reprint = false,
-) {
-  return buildCustomerReceiptHtml(order, settings, reprint);
-}

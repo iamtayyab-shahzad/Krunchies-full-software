@@ -88,11 +88,6 @@ export {
   POS_SYNC_COMPLETE_EVENT,
 };
 
-/** @deprecated use runSync */
-export async function syncOfflineQueue() {
-  return runSync("legacy");
-}
-
 export const authApi = {
   login: async (input: StaffLoginInput) => {
     const data = await apiFetch<{ token: string }>(
