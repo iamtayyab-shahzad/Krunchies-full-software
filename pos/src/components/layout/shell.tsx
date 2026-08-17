@@ -71,7 +71,7 @@ export function Sidebar() {
       if (!isOnline()) return false;
       // Avoid fighting the sync engine mid-flight.
       if (getSyncState().syncing) return false;
-      return 5_000;
+      return 45_000;
     },
     refetchOnWindowFocus: true,
     staleTime: 2_000,

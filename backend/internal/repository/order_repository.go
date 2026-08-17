@@ -18,13 +18,52 @@ func NewOrderRepository(db *gorm.DB) *OrderRepository {
 	return &OrderRepository{db: db}
 }
 
-// listPreloads attaches relations needed by POS/Admin UIs without pulling
-// unused product blobs (description, full category trees, etc.).
-func listPreloads(q *gorm.DB) *gorm.DB {
+func orderListProductSelectColumns() []string {
+	return []string{"id", "name", "category_id", "available"}
+}
+
+func orderDetailProductSelectColumns() []string {
+	return []string{"id", "name", "image", "category_id", "available"}
+}
+
+func selectProductColumns(db *gorm.DB, cols []string) *gorm.DB {
+	switch len(cols) {
+	case 4:
+		return db.Select(cols[0], cols[1], cols[2], cols[3])
+	case 5:
+		return db.Select(cols[0], cols[1], cols[2], cols[3], cols[4])
+	default:
+		return db
+	}
+}
+
+// orderListPreloads attaches relations for list/summary endpoints (pending,
+// history, phone/walk-in lists). Product image is omitted — clients cache
+// catalog images locally; omitting image avoids re-sending base64 blobs on polls.
+func orderListPreloads(q *gorm.DB) *gorm.DB {
 	return q.
 		Preload("Items").
 		Preload("Items.Product", func(db *gorm.DB) *gorm.DB {
-			return db.Select("id", "name", "image", "category_id", "available")
+			return selectProductColumns(db, orderListProductSelectColumns())
+		}).
+		Preload("Items.ProductSize", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "product_id", "size", "price")
+		}).
+		Preload("Customer", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "name", "phone")
+		}).
+		Preload("Payment").
+		Preload("Location", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "name", "delivery_charge")
+		})
+}
+
+// orderDetailPreloads is used for single-order fetches (GET by id / client id).
+func orderDetailPreloads(q *gorm.DB) *gorm.DB {
+	return q.
+		Preload("Items").
+		Preload("Items.Product", func(db *gorm.DB) *gorm.DB {
+			return selectProductColumns(db, orderDetailProductSelectColumns())
 		}).
 		Preload("Items.ProductSize", func(db *gorm.DB) *gorm.DB {
 			return db.Select("id", "product_id", "size", "price")
@@ -44,7 +83,7 @@ func (r *OrderRepository) Create(tx *gorm.DB, order *domain.Order) error {
 
 func (r *OrderRepository) GetByClientOrderID(clientOrderID uuid.UUID) (*domain.Order, error) {
 	var order domain.Order
-	if err := listPreloads(r.db).
+	if err := orderDetailPreloads(r.db).
 		Where("client_order_id = ?", clientOrderID).
 		First(&order).Error; err != nil {
 		return nil, err
@@ -58,7 +97,7 @@ func (r *OrderRepository) GetByID(id uuid.UUID) (*domain.Order, error) {
 
 func (r *OrderRepository) GetByIDTx(tx *gorm.DB, id uuid.UUID) (*domain.Order, error) {
 	var order domain.Order
-	if err := listPreloads(tx).
+	if err := orderDetailPreloads(tx).
 		First(&order, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
@@ -78,7 +117,7 @@ func (r *OrderRepository) ListPaged(limit, offset int, since *time.Time) ([]doma
 	}
 
 	var orders []domain.Order
-	q := listPreloads(r.db)
+	q := orderListPreloads(r.db)
 	if since != nil {
 		q = q.Where("updated_at >= ? OR created_at >= ?", *since, *since)
 	}
@@ -105,7 +144,7 @@ func (r *OrderRepository) ListByCustomerID(customerID uuid.UUID, limit int) ([]d
 		limit = 5
 	}
 	var orders []domain.Order
-	if err := listPreloads(r.db).
+	if err := orderListPreloads(r.db).
 		Where("customer_id = ?", customerID).
 		Order("created_at desc").
 		Limit(limit).
@@ -121,7 +160,7 @@ func (r *OrderRepository) ListByStatus(status string) ([]domain.Order, error) {
 		limit = 300
 	}
 	var orders []domain.Order
-	if err := listPreloads(r.db).
+	if err := orderListPreloads(r.db).
 		Where("order_status = ?", status).
 		Order("created_at desc").
 		Limit(limit).
@@ -133,7 +172,7 @@ func (r *OrderRepository) ListByStatus(status string) ([]domain.Order, error) {
 
 func (r *OrderRepository) ListByType(orderType string) ([]domain.Order, error) {
 	var orders []domain.Order
-	if err := listPreloads(r.db).
+	if err := orderListPreloads(r.db).
 		Where("order_type = ?", orderType).
 		Order("created_at desc").
 		Limit(200).
