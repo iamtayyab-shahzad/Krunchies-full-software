@@ -3,6 +3,7 @@ package handler
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"backend/internal/dto"
 
@@ -13,6 +14,23 @@ const (
 	defaultPageLimit = 50
 	maxPageLimit     = 500
 )
+
+// parseSinceQuery reads optional ?since= RFC3339 timestamp.
+// Empty → nil (legacy full-list behaviour). Invalid → error.
+func parseSinceQuery(c *gin.Context) (*time.Time, error) {
+	raw := strings.TrimSpace(c.Query("since"))
+	if raw == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339Nano, raw)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
 
 // parsePage reads ?limit=&offset=. When limit is omitted, paged is false and
 // the handler should return the full list (legacy behaviour).

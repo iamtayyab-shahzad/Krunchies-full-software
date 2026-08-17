@@ -132,7 +132,13 @@ func (h *OrderHandler) List(c *gin.Context) {
 		offset = 0
 	}
 
-	orders, err := h.service.ListOrders(limit, offset)
+	since, err := parseSinceQuery(c)
+	if err != nil {
+		utils.Error(c, http.StatusBadRequest, "invalid since (use RFC3339)")
+		return
+	}
+
+	orders, err := h.service.ListOrders(limit, offset, since)
 	if err != nil {
 		HandleError(c, err)
 		return

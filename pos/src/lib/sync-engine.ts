@@ -9,6 +9,8 @@ import {
   mapLocalToServerId,
   markActionError,
   markActionSynced,
+  mergeInventory,
+  mergeOrders,
   pruneSyncedActions,
   replaceInventory,
   replaceOrdersPreservingUnsynced,
@@ -32,6 +34,12 @@ import {
   POS_CONNECTIVITY_EVENT,
 } from "@/lib/network";
 import { notifyOrdersChanged } from "@/lib/offline-events";
+import {
+  buildInventoryPullUrl,
+  buildOrdersPullUrl,
+  CATALOG_PULL_AT_KEY,
+  shouldUseIncrementalCatalogPull,
+} from "@/lib/sync-pull";
 import type {
   CreateOrderInput,
   InventoryItem,
@@ -993,9 +1001,26 @@ export async function runSync(reason: string = "manual"): Promise<void> {
 
       if (shouldRefreshCatalog && (!hadFailure || reason === "manual")) {
         try {
+          const wantIncremental = shouldUseIncrementalCatalogPull(reason);
+          const lastPull = wantIncremental
+            ? await cacheGet<string>(CATALOG_PULL_AT_KEY)
+            : null;
+          const useSince =
+            wantIncremental &&
+            typeof lastPull === "string" &&
+            lastPull.length > 0;
+          // Stamp taken at pull start (minus 2s) so borderline updates are not missed.
+          const pullStartedAt = new Date(Date.now() - 2000).toISOString();
+          const ordersUrl = buildOrdersPullUrl({
+            since: useSince ? lastPull : null,
+          });
+          const inventoryUrl = buildInventoryPullUrl({
+            since: useSince ? lastPull : null,
+          });
+
           const [orders, inventory, discountRules] = await Promise.all([
-            apiFetch<Order[]>("/orders?limit=200"),
-            apiFetch<InventoryItem[]>("/inventory"),
+            apiFetch<Order[]>(ordersUrl),
+            apiFetch<InventoryItem[]>(inventoryUrl),
             apiFetch<
               {
                 id: string;
@@ -1012,19 +1037,28 @@ export async function runSync(reason: string = "manual"): Promise<void> {
             >("/discount-rules/active").catch(() => []),
           ]);
           if (Array.isArray(orders)) {
-            await replaceOrdersPreservingUnsynced(orders);
+            if (useSince) {
+              await mergeOrders(orders);
+            } else {
+              await replaceOrdersPreservingUnsynced(orders);
+            }
           }
           if (Array.isArray(inventory)) {
-            await replaceInventory(inventory);
+            if (useSince) {
+              await mergeInventory(inventory);
+            } else {
+              await replaceInventory(inventory);
+            }
           }
           const { setDiscountRulesCache } = await import("@/lib/weekend-promo");
-          const { cacheSet } = await import("@/lib/offline-db");
+          const { cacheSet: cacheSetLocal } = await import("@/lib/offline-db");
           if (Array.isArray(discountRules)) {
             setDiscountRulesCache(discountRules);
-            await cacheSet("discount_rules", discountRules);
+            await cacheSetLocal("discount_rules", discountRules);
           }
+          await cacheSet(CATALOG_PULL_AT_KEY, pullStartedAt);
         } catch {
-          /* ignore refresh failures */
+          /* ignore refresh failures — keep previous catalog_pull_at */
         }
       }
 
@@ -1144,7 +1178,7 @@ export function startSyncEngine() {
       return;
     }
     void runSync("interval");
-  }, 15_000);
+  }, 45_000);
 
   if (isOnline()) void runSync("startup");
 

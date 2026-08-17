@@ -559,8 +559,8 @@ func (s *OrderService) DeleteOrder(id uuid.UUID) error {
 	return tx.Commit().Error
 }
 
-func (s *OrderService) ListOrders(limit, offset int) ([]domain.Order, error) {
-	return s.orderRepo.ListPaged(limit, offset)
+func (s *OrderService) ListOrders(limit, offset int, since *time.Time) ([]domain.Order, error) {
+	return s.orderRepo.ListPaged(limit, offset, since)
 }
 
 func (s *OrderService) ListCustomerOrders(customerID uuid.UUID, limit int) ([]domain.Order, error) {

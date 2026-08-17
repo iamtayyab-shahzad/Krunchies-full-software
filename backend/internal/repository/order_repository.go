@@ -67,7 +67,9 @@ func (r *OrderRepository) GetByIDTx(tx *gorm.DB, id uuid.UUID) (*domain.Order, e
 
 // ListPaged returns orders newest-first with heavy relation preloads, but
 // always bounded by limit/offset to prevent high memory usage.
-func (r *OrderRepository) ListPaged(limit, offset int) ([]domain.Order, error) {
+// When since is non-nil, only rows with updated_at or created_at >= since
+// are returned (additive filter for POS incremental polls).
+func (r *OrderRepository) ListPaged(limit, offset int, since *time.Time) ([]domain.Order, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -76,7 +78,11 @@ func (r *OrderRepository) ListPaged(limit, offset int) ([]domain.Order, error) {
 	}
 
 	var orders []domain.Order
-	if err := listPreloads(r.db).
+	q := listPreloads(r.db)
+	if since != nil {
+		q = q.Where("updated_at >= ? OR created_at >= ?", *since, *since)
+	}
+	if err := q.
 		Order("created_at desc").
 		Limit(limit).
 		Offset(offset).
@@ -87,7 +93,7 @@ func (r *OrderRepository) ListPaged(limit, offset int) ([]domain.Order, error) {
 }
 
 func (r *OrderRepository) List() ([]domain.Order, error) {
-	return r.ListPaged(50, 0)
+	return r.ListPaged(50, 0, nil)
 }
 
 // ListByCustomerID returns the customer's newest orders (capped), with items for reorder.

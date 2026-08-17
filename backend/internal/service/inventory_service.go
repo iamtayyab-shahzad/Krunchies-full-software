@@ -58,6 +58,11 @@ func (s *InventoryService) List() ([]domain.Inventory, error) {
 	return s.repo.List()
 }
 
+// ListUpdatedSince is additive for POS incremental polls; List() stays full.
+func (s *InventoryService) ListUpdatedSince(since time.Time) ([]domain.Inventory, error) {
+	return s.repo.ListUpdatedSince(since)
+}
+
 func (s *InventoryService) ListPaged(limit, offset int) ([]domain.Inventory, int64, error) {
 	return s.repo.ListPaged(limit, offset)
 }

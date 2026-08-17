@@ -632,7 +632,6 @@ export async function replaceOrders(orders: Order[]) {
     await tx.store.put(o);
   }
   await tx.done;
-  await cacheSet("orders", capped);
   await rebuildCustomersFromOrders(capped);
 }
 
@@ -817,7 +816,6 @@ export async function mergeOrders(orders: Order[]) {
     await tx.store.put(o);
   }
   await tx.done;
-  await cacheSet("orders", merged);
 }
 
 export async function upsertLocalOrder(order: Order) {
@@ -836,36 +834,18 @@ export async function upsertLocalOrder(order: Order) {
     (row) => row.id === order.id || ordersShareIdentity(row, order),
   );
   await db.put("orders", order);
-  const cachedRaw = await cacheGet<Order[]>("orders");
-  const cached = compactOrders(Array.isArray(cachedRaw) ? cachedRaw : []);
-  const next = [
-    order,
-    ...cached.filter(
-      (o) => o.id !== order.id && !ordersShareIdentity(o, order),
-    ),
-  ].slice(0, 500);
-  await cacheSet("orders", next);
   await upsertCustomerFromOrder(order, !existed);
 }
 
 export async function deleteLocalOrder(id: string) {
   const db = await getDb();
   await db.delete("orders", id);
-  const cachedRaw = await cacheGet<Order[]>("orders");
-  const cached = compactOrders(Array.isArray(cachedRaw) ? cachedRaw : []);
-  await cacheSet(
-    "orders",
-    cached.filter((o) => o.id !== id),
-  );
 }
 
 export async function listLocalOrders() {
   const { dedupeOrdersByIdentity } = await import("@/lib/order-identity");
   const rows = compactOrders(await getAllSafe("orders"));
-  const cachedRaw = await cacheGet<Order[]>("orders");
-  const cached = compactOrders(Array.isArray(cachedRaw) ? cachedRaw : []);
-  const source = rows.length ? rows : cached;
-  return dedupeOrdersByIdentity(source);
+  return dedupeOrdersByIdentity(rows);
 }
 
 export async function listLocalPendingOrders() {
@@ -882,6 +862,21 @@ export async function replaceInventory(items: InventoryItem[]) {
   for (const item of clean) await tx.store.put(item);
   await tx.done;
   await cacheSet("inventory", clean);
+}
+
+/** Upsert changed inventory rows without clearing the store (incremental sync). */
+export async function mergeInventory(items: InventoryItem[]) {
+  if (!Array.isArray(items) || !items.length) return;
+  const clean = items.filter((item) => item && typeof item.id === "string");
+  if (!clean.length) return;
+  const db = await getDb();
+  const tx = db.transaction("inventory", "readwrite");
+  for (const item of clean) await tx.store.put(item);
+  await tx.done;
+  const all = (await getAllSafe("inventory")).filter(
+    (item) => item && typeof item.id === "string",
+  );
+  await cacheSet("inventory", all);
 }
 
 export async function listLocalInventory() {

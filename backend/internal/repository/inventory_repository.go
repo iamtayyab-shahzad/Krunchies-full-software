@@ -194,6 +194,19 @@ func (r *InventoryRepository) List() ([]domain.Inventory, error) {
 	return items, nil
 }
 
+// ListUpdatedSince returns inventory rows changed at or after since.
+// Additive filter for POS incremental polls — List() unchanged for old clients.
+func (r *InventoryRepository) ListUpdatedSince(since time.Time) ([]domain.Inventory, error) {
+	var items []domain.Inventory
+	if err := r.db.
+		Where("updated_at >= ? OR created_at >= ?", since, since).
+		Order("name asc").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *InventoryRepository) ListPaged(limit, offset int) ([]domain.Inventory, int64, error) {
 	var total int64
 	var items []domain.Inventory

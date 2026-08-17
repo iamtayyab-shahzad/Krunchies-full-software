@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"backend/internal/domain"
 	"backend/internal/service"
 	"backend/internal/utils"
 
@@ -19,9 +20,20 @@ func NewInventoryHandler(s *service.InventoryService) *InventoryHandler {
 }
 
 func (h *InventoryHandler) List(c *gin.Context) {
+	since, err := parseSinceQuery(c)
+	if err != nil {
+		utils.Error(c, http.StatusBadRequest, "invalid since (use RFC3339)")
+		return
+	}
+
 	limit, offset, paged := parsePage(c)
 	if !paged {
-		data, err := h.service.List()
+		var data []domain.Inventory
+		if since != nil {
+			data, err = h.service.ListUpdatedSince(*since)
+		} else {
+			data, err = h.service.List()
+		}
 		if err != nil {
 			HandleError(c, err)
 			return
@@ -29,6 +41,7 @@ func (h *InventoryHandler) List(c *gin.Context) {
 		utils.Success(c, http.StatusOK, "inventory list", data)
 		return
 	}
+	// Paged path unchanged for Admin; since is ignored here (Admin uses full pages).
 	items, total, err := h.service.ListPaged(limit, offset)
 	if err != nil {
 		HandleError(c, err)
