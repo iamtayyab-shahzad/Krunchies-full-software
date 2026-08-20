@@ -376,6 +376,7 @@ export async function pruneCacheKeys(keepKeys: string[]) {
     "sync_conflicts",
     "order_id_map",
     "discount_rules",
+    "shop_till_creds",
   ];
   for (const row of all) {
     if (!isValidCacheRow(row)) {
@@ -931,6 +932,34 @@ export async function clearSession() {
   const db = await getDb();
   await db.delete("session", "current");
   await db.delete("cache", "session");
+  await db.delete("cache", "shop_till_creds");
+}
+
+export type ShopTillCredentials = {
+  username: string;
+  password: string;
+};
+
+/** Local shop only — never written on Vercel hosts. Cleared on Logout. */
+export async function saveShopTillCredentials(
+  creds: ShopTillCredentials,
+): Promise<void> {
+  if (!creds?.username || !creds?.password) return;
+  await cacheSet("shop_till_creds", {
+    username: creds.username,
+    password: creds.password,
+  });
+}
+
+export async function getShopTillCredentials(): Promise<ShopTillCredentials | null> {
+  const row = await cacheGet<ShopTillCredentials>("shop_till_creds");
+  if (!row?.username || !row?.password) return null;
+  return row;
+}
+
+export async function clearShopTillCredentials(): Promise<void> {
+  const db = await getDb();
+  await db.delete("cache", "shop_till_creds");
 }
 
 export async function replaceCustomers(customers: Customer[]) {

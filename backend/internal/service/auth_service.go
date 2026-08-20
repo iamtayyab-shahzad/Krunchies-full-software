@@ -35,7 +35,9 @@ func (s *AuthService) StaffLogin(input dto.StaffLoginRequest) (string, error) {
 	if !utils.CheckPassword(user.Password, input.Password) {
 		return "", utils.NewAppError(http.StatusUnauthorized, "invalid credentials")
 	}
-	return utils.GenerateToken(s.jwtSecret, user.ID.String(), "staff", 24*time.Hour)
+	// Shop tills stay open for days; 24h forced re-login was kicking cashiers.
+	// Cloud POS still requires password — this only lengthens the signed ticket.
+	return utils.GenerateToken(s.jwtSecret, user.ID.String(), "staff", 30*24*time.Hour)
 }
 
 func (s *AuthService) RegisterCustomer(input dto.CustomerRegisterRequest) (*domain.Customer, string, error) {

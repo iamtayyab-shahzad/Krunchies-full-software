@@ -99,6 +99,18 @@ export const authApi = {
       false,
     );
     await sessionRepo.cacheFromToken(input.username, data.token);
+    // Shop till only: remember credentials so cashiers never type password again.
+    // Vercel / public hosts never store this.
+    if (typeof window !== "undefined") {
+      const { isLocalShopPos } = await import("@/lib/pos-mode");
+      if (isLocalShopPos()) {
+        const { saveShopTillCredentials } = await import("@/lib/offline-db");
+        await saveShopTillCredentials({
+          username: input.username,
+          password: input.password,
+        });
+      }
+    }
     return data;
   },
 };

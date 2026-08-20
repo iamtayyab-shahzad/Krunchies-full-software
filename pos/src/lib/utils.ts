@@ -70,6 +70,23 @@ export function isOfflineSessionValid(session: {
   return Date.now() - saved < OFFLINE_SESSION_GRACE_MS;
 }
 
+/**
+ * Shop till (127.0.0.1): keep session until Logout — no password every few days.
+ * Cloud / Vercel: same 30-day grace as offline (password still required after).
+ */
+export function isTillSessionValid(
+  session: {
+    token?: string;
+    exp?: number | null;
+    saved_at?: string;
+  } | null,
+  opts?: { localShop?: boolean },
+): boolean {
+  if (!session?.token) return false;
+  if (opts?.localShop) return true;
+  return isOfflineSessionValid(session);
+}
+
 /** Deterministic walk-in location seeded by importmenu. */
 export const WALKIN_LOCATION_ID = "50000000-0000-4000-8000-000000000000";
 

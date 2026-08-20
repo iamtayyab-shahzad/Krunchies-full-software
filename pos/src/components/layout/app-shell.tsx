@@ -5,8 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sidebar, TopBar } from "@/components/layout/shell";
 import { useMenuSearch } from "@/context/menu-search-context";
-import { TOKEN_KEY, isTokenExpired, isOfflineSessionValid } from "@/lib/utils";
+import {
+  TOKEN_KEY,
+  isTokenExpired,
+  isTillSessionValid,
+} from "@/lib/utils";
 import { isOnline } from "@/lib/network";
+import { isLocalShopPos } from "@/lib/pos-mode";
 import {
   sessionRepo,
   settingsApi,
@@ -40,26 +45,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const localShop = isLocalShopPos();
       let token = localStorage.getItem(TOKEN_KEY);
       const session = await sessionRepo.get();
 
-      // Restore session from IndexedDB when localStorage is empty / JWT expired.
-      // Offline: allow grace period so cashiers keep selling without re-login.
-      if (!token || isTokenExpired(token)) {
-        if (isOfflineSessionValid(session) && session?.token) {
-          if (!isOnline() || !token) {
-            localStorage.setItem(TOKEN_KEY, session.token);
-            token = session.token;
-          }
-        }
+      // Restore IndexedDB session when localStorage is empty or JWT expired.
+      // Do this even when online — previously online+expired wiped the till.
+      if (
+        (!token || isTokenExpired(token)) &&
+        isTillSessionValid(session, { localShop }) &&
+        session?.token
+      ) {
+        localStorage.setItem(TOKEN_KEY, session.token);
+        token = session.token;
       }
 
-      const allowOffline =
-        !isOnline() && isOfflineSessionValid(session) && Boolean(token);
+      const sessionOk = isTillSessionValid(session, { localShop });
+      const hasUsableToken = Boolean(token) && sessionOk;
 
-      if (!token || (isTokenExpired(token) && !allowOffline)) {
+      if (!hasUsableToken) {
+        // Local shop with saved till credentials: bounce to login page which
+        // auto-signs in (no password UI). Cloud always shows password form.
         localStorage.removeItem(TOKEN_KEY);
-        if (isOnline()) await sessionRepo.clear();
         if (!cancelled) router.replace("/login");
         return;
       }
