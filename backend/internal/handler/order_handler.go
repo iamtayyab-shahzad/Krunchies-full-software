@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"backend/internal/dto"
+	"backend/internal/repository"
 	"backend/internal/service"
 	"backend/internal/utils"
 
@@ -138,9 +139,32 @@ func (h *OrderHandler) List(c *gin.Context) {
 		return
 	}
 
-	orders, err := h.service.ListOrders(limit, offset, since)
+	createdFrom, createdTo, err := parseOptionalOrderDateRange(c)
+	if err != nil {
+		utils.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	filter := repository.OrderListFilter{
+		Limit:       limit,
+		Offset:      offset,
+		Since:       since,
+		CreatedFrom: createdFrom,
+		CreatedTo:   createdTo,
+		Status:      strings.TrimSpace(c.Query("status")),
+		Query:       strings.TrimSpace(c.Query("q")),
+	}
+
+	orders, total, err := h.service.ListOrdersFiltered(filter)
 	if err != nil {
 		HandleError(c, err)
+		return
+	}
+
+	// POS / legacy clients expect a bare array. Admin passes include_total=1
+	// for paginated { items, total, limit, offset }.
+	if strings.TrimSpace(c.Query("include_total")) == "1" {
+		utils.Success(c, http.StatusOK, "orders list", pageResult(orders, total, limit, offset))
 		return
 	}
 	utils.Success(c, http.StatusOK, "orders list", orders)

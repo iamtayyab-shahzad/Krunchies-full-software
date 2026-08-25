@@ -84,3 +84,47 @@ func parseDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	}
 	return start, end, nil
 }
+
+// parseOptionalOrderDateRange reads optional ?start=&end= YYYY-MM-DD (Asia/Karachi).
+// Unlike parseDateRange, omitting both returns nil filters (full history).
+func parseOptionalOrderDateRange(c *gin.Context) (*time.Time, *time.Time, error) {
+	startRaw := strings.TrimSpace(c.Query("start"))
+	endRaw := strings.TrimSpace(c.Query("end"))
+	if startRaw == "" && endRaw == "" {
+		return nil, nil, nil
+	}
+	loc := businessLocation()
+	parse := func(raw string, endOfDay bool) (time.Time, error) {
+		t, err := time.ParseInLocation("2006-01-02", raw, loc)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("invalid date %q (use YYYY-MM-DD)", raw)
+		}
+		if endOfDay {
+			return t.AddDate(0, 0, 1), nil
+		}
+		return t, nil
+	}
+	var start, end time.Time
+	var err error
+	if startRaw != "" {
+		start, err = parse(startRaw, false)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		// Only end provided — open-ended start (epoch).
+		start = time.Unix(0, 0).UTC()
+	}
+	if endRaw != "" {
+		end, err = parse(endRaw, true)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		end = time.Now().In(loc).AddDate(0, 0, 1)
+	}
+	if !end.After(start) {
+		return nil, nil, fmt.Errorf("end date must be after start date")
+	}
+	return &start, &end, nil
+}

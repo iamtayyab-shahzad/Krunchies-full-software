@@ -42,3 +42,37 @@ func TestParseDateRange_WeekIsMondayStartKarachi(t *testing.T) {
 		t.Fatalf("week should be 7 days, got %d", days)
 	}
 }
+
+func TestParseOptionalOrderDateRange_OmittedMeansNoFilter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/orders?limit=50", nil)
+	from, to, err := parseOptionalOrderDateRange(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if from != nil || to != nil {
+		t.Fatalf("expected nil filters, got %v %v", from, to)
+	}
+}
+
+func TestParseOptionalOrderDateRange_StartEndInclusiveExclusive(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	loc := businessLocation()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/orders?start=2026-08-01&end=2026-08-07", nil)
+	from, to, err := parseOptionalOrderDateRange(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if from == nil || to == nil {
+		t.Fatal("expected both bounds")
+	}
+	wantFrom := time.Date(2026, 8, 1, 0, 0, 0, 0, loc)
+	wantTo := time.Date(2026, 8, 8, 0, 0, 0, 0, loc)
+	if !from.Equal(wantFrom) || !to.Equal(wantTo) {
+		t.Fatalf("want %v–%v got %v–%v", wantFrom, wantTo, *from, *to)
+	}
+}

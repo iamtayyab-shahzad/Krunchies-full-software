@@ -1205,12 +1205,53 @@ export const reportsApi = {
 };
 
 export const ordersApi = {
-  list: (params?: { limit?: number; offset?: number }) => {
+  /** Bare array (POS/dashboard compatible). Pass includeTotal via listPaged instead. */
+  list: (params?: {
+    limit?: number;
+    offset?: number;
+    start?: string;
+    end?: string;
+    status?: string;
+    q?: string;
+  }) => {
     const search = new URLSearchParams();
     if (params?.limit != null) search.set("limit", String(params.limit));
     if (params?.offset != null) search.set("offset", String(params.offset));
+    if (params?.start) search.set("start", params.start);
+    if (params?.end) search.set("end", params.end);
+    if (params?.status && params.status !== "ALL") search.set("status", params.status);
+    if (params?.q?.trim()) search.set("q", params.q.trim());
     const qs = search.toString();
     return apiFetch<BackendOrder[]>(`/orders${qs ? `?${qs}` : "?limit=200"}`);
+  },
+  listPaged: async (params?: {
+    limit?: number;
+    offset?: number;
+    start?: string;
+    end?: string;
+    status?: string;
+    q?: string;
+  }) => {
+    const search = new URLSearchParams();
+    if (params?.limit != null) search.set("limit", String(params.limit));
+    if (params?.offset != null) search.set("offset", String(params.offset));
+    if (params?.start) search.set("start", params.start);
+    if (params?.end) search.set("end", params.end);
+    if (params?.status && params.status !== "ALL") search.set("status", params.status);
+    if (params?.q?.trim()) search.set("q", params.q.trim());
+    search.set("include_total", "1");
+    const page = await apiFetch<{
+      items: BackendOrder[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(`/orders?${search}`);
+    return {
+      items: page.items || [],
+      total: Number(page.total || 0),
+      limit: Number(page.limit || params?.limit || 50),
+      offset: Number(page.offset || params?.offset || 0),
+    };
   },
   pending: () => apiFetch<BackendOrder[]>("/orders/pending"),
   update: (

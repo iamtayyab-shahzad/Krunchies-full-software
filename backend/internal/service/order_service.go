@@ -563,6 +563,10 @@ func (s *OrderService) ListOrders(limit, offset int, since *time.Time) ([]domain
 	return s.orderRepo.ListPaged(limit, offset, since)
 }
 
+func (s *OrderService) ListOrdersFiltered(f repository.OrderListFilter) ([]domain.Order, int64, error) {
+	return s.orderRepo.ListPagedFiltered(f)
+}
+
 func (s *OrderService) ListCustomerOrders(customerID uuid.UUID, limit int) ([]domain.Order, error) {
 	return s.orderRepo.ListByCustomerID(customerID, limit)
 }

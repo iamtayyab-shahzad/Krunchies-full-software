@@ -109,6 +109,52 @@ func (r *OrderRepository) GetByIDTx(tx *gorm.DB, id uuid.UUID) (*domain.Order, e
 // When since is non-nil, only rows with updated_at or created_at >= since
 // are returned (additive filter for POS incremental polls).
 func (r *OrderRepository) ListPaged(limit, offset int, since *time.Time) ([]domain.Order, error) {
+	rows, _, err := r.ListPagedFiltered(OrderListFilter{
+		Limit:  limit,
+		Offset: offset,
+		Since:  since,
+	})
+	return rows, err
+}
+
+// OrderListFilter is the admin/POS list query shape.
+type OrderListFilter struct {
+	Limit       int
+	Offset      int
+	Since       *time.Time // POS incremental (updated_at OR created_at)
+	CreatedFrom *time.Time // inclusive (Asia/Karachi day start as UTC instant)
+	CreatedTo   *time.Time // exclusive end
+	Status      string
+	Query       string
+}
+
+func applyOrderListFilter(db *gorm.DB, f OrderListFilter) *gorm.DB {
+	q := db.Model(&domain.Order{})
+	if f.Since != nil {
+		q = q.Where("updated_at >= ? OR created_at >= ?", *f.Since, *f.Since)
+	}
+	if f.CreatedFrom != nil {
+		q = q.Where("created_at >= ?", *f.CreatedFrom)
+	}
+	if f.CreatedTo != nil {
+		q = q.Where("created_at < ?", *f.CreatedTo)
+	}
+	if status := strings.TrimSpace(f.Status); status != "" && !strings.EqualFold(status, "ALL") {
+		q = q.Where("order_status = ?", strings.ToUpper(status))
+	}
+	if query := strings.TrimSpace(f.Query); query != "" {
+		like := "%" + query + "%"
+		q = q.Where(
+			"order_number ILIKE ? OR customer_name ILIKE ? OR phone ILIKE ? OR CAST(id AS text) ILIKE ?",
+			like, like, like, like,
+		)
+	}
+	return q
+}
+
+func (r *OrderRepository) ListPagedFiltered(f OrderListFilter) ([]domain.Order, int64, error) {
+	limit := f.Limit
+	offset := f.Offset
 	if limit <= 0 {
 		limit = 50
 	}
@@ -116,19 +162,20 @@ func (r *OrderRepository) ListPaged(limit, offset int, since *time.Time) ([]doma
 		offset = 0
 	}
 
-	var orders []domain.Order
-	q := orderListPreloads(r.db)
-	if since != nil {
-		q = q.Where("updated_at >= ? OR created_at >= ?", *since, *since)
+	var total int64
+	if err := applyOrderListFilter(r.db, f).Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
-	if err := q.
+
+	var orders []domain.Order
+	if err := orderListPreloads(applyOrderListFilter(r.db, f)).
 		Order("created_at desc").
 		Limit(limit).
 		Offset(offset).
 		Find(&orders).Error; err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return orders, nil
+	return orders, total, nil
 }
 
 func (r *OrderRepository) List() ([]domain.Order, error) {

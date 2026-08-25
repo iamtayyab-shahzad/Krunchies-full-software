@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Search, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Search, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -20,41 +20,108 @@ import {
   type BackendOrder,
 } from "@/services/api";
 
+const PAGE_SIZE = 50;
+
+function ymd(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function startOfWeekMonday(d = new Date()) {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  const weekday = copy.getDay(); // Sun=0
+  const offset = (weekday + 6) % 7; // Mon=0
+  copy.setDate(copy.getDate() - offset);
+  return copy;
+}
+
+type DatePreset = "all" | "today" | "week" | "month" | "custom";
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatusFilter] = useState("ALL");
+  const [page, setPage] = useState(0);
+  const [preset, setPreset] = useState<DatePreset>("all");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
   const [editing, setEditing] = useState<BackendOrder | null>(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
 
-  const refresh = async () => {
-    const list = await ordersApi.list();
-    setOrders(list);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      const next = query.trim();
+      if (next === debouncedQuery) return;
+      setDebouncedQuery(next);
+      setPage(0);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [query, debouncedQuery]);
+
+  const applyPreset = (next: DatePreset) => {
+    setPreset(next);
+    setPage(0);
+    const now = new Date();
+    if (next === "all") {
+      setStart("");
+      setEnd("");
+      return;
+    }
+    if (next === "today") {
+      const day = ymd(now);
+      setStart(day);
+      setEnd(day);
+      return;
+    }
+    if (next === "week") {
+      const from = startOfWeekMonday(now);
+      setStart(ymd(from));
+      setEnd(ymd(now));
+      return;
+    }
+    if (next === "month") {
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStart(ymd(from));
+      setEnd(ymd(now));
+    }
   };
 
-  useEffect(() => {
-    refresh()
-      .catch((error) =>
-        toast.error(error instanceof Error ? error.message : "Failed to load orders"),
-      )
-      .finally(() => setLoading(false));
-  }, []);
+  const refresh = useCallback(async () => {
+    const pageData = await ordersApi.listPaged({
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+      start: start || undefined,
+      end: end || undefined,
+      status,
+      q: debouncedQuery || undefined,
+    });
+    setOrders(pageData.items);
+    setTotal(pageData.total);
+  }, [page, start, end, status, debouncedQuery]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return orders
-      .filter((o) => status === "ALL" || o.order_status === status)
-      .filter(
-        (o) =>
-          !q ||
-          o.order_number.toLowerCase().includes(q) ||
-          o.id.toLowerCase().includes(q) ||
-          o.customer_name.toLowerCase().includes(q) ||
-          o.phone.includes(q),
-      );
-  }, [orders, query, status]);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    refresh()
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load orders");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh]);
 
   const openEdit = (order: BackendOrder) => {
     if (order.order_status !== "PENDING") {
@@ -95,15 +162,62 @@ export default function OrdersPage() {
     }
   };
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const fromRow = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const toRow = Math.min(total, (page + 1) * PAGE_SIZE);
+
   return (
     <div>
       <PageHeader
         title="Orders"
-        description="Search, edit pending, complete, or cancel orders"
+        description="Search, filter by date, edit pending, complete, or cancel orders"
       />
 
-      <div className="mb-4 flex items-center gap-3">
-        <div className="relative max-w-md flex-1">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {(
+          [
+            ["all", "All time"],
+            ["today", "Today"],
+            ["week", "This week"],
+            ["month", "This month"],
+          ] as const
+        ).map(([value, label]) => (
+          <Button
+            key={value}
+            size="sm"
+            variant={preset === value ? "default" : "secondary"}
+            onClick={() => applyPreset(value)}
+          >
+            {label}
+          </Button>
+        ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="date"
+            className="w-auto"
+            value={start}
+            onChange={(e) => {
+              setPreset("custom");
+              setStart(e.target.value);
+              setPage(0);
+            }}
+          />
+          <span className="text-sm text-zinc-500">to</span>
+          <Input
+            type="date"
+            className="w-auto"
+            value={end}
+            onChange={(e) => {
+              setPreset("custom");
+              setEnd(e.target.value);
+              setPage(0);
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] max-w-md flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
           <Input
             className="pl-10"
@@ -117,7 +231,10 @@ export default function OrdersPage() {
             key={value}
             size="sm"
             variant={status === value ? "default" : "secondary"}
-            onClick={() => setStatusFilter(value)}
+            onClick={() => {
+              setStatusFilter(value);
+              setPage(0);
+            }}
           >
             {value}
           </Button>
@@ -137,8 +254,8 @@ export default function OrdersPage() {
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {filtered.map((order) => (
+          <tbody className={loading ? "opacity-60" : undefined}>
+            {orders.map((order) => (
               <tr key={order.id} className="border-t border-zinc-800">
                 <td className="px-4 py-3">
                   <p className="font-bold">{order.order_number}</p>
@@ -220,15 +337,53 @@ export default function OrdersPage() {
                 </td>
               </tr>
             ))}
-            {!loading && !filtered.length ? (
+            {!loading && !orders.length ? (
               <tr>
                 <td colSpan={7} className="px-4 py-10 text-center text-zinc-500">
                   No orders found.
                 </td>
               </tr>
             ) : null}
+            {loading && !orders.length ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-zinc-500">
+                  Loading orders…
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-zinc-400">
+          {total === 0
+            ? "No results"
+            : `Showing ${fromRow}–${toRow} of ${total}`}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={page <= 0 || loading}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+          <span className="min-w-[7rem] text-center text-sm text-zinc-400">
+            Page {Math.min(page + 1, totalPages)} of {totalPages}
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={loading || (page + 1) * PAGE_SIZE >= total}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <Dialog open={Boolean(editing)} onOpenChange={() => setEditing(null)}>
