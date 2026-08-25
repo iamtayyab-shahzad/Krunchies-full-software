@@ -23,13 +23,17 @@ import {
 } from "@/lib/offline-db";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import {
+  beginCatchupTimeoutBudget,
   bindConnectivityListeners,
   clearForcedOffline,
+  endCatchupTimeoutBudget,
   forceOfflineNow,
+  isBrowserOnline,
   isNetworkError,
   isOnline,
   isPermanentSyncError,
   isQueueableError,
+  isUiOnline,
   shouldCountSyncAttempt,
   POS_CONNECTIVITY_EVENT,
 } from "@/lib/network";
@@ -411,9 +415,19 @@ async function processAction(
           : p.orderType === "walkin"
             ? "/orders/walkin"
             : "/orders";
+      // Guard: older queued payloads / phone drafts cleared after walk-in→phone
+      // switch can carry a blank name; backend rejects those permanently.
+      const { sanitizeOrderCustomerName } = await import("@/lib/order-customer");
+      const createBody: CreateOrderInput = {
+        ...p.input,
+        customer_name: sanitizeOrderCustomerName(
+          p.input.customer_name,
+          p.orderType,
+        ),
+      };
       const order = await apiFetch<Order>(path, {
         method: "POST",
-        body: JSON.stringify(p.input),
+        body: JSON.stringify(createBody),
       });
 
       // Never flash server PENDING over a locally completed/cancelled order.
@@ -874,16 +888,34 @@ async function reviveDeadActionsOnReconnect() {
   }
 }
 
+function shouldUseCatchupTimeout(reason: string) {
+  return (
+    reason === "manual" ||
+    reason === "online" ||
+    reason === "startup" ||
+    reason === "visible"
+  );
+}
+
 export async function runSync(reason: string = "manual"): Promise<void> {
+  // UI label follows the browser; API circuit-breaker only gates whether we try.
   if (!isOnline()) {
-    setState({ online: false });
+    setState({ online: isUiOnline() });
     await refreshPendingCount();
     return;
   }
   if (syncPromise) return syncPromise;
 
+  const catchupBudget = shouldUseCatchupTimeout(reason);
+  if (catchupBudget) beginCatchupTimeoutBudget();
+
   syncPromise = (async () => {
-    setState({ online: true, syncing: true, completed: 0, current_action: null });
+    setState({
+      online: isUiOnline(),
+      syncing: true,
+      completed: 0,
+      current_action: null,
+    });
     try {
       if (reason === "online" || reason === "startup" || reason === "manual" || reason === "visible") {
         await reviveDeadActionsOnReconnect();
@@ -910,6 +942,10 @@ export async function runSync(reason: string = "manual"): Promise<void> {
       const skipped: OfflineAction[] = [];
 
       const runOne = async (action: OfflineAction, collectSkips: boolean) => {
+        // Genuine disconnect — stop the pass. Circuit-breaker cooldown alone
+        // must not abort the rest of a catch-up batch.
+        if (!isBrowserOnline()) return;
+
         const stillOpen = (await listPendingActions()).some(
           (a) => a.id === action.id,
         );
@@ -962,21 +998,18 @@ export async function runSync(reason: string = "manual"): Promise<void> {
           });
           if (isNetworkError(err) || isQueueableError(err)) {
             bumpBackoff();
-            throw err;
+            // Do NOT abort the batch — remaining actions still get a chance
+            // in this pass (cold-start / one flaky request must not kill all).
           }
         }
       };
 
-      try {
-        for (const action of due) {
-          await runOne(action, true);
-        }
-        // Second pass: COMPLETE/CANCEL that waited on CREATE in this same run.
-        for (const action of skipped) {
-          await runOne(action, false);
-        }
-      } catch {
-        /* network break already recorded */
+      for (const action of due) {
+        await runOne(action, true);
+      }
+      // Second pass: COMPLETE/CANCEL that waited on CREATE in this same run.
+      for (const action of skipped) {
+        await runOne(action, false);
       }
 
       await pruneSyncedActions(50);
@@ -1084,8 +1117,13 @@ export async function runSync(reason: string = "manual"): Promise<void> {
         scheduleDrainSoon();
       }
     } finally {
+      if (catchupBudget) endCatchupTimeoutBudget();
       await refreshPendingCount();
-      setState({ syncing: false, current_action: null });
+      setState({
+        online: isUiOnline(),
+        syncing: false,
+        current_action: null,
+      });
       syncPromise = null;
     }
   })();
@@ -1150,12 +1188,13 @@ export function startSyncEngine() {
   window.addEventListener("online", onOnline);
   window.addEventListener("offline", onOffline);
   const onConnectivity = (e: Event) => {
-    const online = Boolean(
+    const apiOnline = Boolean(
       (e as CustomEvent<{ online?: boolean }>).detail?.online,
     );
-    setState({ online });
+    // Never drive the Offline badge from circuit-breaker cooldown alone.
+    setState({ online: isUiOnline() });
     // API reachable again after a forced-offline cooldown — push immediately.
-    if (online) {
+    if (apiOnline && isUiOnline()) {
       resetBackoff();
       void runSync("online");
     }
@@ -1169,11 +1208,12 @@ export function startSyncEngine() {
   };
   document.addEventListener("visibilitychange", onVisible);
 
-  setState({ online: isOnline() });
+  setState({ online: isUiOnline() });
 
   const interval = setInterval(() => {
     if (typeof document !== "undefined" && document.hidden) return;
     if (!isOnline()) {
+      setState({ online: isUiOnline() });
       void refreshPendingCount();
       return;
     }

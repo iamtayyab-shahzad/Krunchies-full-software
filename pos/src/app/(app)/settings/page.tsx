@@ -27,6 +27,7 @@ import {
   discardAction,
   healIndexedDb,
   listDeadActions,
+  listLocalOrders,
   listPendingActions,
   reviveDeadAction,
 } from "@/lib/offline-db";
@@ -144,12 +145,25 @@ function FailedSyncPanel() {
   const [items, setItems] = useState<
     Awaited<ReturnType<typeof listDeadActions>>
   >([]);
+  const [orderByAction, setOrderByAction] = useState<
+    Record<string, import("@/types").Order | null>
+  >({});
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
     setLoading(true);
     try {
-      setItems(await listDeadActions());
+      const dead = await listDeadActions();
+      setItems(dead);
+      const locals = await listLocalOrders();
+      const { findOrderForFailedAction } = await import(
+        "@/lib/failed-sync-order"
+      );
+      const map: Record<string, import("@/types").Order | null> = {};
+      for (const item of dead) {
+        map[item.id] = findOrderForFailedAction(item, locals);
+      }
+      setOrderByAction(map);
     } finally {
       setLoading(false);
     }
@@ -190,46 +204,85 @@ function FailedSyncPanel() {
         <p className="text-sm text-zinc-500">Loading…</p>
       ) : (
         <div className="space-y-2">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-black/40 px-3 py-3"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-zinc-200">
-                  {item.type}
-                </p>
-                <p className="break-all text-xs text-zinc-500">
-                  {item.error || "Unknown error"}
-                </p>
+          {items.map((item) => {
+            const linked = orderByAction[item.id];
+            return (
+              <div
+                key={item.id}
+                className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-black/40 px-3 py-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-zinc-200">
+                    {item.type}
+                  </p>
+                  <p className="break-all text-xs text-red-300/90">
+                    {item.error || "Unknown error"}
+                  </p>
+                  {linked ? (
+                    <div className="mt-2 space-y-0.5 text-xs text-zinc-400">
+                      <p>
+                        <span className="text-zinc-500">Order:</span>{" "}
+                        {linked.order_number || linked.id.slice(0, 8)}
+                        {linked.customer_name
+                          ? ` · ${linked.customer_name}`
+                          : ""}
+                      </p>
+                      <p>
+                        <span className="text-zinc-500">Items:</span>{" "}
+                        {(linked.items || [])
+                          .map((i) => {
+                            const name =
+                              i.product_name || i.product?.name || "Item";
+                            const size = i.size || i.product_size?.size || "";
+                            return `${i.quantity}× ${name}${size ? ` (${size})` : ""}`;
+                          })
+                          .join(", ") || "—"}
+                      </p>
+                      <p>
+                        <span className="text-zinc-500">Total:</span> Rs{" "}
+                        {Number(linked.grand_total || 0).toLocaleString("en-PK")}
+                        {linked.created_at
+                          ? ` · ${new Date(linked.created_at).toLocaleString("en-PK", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}`
+                          : ""}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-zinc-600">
+                      No local order details found for this queue item.
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={async () => {
+                      await reviveDeadAction(item.id);
+                      toast.success("Queued for retry");
+                      await refresh();
+                      void runSync("manual");
+                    }}
+                  >
+                    Retry
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={async () => {
+                      await discardAction(item.id);
+                      toast.message("Discarded");
+                      await refresh();
+                    }}
+                  >
+                    Discard
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={async () => {
-                    await reviveDeadAction(item.id);
-                    toast.success("Queued for retry");
-                    await refresh();
-                    void runSync("manual");
-                  }}
-                >
-                  Retry
-                </Button>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={async () => {
-                    await discardAction(item.id);
-                    toast.message("Discarded");
-                    await refresh();
-                  }}
-                >
-                  Discard
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

@@ -697,9 +697,12 @@ export const ordersApi = {
     input: CreateOrderInput,
     orderType: "walkin" | "phone" | "website" = "walkin",
   ) => {
+    const { sanitizeOrderCustomerName } = await import("@/lib/order-customer");
+    const safeName = sanitizeOrderCustomerName(input.customer_name, orderType);
     const clientOrderId = input.client_order_id || crypto.randomUUID();
     const apiInput: CreateOrderInput = {
       ...input,
+      customer_name: safeName,
       client_order_id: clientOrderId,
       items: input.items.map(
         ({ product_id, product_size_id, quantity, special_instructions }) => ({

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"backend/internal/dto"
+	"backend/internal/middleware"
 	"backend/internal/service"
 	"backend/internal/utils"
 
@@ -32,11 +33,16 @@ func (h *AuthHandler) StaffLogin(c *gin.Context) {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !middleware.CheckLoginAllowed(c, input.Username) {
+		return
+	}
 	token, err := h.service.StaffLogin(input)
 	if err != nil {
+		middleware.RecordLoginFailure(c, input.Username)
 		HandleError(c, err)
 		return
 	}
+	middleware.RecordLoginSuccess(c, input.Username)
 	utils.Success(c, http.StatusOK, "staff login successful", gin.H{"token": token})
 }
 
@@ -76,11 +82,16 @@ func (h *AuthHandler) CustomerLogin(c *gin.Context) {
 		utils.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !middleware.CheckLoginAllowed(c, input.Phone) {
+		return
+	}
 	customer, token, err := h.service.CustomerLogin(input)
 	if err != nil {
+		middleware.RecordLoginFailure(c, input.Phone)
 		HandleError(c, err)
 		return
 	}
+	middleware.RecordLoginSuccess(c, input.Phone)
 	utils.Success(c, http.StatusOK, "customer login successful", gin.H{
 		"customer": customer,
 		"token":    token,

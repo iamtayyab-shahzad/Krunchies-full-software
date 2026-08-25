@@ -3,8 +3,13 @@
 /** After a network failure, skip remote calls for this long (use IndexedDB). */
 const UNREACHABLE_COOLDOWN_MS = 45_000;
 
+/** Cold-start budget for manual / reconnect / startup sync passes. */
+const CATCHUP_TIMEOUT_MS = 45_000;
+
 let forcedOfflineUntil = 0;
 let consecutiveFailures = 0;
+/** When set, apiFetch uses this timeout (catch-up sync). */
+let overrideTimeoutMs: number | null = null;
 
 export function isBrowserOnline() {
   if (typeof navigator === "undefined") return true;
@@ -12,13 +17,21 @@ export function isBrowserOnline() {
 }
 
 /**
- * Effective connectivity for POS.
+ * Effective connectivity for POS API calls.
  * False when the browser reports offline OR we recently confirmed the API
  * is unreachable (avoids long hangs while Wi‑Fi says "online").
  */
 export function isOnline() {
   if (!isBrowserOnline()) return false;
   return Date.now() >= forcedOfflineUntil;
+}
+
+/**
+ * User-facing online label: browser network only.
+ * Circuit-breaker cooldown must not flicker the Offline badge during catch-up.
+ */
+export function isUiOnline() {
+  return isBrowserOnline();
 }
 
 export const POS_CONNECTIVITY_EVENT = "pos-connectivity";
@@ -61,8 +74,21 @@ export function clearForcedOffline() {
   emitConnectivity(true);
 }
 
+/**
+ * Longer timeout for manual / reconnect / startup / visible catch-up sync
+ * so a sleeping Render free instance does not abort the whole batch.
+ */
+export function beginCatchupTimeoutBudget() {
+  overrideTimeoutMs = CATCHUP_TIMEOUT_MS;
+}
+
+export function endCatchupTimeoutBudget() {
+  overrideTimeoutMs = null;
+}
+
 /** Shorter timeouts while we are already in a failure streak. */
 export function apiTimeoutMs() {
+  if (overrideTimeoutMs != null) return overrideTimeoutMs;
   if (!isBrowserOnline()) return 2_000;
   if (consecutiveFailures >= 2) return 3_000;
   if (consecutiveFailures === 1) return 5_000;

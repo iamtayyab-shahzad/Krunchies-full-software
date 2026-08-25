@@ -352,6 +352,11 @@ export default function NewOrderPage() {
       toast.error("Customer name and phone required");
       return false;
     }
+    // Phone/delivery must never queue a blank name (backend permanent 400).
+    if (bill.customerName.trim().length < 2) {
+      toast.error("Customer name must be at least 2 characters");
+      return false;
+    }
     if (!isValidPkPhone(bill.phone)) {
       toast.error("Enter a valid 11-digit mobile number (e.g. 0300-1234567)");
       return false;
