@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -404,7 +404,7 @@ export default function InventoryPage() {
         .map((l) => `${l.inventory_name} (${l.quantity_base}${l.unit})`)
         .join(", ");
       toast.success(
-        `Deducted recipe for ${result.quantity}× ${result.product_name}${
+        `Deducted recipe for ${result.quantity}├ù ${result.product_name}${
           summary ? `: ${summary}` : ""
         }`,
       );
@@ -431,7 +431,7 @@ export default function InventoryPage() {
               </Button>
               <Button onClick={() => void saveAll()} disabled={saving || !dirtyCount}>
                 <Save className="h-4 w-4" />
-                {saving ? "Saving…" : `Save all${dirtyCount ? ` (${dirtyCount})` : ""}`}
+                {saving ? "SavingΓÇª" : `Save all${dirtyCount ? ` (${dirtyCount})` : ""}`}
               </Button>
             </div>
           ) : null
@@ -465,7 +465,7 @@ export default function InventoryPage() {
       {tab === "recipes" ? <RecipesPanel /> : null}
 
       {loading && tab !== "recipes" ? (
-        <p className="text-zinc-400">Loading inventory…</p>
+        <p className="text-zinc-400">Loading inventoryΓÇª</p>
       ) : null}
 
       {!loading && tab === "stock" ? (
@@ -474,7 +474,7 @@ export default function InventoryPage() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
             <Input
               className="pl-9"
-              placeholder="Search item…"
+              placeholder="Search itemΓÇª"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -558,7 +558,7 @@ export default function InventoryPage() {
                         )}
                         {Number(row.buyQty || 0) > 0 ? (
                           <p className="text-xs text-emerald-400">
-                            →{" "}
+                            ΓåÆ{" "}
                             {formatStock(
                               newStockPreview,
                               item.unit,
@@ -618,7 +618,7 @@ export default function InventoryPage() {
                       colSpan={7}
                       className="px-3 py-8 text-center text-zinc-500"
                     >
-                      No inventory items yet. Click “Add item”.
+                      No inventory items yet. Click ΓÇ£Add itemΓÇ¥.
                     </td>
                   </tr>
                 ) : null}
@@ -626,7 +626,7 @@ export default function InventoryPage() {
             </table>
           </div>
           <p className="text-xs text-zinc-500">
-            Tip: fill “Today bought” + “Today cost”, then Save all. Stock goes up
+            Tip: fill ΓÇ£Today boughtΓÇ¥ + ΓÇ£Today costΓÇ¥, then Save all. Stock goes up
             and average cost updates automatically. Rent/bills stay in Expenses.
           </p>
         </div>
@@ -663,7 +663,7 @@ export default function InventoryPage() {
             <>
               <p className="text-sm text-zinc-400">
                 Pick a menu item (e.g. Chicken Tikka pizza). The system deducts
-                every recipe ingredient automatically — no need to enter cheese,
+                every recipe ingredient automatically ΓÇö no need to enter cheese,
                 dough, etc. one by one. Recipes must be set under Recipes first.
               </p>
               <div className="space-y-2">
@@ -722,7 +722,7 @@ export default function InventoryPage() {
                 <Textarea
                   value={wastageReason}
                   onChange={(e) => setWastageReason(e.target.value)}
-                  placeholder="Burnt / staff meal / customer return…"
+                  placeholder="Burnt / staff meal / customer returnΓÇª"
                 />
               </div>
               <Button onClick={() => void saveProductWastage()}>
@@ -767,7 +767,7 @@ export default function InventoryPage() {
                 <Textarea
                   value={wastageReason}
                   onChange={(e) => setWastageReason(e.target.value)}
-                  placeholder="Expired / damaged…"
+                  placeholder="Expired / damagedΓÇª"
                 />
               </div>
               <Button onClick={() => void saveWastage()}>Record wastage</Button>
@@ -827,9 +827,9 @@ export default function InventoryPage() {
                   </td>
                   <td className="px-3 py-2">{r.quantity}</td>
                   <td className="px-3 py-2">
-                    {r.totalCost != null ? formatPrice(r.totalCost) : "—"}
+                    {r.totalCost != null ? formatPrice(r.totalCost) : "ΓÇö"}
                   </td>
-                  <td className="px-3 py-2">{r.balanceAfter ?? "—"}</td>
+                  <td className="px-3 py-2">{r.balanceAfter ?? "ΓÇö"}</td>
                   <td className="px-3 py-2 text-zinc-400">{r.reason}</td>
                 </tr>
               ))}
@@ -849,7 +849,7 @@ export default function InventoryPage() {
               <Input
                 value={addName}
                 onChange={(e) => setAddName(e.target.value)}
-                placeholder="Cheese, Flour…"
+                placeholder="Cheese, FlourΓÇª"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">

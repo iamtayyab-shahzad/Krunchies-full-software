@@ -1343,3 +1343,95 @@ export const analyticsApi = {
       [],
     ),
 };
+
+export type PosExpense = {
+  id: string;
+  category: string;
+  title: string;
+  amount: number;
+  expenseDate: string;
+  paymentMethod: string;
+  notes: string;
+  receiptImage: string;
+  recurrence: string;
+};
+
+type ExpensePayload = {
+  category: string;
+  title?: string;
+  amount: number;
+  expenseDate: string;
+  paymentMethod?: string;
+  notes?: string;
+  recurrence?: string;
+};
+
+function mapExpense(e: {
+  id: string;
+  category: string;
+  title: string;
+  amount: number;
+  expense_date: string;
+  payment_method: string;
+  notes: string;
+  receipt_image: string;
+  recurrence: string;
+}): PosExpense {
+  return {
+    id: e.id,
+    category: e.category,
+    title: e.title || "",
+    amount: Number(e.amount || 0),
+    expenseDate: (e.expense_date || "").slice(0, 10),
+    paymentMethod: e.payment_method || "cash",
+    notes: e.notes || "",
+    receiptImage: e.receipt_image || "",
+    recurrence: e.recurrence || "NONE",
+  };
+}
+
+function expenseBody(payload: ExpensePayload) {
+  return {
+    category: payload.category,
+    title: payload.title || "",
+    amount: Number(payload.amount || 0),
+    expense_date: new Date(payload.expenseDate).toISOString(),
+    payment_method: payload.paymentMethod || "cash",
+    notes: payload.notes || "",
+    recurrence: payload.recurrence || "NONE",
+  };
+}
+
+export const expensesApi = {
+  categories: () => apiFetch<string[]>("/expenses/categories"),
+  list: async (): Promise<PosExpense[]> => {
+    const rows = await apiFetch<
+      {
+        id: string;
+        category: string;
+        title: string;
+        amount: number;
+        expense_date: string;
+        payment_method: string;
+        notes: string;
+        receipt_image: string;
+        recurrence: string;
+      }[]
+    >("/expenses");
+    return (rows || []).map(mapExpense);
+  },
+  create: async (payload: ExpensePayload) => {
+    await apiFetch("/expenses", {
+      method: "POST",
+      body: JSON.stringify(expenseBody(payload)),
+    });
+  },
+  update: async (id: string, payload: ExpensePayload) => {
+    await apiFetch(`/expenses/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(expenseBody(payload)),
+    });
+  },
+  remove: (id: string) =>
+    apiFetch(`/expenses/${id}`, { method: "DELETE" }),
+};

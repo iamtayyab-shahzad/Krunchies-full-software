@@ -417,7 +417,7 @@ export default function ProfitLossPage() {
               <h2 className="mb-4 text-lg font-bold">Expense breakdown</h2>
               {expenseBreakdown.length === 0 ? (
                 <p className="text-zinc-400">
-                  No expenses in this period. Add bills on the Expenses page
+                  No expenses in this period. Add bills on the shop POS → Expenses
                   (use MONTHLY for salaries).
                 </p>
               ) : (

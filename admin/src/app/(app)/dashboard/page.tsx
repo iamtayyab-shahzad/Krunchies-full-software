@@ -134,12 +134,6 @@ export default function DashboardPage() {
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Button asChild variant="secondary" size="sm">
-          <Link href="/inventory">
-            <Package className="h-4 w-4" />
-            Inventory
-          </Link>
-        </Button>
-        <Button asChild variant="secondary" size="sm">
           <Link href="/profit-loss">
             <Receipt className="h-4 w-4" />
             Profit &amp; Loss
@@ -280,12 +274,10 @@ export default function DashboardPage() {
                 </div>
               ))}
               {alertItems.length > 8 ? (
-                <Link
-                  href="/inventory"
-                  className="block text-center text-sm font-bold text-orange-400 hover:underline"
-                >
-                  View all {alertItems.length} alerts in Inventory →
-                </Link>
+                <p className="text-center text-sm text-zinc-400">
+                  +{alertItems.length - 8} more — manage stock on the shop POS
+                  Inventory screen.
+                </p>
               ) : null}
             </div>
           )}
