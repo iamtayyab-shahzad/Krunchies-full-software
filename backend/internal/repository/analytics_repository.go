@@ -71,17 +71,30 @@ func (r *AnalyticsRepository) PaymentBreakdown() ([]map[string]any, error) {
 }
 
 func (r *AnalyticsRepository) BestSellingProducts(limit int) ([]map[string]any, error) {
+	return r.BestSellingProductsBetween(time.Time{}, time.Time{}, limit)
+}
+
+// BestSellingProductsBetween aggregates completed order-item quantities in [start, end).
+// Zero start/end means no date filter (all-time), matching the existing best-sellers endpoint.
+func (r *AnalyticsRepository) BestSellingProductsBetween(start, end time.Time, limit int) ([]map[string]any, error) {
+	if limit <= 0 {
+		limit = 10
+	}
 	type row struct {
 		ProductID   string
 		ProductName string
 		Quantity    int
 	}
 	var rows []row
-	err := r.db.Table("order_items").
+	q := r.db.Table("order_items").
 		Select("order_items.product_id, COALESCE(products.name, '') as product_name, COALESCE(SUM(order_items.quantity), 0) as quantity").
 		Joins("JOIN orders ON orders.id = order_items.order_id").
 		Joins("LEFT JOIN products ON products.id = order_items.product_id").
-		Where("orders.order_status = ?", "COMPLETED").
+		Where("orders.order_status = ?", "COMPLETED")
+	if !start.IsZero() && !end.IsZero() {
+		q = q.Where("orders.created_at >= ? AND orders.created_at < ?", start, end)
+	}
+	err := q.
 		Group("order_items.product_id, products.name").
 		Order("quantity desc").
 		Limit(limit).

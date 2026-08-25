@@ -554,6 +554,8 @@ export type AnalyticsSalesPeriod = {
   order_count: number;
   from: string;
   to: string;
+  /** Items sold in this period (completed orders only). */
+  items?: AnalyticsBestSellingRow[];
 };
 
 export const analyticsApi = {

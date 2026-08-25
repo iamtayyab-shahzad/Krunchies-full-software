@@ -46,10 +46,11 @@ func (s *AnalyticsService) YesterdaySales() (int, error) {
 
 // SalesPeriodResult is completed sales for a Karachi calendar day or inclusive range.
 type SalesPeriodResult struct {
-	Total      int       `json:"total"`
-	OrderCount int64     `json:"order_count"`
-	From       time.Time `json:"from"`
-	To         time.Time `json:"to"`
+	Total      int              `json:"total"`
+	OrderCount int64            `json:"order_count"`
+	From       time.Time        `json:"from"`
+	To         time.Time        `json:"to"`
+	Items      []map[string]any `json:"items"`
 }
 
 // SalesForPeriod returns sales for [fromDate, toDate] inclusive (YYYY-MM-DD, Asia/Karachi).
@@ -70,11 +71,19 @@ func (s *AnalyticsService) SalesForPeriod(fromDate, toDate string) (*SalesPeriod
 	if err != nil {
 		return nil, err
 	}
+	items, err := s.repo.BestSellingProductsBetween(start, end, 25)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []map[string]any{}
+	}
 	return &SalesPeriodResult{
 		Total:      total,
 		OrderCount: count,
 		From:       start,
 		To:         endDay,
+		Items:      items,
 	}, nil
 }
 

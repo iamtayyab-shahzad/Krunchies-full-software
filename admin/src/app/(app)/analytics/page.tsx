@@ -146,6 +146,15 @@ export default function AnalyticsPage() {
     1,
     ...data.bestSelling.map((p) => Number(p.quantity || 0)),
   );
+  const lookupItems = lookup?.items || [];
+  const maxLookupSold = Math.max(
+    1,
+    ...lookupItems.map((p) => Number(p.quantity || 0)),
+  );
+  const lookupItemsQty = lookupItems.reduce(
+    (sum, row) => sum + Number(row.quantity || 0),
+    0,
+  );
 
   return (
     <div>
@@ -249,37 +258,77 @@ export default function AnalyticsPage() {
           </Button>
         </div>
         {lookup ? (
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            <StatCard
-              label={
-                lookup.from === lookup.to
-                  ? `Sales on ${lookup.from}`
-                  : `Sales ${lookup.from} → ${lookup.to}`
-              }
-              value={formatPrice(lookup.total)}
-              icon={<TrendingUp className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Completed orders"
-              value={String(lookup.order_count)}
-              icon={<TrendingUp className="h-5 w-5" />}
-            />
-            <StatCard
-              label="Period"
-              value={
-                lookup.from === lookup.to
-                  ? lookup.from
-                  : `${lookup.from} → ${lookup.to}`
-              }
-              icon={<TrendingUp className="h-5 w-5" />}
-            />
+          <div className="mt-5 space-y-5">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <StatCard
+                label={
+                  lookup.from === lookup.to
+                    ? `Sales on ${lookup.from}`
+                    : `Sales ${lookup.from} → ${lookup.to}`
+                }
+                value={formatPrice(lookup.total)}
+                icon={<TrendingUp className="h-5 w-5" />}
+              />
+              <StatCard
+                label="Completed orders"
+                value={String(lookup.order_count)}
+                icon={<TrendingUp className="h-5 w-5" />}
+              />
+              <StatCard
+                label="Items sold (qty)"
+                value={String(lookupItemsQty)}
+                icon={<TrendingUp className="h-5 w-5" />}
+              />
+            </div>
+
+            <div>
+              <h3 className="mb-3 text-base font-bold">
+                {lookup.from === lookup.to
+                  ? `Items sold on ${lookup.from}`
+                  : `Items sold ${lookup.from} → ${lookup.to}`}
+              </h3>
+              {lookupItems.length === 0 ? (
+                <p className="text-sm text-zinc-400">
+                  No completed item sales in this period.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {lookupItems.map((item) => (
+                    <div key={item.product_id || item.product_name}>
+                      <div className="mb-1 flex justify-between text-sm">
+                        <span className="font-semibold">
+                          {item.product_name || "Unknown product"}
+                        </span>
+                        <span className="text-orange-400">
+                          {item.quantity} sold
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+                        <div
+                          className="h-full rounded-full bg-orange-500"
+                          style={{
+                            width: `${(Number(item.quantity || 0) / maxLookupSold) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        ) : null}
+        ) : (
+          <p className="mt-4 text-sm text-zinc-500">
+            Choose a day or range, then click Get sales to see that period&apos;s
+            total and item breakdown.
+          </p>
+        )}
       </Card>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Card>
-          <h2 className="mb-4 text-lg font-bold">Best Selling Products</h2>
+          <h2 className="mb-1 text-lg font-bold">Best Selling Products</h2>
+          <p className="mb-4 text-sm text-zinc-500">All-time (completed orders)</p>
           {data.bestSelling.length === 0 ? (
             <p className="text-zinc-400">No completed sales yet.</p>
           ) : (
