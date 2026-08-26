@@ -42,6 +42,7 @@ import {
   buildInventoryPullUrl,
   buildOrdersPullUrl,
   CATALOG_PULL_AT_KEY,
+  shouldPullCatalogAfterSync,
   shouldUseIncrementalCatalogPull,
 } from "@/lib/sync-pull";
 import type {
@@ -1021,18 +1022,18 @@ export async function runSync(reason: string = "manual"): Promise<void> {
 
       // Keep order push fast: enqueue/drain only drain the queue. Full catalog
       // pull runs on startup, reconnect, tab focus, manual sync, or interval.
+      // One failed action must NOT block offers/discount-rules when others synced.
       const stillPending = await listPendingActions();
       const stillIds = new Set(stillPending.map((a) => a.id));
       const syncedSomething = due.some((a) => !stillIds.has(a.id));
 
-      const shouldRefreshCatalog =
-        reason === "manual" ||
-        reason === "startup" ||
-        reason === "online" ||
-        reason === "visible" ||
-        (reason === "interval" && (syncedSomething || due.length === 0));
+      const shouldRefreshCatalog = shouldPullCatalogAfterSync({
+        reason,
+        syncedSomething,
+        dueCount: due.length,
+      });
 
-      if (shouldRefreshCatalog && (!hadFailure || reason === "manual")) {
+      if (shouldRefreshCatalog) {
         try {
           const wantIncremental = shouldUseIncrementalCatalogPull(reason);
           const lastPull = wantIncremental
