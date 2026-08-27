@@ -38,7 +38,7 @@ function todayISO() {
 
 function emptyForm(categories: string[]): ExpenseForm {
   return {
-    category: categories[0] || "Miscellaneous",
+    category: categories[0] || "Inventory / Stock",
     title: "",
     amount: 0,
     expenseDate: todayISO(),
@@ -150,13 +150,13 @@ export default function ExpensesPage() {
         expenses: rows
           .slice()
           .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate)),
-        categories: cats.length ? cats : ["Miscellaneous"],
+        categories: cats.length ? cats : ["Inventory / Stock"],
       };
     },
   });
 
   const expenses = data?.expenses ?? [];
-  const categories = data?.categories ?? ["Miscellaneous"];
+  const categories = data?.categories ?? ["Inventory / Stock"];
 
   useEffect(() => {
     if (isError) {
