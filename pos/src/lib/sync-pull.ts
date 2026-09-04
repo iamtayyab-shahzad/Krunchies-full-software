@@ -8,9 +8,21 @@ export function shouldUseIncrementalCatalogPull(reason: string): boolean {
 }
 
 /**
- * Whether this sync pass should refresh orders/inventory/discount-rules.
- * Intentionally ignores per-action failures: one dead/retrying item must not
- * block catalog pull when the rest of the backlog synced (or the queue is idle).
+ * Pull discount rules BEFORE draining a large offline backlog.
+ * Weeks of waiting CREATE/COMPLETE must not delay offer updates on reconnect.
+ */
+export function shouldPullDiscountRulesBeforeQueue(reason: string): boolean {
+  return (
+    reason === "manual" ||
+    reason === "startup" ||
+    reason === "online" ||
+    reason === "visible"
+  );
+}
+
+/**
+ * Whether this sync pass should refresh orders/inventory/discount-rules
+ * after the queue drain. Intentionally ignores per-action failures.
  */
 export function shouldPullCatalogAfterSync(opts: {
   reason: string;
@@ -20,15 +32,21 @@ export function shouldPullCatalogAfterSync(opts: {
   dueCount: number;
 }): boolean {
   const { reason, syncedSomething, dueCount } = opts;
-  if (reason === "manual") return true;
-  const catalogReasons =
+  // Reconnect / focus / manual: always refresh after the pass (rules also
+  // pulled earlier via shouldPullDiscountRulesBeforeQueue).
+  if (
+    reason === "manual" ||
     reason === "startup" ||
     reason === "online" ||
-    reason === "visible" ||
-    reason === "interval";
-  if (!catalogReasons) return false;
-  // Progress or idle due-list — never gated on sibling action failures.
-  return syncedSomething || dueCount === 0;
+    reason === "visible"
+  ) {
+    return true;
+  }
+  if (reason === "interval") {
+    // Progress or idle — never gated on sibling action failures.
+    return syncedSomething || dueCount === 0;
+  }
+  return false;
 }
 
 export function buildOrdersPullUrl(opts: {

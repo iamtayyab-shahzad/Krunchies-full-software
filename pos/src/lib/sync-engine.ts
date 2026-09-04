@@ -43,6 +43,7 @@ import {
   buildOrdersPullUrl,
   CATALOG_PULL_AT_KEY,
   shouldPullCatalogAfterSync,
+  shouldPullDiscountRulesBeforeQueue,
   shouldUseIncrementalCatalogPull,
 } from "@/lib/sync-pull";
 import type {
@@ -898,6 +899,35 @@ function shouldUseCatchupTimeout(reason: string) {
   );
 }
 
+type DiscountRuleApiRow = {
+  id: string;
+  name: string;
+  active: boolean;
+  percent: number;
+  min_subtotal: number;
+  schedule_type: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  weekdays_json?: string;
+  exclude_deals?: boolean;
+};
+
+/** Lightweight offer refresh — runs before a large backlog drain. */
+async function refreshDiscountRulesFromServer(): Promise<void> {
+  try {
+    const discountRules = await apiFetch<DiscountRuleApiRow[]>(
+      "/discount-rules/active",
+    );
+    if (!Array.isArray(discountRules)) return;
+    const { setDiscountRulesCache } = await import("@/lib/weekend-promo");
+    const { cacheSet: cacheSetLocal } = await import("@/lib/offline-db");
+    setDiscountRulesCache(discountRules);
+    await cacheSetLocal("discount_rules", discountRules);
+  } catch {
+    /* keep previous rules on network miss */
+  }
+}
+
 export async function runSync(reason: string = "manual"): Promise<void> {
   // UI label follows the browser; API circuit-breaker only gates whether we try.
   if (!isOnline()) {
@@ -937,6 +967,13 @@ export async function runSync(reason: string = "manual"): Promise<void> {
         .slice()
         .sort((a, b) => syncActionPriority(a.type) - syncActionPriority(b.type));
       setState({ total: due.length, pending_count: pending.length });
+
+      // Weeks of offline orders can take a long time to drain. Refresh
+      // discount rules first so finished/new offers apply immediately.
+      if (shouldPullDiscountRulesBeforeQueue(reason)) {
+        setState({ current_action: "REFRESH_DISCOUNT_RULES" });
+        await refreshDiscountRulesFromServer();
+      }
 
       let hadFailure = false;
       let lastError: string | null = null;
@@ -1055,20 +1092,9 @@ export async function runSync(reason: string = "manual"): Promise<void> {
           const [orders, inventory, discountRules] = await Promise.all([
             apiFetch<Order[]>(ordersUrl),
             apiFetch<InventoryItem[]>(inventoryUrl),
-            apiFetch<
-              {
-                id: string;
-                name: string;
-                active: boolean;
-                percent: number;
-                min_subtotal: number;
-                schedule_type: string;
-                start_date?: string | null;
-                end_date?: string | null;
-                weekdays_json?: string;
-                exclude_deals?: boolean;
-              }[]
-            >("/discount-rules/active").catch(() => []),
+            apiFetch<DiscountRuleApiRow[]>(
+              "/discount-rules/active",
+            ).catch(() => null),
           ]);
           if (Array.isArray(orders)) {
             if (useSince) {
@@ -1086,6 +1112,8 @@ export async function runSync(reason: string = "manual"): Promise<void> {
           }
           const { setDiscountRulesCache } = await import("@/lib/weekend-promo");
           const { cacheSet: cacheSetLocal } = await import("@/lib/offline-db");
+          // Only update when the API answered (including []). A network miss
+          // must not wipe rules or re-enable the legacy Fri/Sun fallback.
           if (Array.isArray(discountRules)) {
             setDiscountRulesCache(discountRules);
             await cacheSetLocal("discount_rules", discountRules);
@@ -1162,7 +1190,9 @@ export function startSyncEngine() {
       const cached = await cacheGet<Parameters<typeof setDiscountRulesCache>[0]>(
         "discount_rules",
       );
-      if (cached?.length) setDiscountRulesCache(cached);
+      // Empty array means admin finished all rules — still hydrate so we do
+      // not fall back to the built-in Fri/Sun 10% promo.
+      if (Array.isArray(cached)) setDiscountRulesCache(cached);
     } catch {
       /* ignore */
     }

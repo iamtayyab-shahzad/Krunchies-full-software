@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { recomputeOrderMoney } from "@/lib/utils";
+import {
+  resetDiscountRulesCacheForTests,
+  setDiscountRulesCache,
+} from "@/lib/weekend-promo";
 import type { Order } from "@/types";
 
 function order(partial: Partial<Order>): Order {
@@ -41,6 +45,23 @@ function order(partial: Partial<Order>): Order {
 }
 
 describe("recomputeOrderMoney promo date", () => {
+  beforeEach(() => {
+    resetDiscountRulesCacheForTests();
+    // Historical Fri/Sun rule as it existed on the till when those orders sold.
+    setDiscountRulesCache([
+      {
+        name: "Fri & Sun 10% off",
+        active: true,
+        percent: 10,
+        min_subtotal: 1000,
+        schedule_type: "weekdays",
+        end_date: "2026-08-31",
+        weekdays_json: "[5,0]",
+        exclude_deals: true,
+      },
+    ]);
+  });
+
   it("keeps Friday promo discount when recomputed on a later day", () => {
     // Order created Friday 7 Aug 2026 Karachi; recompute must use created_at
     // not "today" so Monday reprint does not strip the 10% discount.

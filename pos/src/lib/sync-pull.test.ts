@@ -3,6 +3,7 @@ import {
   buildInventoryPullUrl,
   buildOrdersPullUrl,
   shouldPullCatalogAfterSync,
+  shouldPullDiscountRulesBeforeQueue,
   shouldUseIncrementalCatalogPull,
 } from "@/lib/sync-pull";
 
@@ -42,11 +43,29 @@ describe("sync-pull bandwidth helpers", () => {
   });
 });
 
+describe("discount-rules pull before backlog drain", () => {
+  it("pulls rules on reconnect/startup before queue drain even with huge due count", () => {
+    for (const reason of ["online", "startup", "visible", "manual"] as const) {
+      expect(shouldPullDiscountRulesBeforeQueue(reason)).toBe(true);
+      // End-of-pass catalog also runs on reconnect regardless of backlog progress.
+      expect(
+        shouldPullCatalogAfterSync({
+          reason,
+          syncedSomething: false,
+          dueCount: 500,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("does not early-pull on enqueue/drain/interval (keep order push fast)", () => {
+    expect(shouldPullDiscountRulesBeforeQueue("enqueue")).toBe(false);
+    expect(shouldPullDiscountRulesBeforeQueue("drain")).toBe(false);
+    expect(shouldPullDiscountRulesBeforeQueue("interval")).toBe(false);
+  });
+});
+
 describe("catalog / discount-rules pull after partial backlog failure", () => {
-  /**
-   * Simulates the old bug gate: `shouldRefresh && (!hadFailure || manual)`.
-   * New helper must pull whenever there was real progress — hadFailure ignored.
-   */
   function oldGate(opts: {
     reason: string;
     syncedSomething: boolean;
@@ -70,7 +89,7 @@ describe("catalog / discount-rules pull after partial backlog failure", () => {
       dueCount: 22,
       hadFailure: true,
     };
-    expect(oldGate(opts)).toBe(false); // regression baseline
+    expect(oldGate(opts)).toBe(false);
     expect(
       shouldPullCatalogAfterSync({
         reason: opts.reason,
@@ -78,26 +97,6 @@ describe("catalog / discount-rules pull after partial backlog failure", () => {
         dueCount: opts.dueCount,
       }),
     ).toBe(true);
-  });
-
-  it("pulls on startup/online/visible after partial success despite failures", () => {
-    for (const reason of ["startup", "online", "visible"] as const) {
-      expect(
-        shouldPullCatalogAfterSync({
-          reason,
-          syncedSomething: true,
-          dueCount: 10,
-        }),
-      ).toBe(true);
-      expect(
-        oldGate({
-          reason,
-          syncedSomething: true,
-          dueCount: 10,
-          hadFailure: true,
-        }),
-      ).toBe(false);
-    }
   });
 
   it("still pulls when due queue is empty (idle interval)", () => {
@@ -110,27 +109,10 @@ describe("catalog / discount-rules pull after partial backlog failure", () => {
     ).toBe(true);
   });
 
-  it("manual always pulls", () => {
-    expect(
-      shouldPullCatalogAfterSync({
-        reason: "manual",
-        syncedSomething: false,
-        dueCount: 5,
-      }),
-    ).toBe(true);
-  });
-
   it("enqueue/drain stay push-only (no catalog pull)", () => {
     expect(
       shouldPullCatalogAfterSync({
         reason: "enqueue",
-        syncedSomething: true,
-        dueCount: 3,
-      }),
-    ).toBe(false);
-    expect(
-      shouldPullCatalogAfterSync({
-        reason: "drain",
         syncedSomething: true,
         dueCount: 3,
       }),

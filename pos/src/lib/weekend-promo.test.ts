@@ -3,39 +3,23 @@ import {
   activePromoInfo,
   eligiblePromoSubtotal,
   isWeekendPromoDay,
+  resetDiscountRulesCacheForTests,
   setDiscountRulesCache,
   weekendDiscount,
   weekendPromoLabel,
 } from "@/lib/weekend-promo";
 
-describe("weekend promo (Fri & Sun 10% non-deal until 31 Aug 2026)", () => {
-  it("applies only Fri/Sun Asia/Karachi (not Saturday)", () => {
-    setDiscountRulesCache([]);
-    expect(isWeekendPromoDay(new Date("2026-08-07T12:00:00+05:00"))).toBe(
-      true,
-    );
-    expect(isWeekendPromoDay(new Date("2026-08-08T12:00:00+05:00"))).toBe(
-      false,
-    );
-    expect(isWeekendPromoDay(new Date("2026-08-09T12:00:00+05:00"))).toBe(
-      true,
-    );
-    expect(isWeekendPromoDay(new Date("2026-08-03T12:00:00+05:00"))).toBe(
-      false,
-    );
-  });
-
-  it("turns off after 31 Aug 2026 even on Friday/Sunday", () => {
-    setDiscountRulesCache([]);
-    expect(isWeekendPromoDay(new Date("2026-09-04T12:00:00+05:00"))).toBe(
-      false,
-    );
-    expect(isWeekendPromoDay(new Date("2026-08-31T12:00:00+05:00"))).toBe(
-      false,
-    );
-    expect(isWeekendPromoDay(new Date("2026-08-30T18:00:00+05:00"))).toBe(
-      true,
-    );
+describe("discount rules (server/IDB only — no legacy Fri/Sun fallback)", () => {
+  it("applies nothing until rules are hydrated from server", () => {
+    resetDiscountRulesCacheForTests();
+    const friday = new Date("2026-08-07T12:00:00+05:00");
+    expect(isWeekendPromoDay(friday)).toBe(false);
+    expect(
+      weekendDiscount(
+        [{ product_name: "Pizza", price: 2000, quantity: 1 }],
+        friday,
+      ),
+    ).toBe(0);
   });
 
   it("excludes deal items from eligible subtotal", () => {
@@ -45,54 +29,6 @@ describe("weekend promo (Fri & Sun 10% non-deal until 31 Aug 2026)", () => {
       { product_name: "Mega Combo Box", price: 1500, quantity: 1 },
     ]);
     expect(eligible).toBe(800);
-  });
-
-  it("gives 10% when eligible subtotal >= 1000 on Fri/Sun", () => {
-    setDiscountRulesCache([]);
-    const friday = new Date("2026-08-07T18:00:00+05:00");
-    const discount = weekendDiscount(
-      [
-        { product_name: "Pizza", price: 600, quantity: 2, is_deal: false },
-        {
-          product_name: "Deal Special",
-          price: 1999,
-          quantity: 1,
-          is_deal: true,
-        },
-      ],
-      friday,
-    );
-    expect(discount).toBe(120);
-    expect(weekendPromoLabel(undefined, friday)).toMatch(/Fri & Sun 10%/);
-  });
-
-  it("gives zero on Saturday even above min", () => {
-    setDiscountRulesCache([]);
-    const saturday = new Date("2026-08-08T18:00:00+05:00");
-    expect(
-      weekendDiscount(
-        [{ product_name: "Pizza", price: 2000, quantity: 1 }],
-        saturday,
-      ),
-    ).toBe(0);
-  });
-
-  it("gives zero below Rs 1000 eligible or on weekday", () => {
-    setDiscountRulesCache([]);
-    const friday = new Date("2026-08-07T18:00:00+05:00");
-    const monday = new Date("2026-08-03T18:00:00+05:00");
-    expect(
-      weekendDiscount(
-        [{ product_name: "Pizza", price: 500, quantity: 1 }],
-        friday,
-      ),
-    ).toBe(0);
-    expect(
-      weekendDiscount(
-        [{ product_name: "Pizza", price: 2000, quantity: 1 }],
-        monday,
-      ),
-    ).toBe(0);
   });
 
   it("uses cached Azaadi rule name and min for labels", () => {
@@ -125,5 +61,30 @@ describe("weekend promo (Fri & Sun 10% non-deal until 31 Aug 2026)", () => {
       ),
     ).toBe("Azaadi Discount");
     setDiscountRulesCache([]);
+  });
+
+  it("stops promo when admin clears rules (empty server list)", () => {
+    const friday = new Date("2026-08-07T18:00:00+05:00");
+    setDiscountRulesCache([
+      {
+        name: "Fri & Sun 10% off",
+        active: true,
+        percent: 10,
+        min_subtotal: 1000,
+        schedule_type: "weekdays",
+        weekdays_json: "[5,0]",
+        exclude_deals: true,
+      },
+    ]);
+    expect(isWeekendPromoDay(friday)).toBe(true);
+    setDiscountRulesCache([]); // offer finished
+    expect(isWeekendPromoDay(friday)).toBe(false);
+    expect(
+      weekendDiscount(
+        [{ product_name: "Pizza", price: 2000, quantity: 1 }],
+        friday,
+      ),
+    ).toBe(0);
+    expect(weekendPromoLabel(undefined, friday)).toBeNull();
   });
 });

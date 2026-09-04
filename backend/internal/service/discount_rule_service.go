@@ -110,31 +110,11 @@ func (s *DiscountRuleService) Disable(id uuid.UUID) error {
 	return s.crud.Update(id, map[string]any{"active": false})
 }
 
-// SeedDefaultWeekendRule inserts the legacy Fri/Sun 10% rule once if table is empty.
+// SeedDefaultWeekendRule used to insert Fri/Sun 10% when the table was empty.
+// That re-created a finished promo after admins cleared all rules + restart.
+// No-op now — discounts only come from Admin → Discount rules.
 func (s *DiscountRuleService) SeedDefaultWeekendRule() error {
-	var count int64
-	if err := s.db.Model(&domain.DiscountRule{}).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	end, err := time.ParseInLocation("2006-01-02", "2026-08-31", karachiLoc)
-	if err != nil {
-		return err
-	}
-	weekdays, _ := json.Marshal([]int{int(time.Friday), int(time.Sunday)})
-	rule := &domain.DiscountRule{
-		Name:         "Fri & Sun 10% off",
-		Active:       true,
-		Percent:      10,
-		MinSubtotal:  1000,
-		ScheduleType: ScheduleWeekdays,
-		EndDate:      &end,
-		WeekdaysJSON: string(weekdays),
-		ExcludeDeals: true,
-	}
-	return s.db.Create(rule).Error
+	return nil
 }
 
 func normalizeDiscountRule(model *domain.DiscountRule) error {

@@ -1,10 +1,14 @@
 /**
  * Documents the batch-continue contract: a network error on one action must
  * not abort the rest of the due list in the same runSync pass.
- * Also: catalog/discount-rules pull is not blocked by that sibling failure.
+ * Also: catalog/discount-rules pull is not blocked by that sibling failure,
+ * and reconnect pulls rules before draining a large backlog.
  */
 import { describe, expect, it } from "vitest";
-import { shouldPullCatalogAfterSync } from "@/lib/sync-pull";
+import {
+  shouldPullCatalogAfterSync,
+  shouldPullDiscountRulesBeforeQueue,
+} from "@/lib/sync-pull";
 
 function simulateBatch(
   actions: string[],
@@ -16,12 +20,10 @@ function simulateBatch(
   for (let i = 0; i < actions.length; i++) {
     processed.push(actions[i]);
     if (i === failAt) {
-      // Fixed behavior: record failure and CONTINUE (do not throw/break).
       continue;
     }
     syncedIds.push(actions[i]);
   }
-  // Old bug would have set abortedEarly=true and stopped at failAt.
   abortedEarly = processed.length < actions.length;
   return { processed, abortedEarly, syncedIds };
 }
@@ -41,7 +43,6 @@ describe("sync batch continue after network failure", () => {
     const { syncedIds } = simulateBatch(actions, 5);
     expect(syncedIds).toHaveLength(21);
 
-    // Same signals runSync uses after the batch (hadFailure is irrelevant).
     expect(
       shouldPullCatalogAfterSync({
         reason: "interval",
@@ -54,6 +55,18 @@ describe("sync batch continue after network failure", () => {
         reason: "startup",
         syncedSomething: syncedIds.length > 0,
         dueCount: actions.length,
+      }),
+    ).toBe(true);
+  });
+
+  it("on reconnect with weeks of backlog, pulls discount rules before drain", () => {
+    const backlog = 400;
+    expect(shouldPullDiscountRulesBeforeQueue("online")).toBe(true);
+    expect(
+      shouldPullCatalogAfterSync({
+        reason: "online",
+        syncedSomething: false,
+        dueCount: backlog,
       }),
     ).toBe(true);
   });

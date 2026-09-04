@@ -13,6 +13,8 @@ import {
 
 export type { PromoLine };
 export { eligiblePromoSubtotal, isDealLineName };
+
+/** @deprecated Kept for tests/docs only — legacy Fri/Sun promo ended 2026-08-31. */
 export const WEEKEND_PROMO_END_DATE = "2026-08-31";
 
 let cachedRules: DiscountRule[] = [];
@@ -24,27 +26,21 @@ export function setDiscountRulesCache(rules: DiscountRule[]) {
   }
 }
 
+/** Test helper: clear in-memory rules. */
+export function resetDiscountRulesCacheForTests() {
+  cachedRules = [];
+}
+
 export function getDiscountRulesCache(): DiscountRule[] {
   return cachedRules;
 }
 
-function legacyFallbackRules(): DiscountRule[] {
-  return [
-    {
-      name: "Fri & Sun 10% off",
-      active: true,
-      percent: 10,
-      min_subtotal: 1000,
-      schedule_type: "weekdays",
-      end_date: WEEKEND_PROMO_END_DATE,
-      weekdays_json: "[5,0]",
-      exclude_deals: true,
-    },
-  ];
-}
-
-function rulesOrLegacy(): DiscountRule[] {
-  return cachedRules.length ? cachedRules : legacyFallbackRules();
+/**
+ * Only Admin/server (or IDB hydrate) rules. No built-in Fri/Sun fallback —
+ * finished offers must stay finished on the till.
+ */
+function rulesForPricing(): DiscountRule[] {
+  return cachedRules;
 }
 
 export type ActivePromoInfo = {
@@ -58,7 +54,7 @@ export function activePromoInfo(
   lines?: PromoLine[],
   date = new Date(),
 ): ActivePromoInfo | null {
-  const rule = bestMatchingRule(rulesOrLegacy(), date, lines);
+  const rule = bestMatchingRule(rulesForPricing(), date, lines);
   if (!rule?.name) return null;
   return {
     name: rule.name,
@@ -68,11 +64,11 @@ export function activePromoInfo(
 }
 
 export function isWeekendPromoDay(date = new Date()): boolean {
-  return anyRuleMatchesToday(rulesOrLegacy(), date);
+  return anyRuleMatchesToday(rulesForPricing(), date);
 }
 
 export function weekendDiscount(lines: PromoLine[], date = new Date()): number {
-  return discountFromRules(rulesOrLegacy(), lines, date);
+  return discountFromRules(rulesForPricing(), lines, date);
 }
 
 export function weekendPromoLabel(
@@ -84,7 +80,7 @@ export function weekendPromoLabel(
   }
   if (Array.isArray(linesOrDate)) {
     return (
-      bestDiscountLabel(rulesOrLegacy(), linesOrDate, date) ||
+      bestDiscountLabel(rulesForPricing(), linesOrDate, date) ||
       activePromoInfo(linesOrDate, date)?.name ||
       null
     );
