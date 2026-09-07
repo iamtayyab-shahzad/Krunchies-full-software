@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { ProductCard } from "@/components/menu/product-card";
+import { MenuProductSkeleton } from "@/components/menu/menu-product-skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/i18n/locale-context";
@@ -21,22 +21,35 @@ type MenuClientProps = {
   initialProducts?: Product[];
 };
 
+function categoryFromLocationSearch(): string {
+  if (typeof window === "undefined") return "all";
+  try {
+    const value = new URLSearchParams(window.location.search).get("category");
+    return value && value.trim() ? value.trim() : "all";
+  } catch {
+    return "all";
+  }
+}
+
 export default function MenuClient({
   initialCategories = [],
   initialProducts = [],
 }: MenuClientProps) {
   const { t, locale } = useLocale();
-  const searchParams = useSearchParams();
-  const initialCategory = searchParams.get("category") ?? "all";
 
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [categoryId, setCategoryId] = useState(initialCategory);
+  // Start as "all" for SSR/prerender — apply ?category= after mount (no useSearchParams).
+  const [categoryId, setCategoryId] = useState("all");
   const [search, setSearch] = useState("");
   const [sizeFilter, setSizeFilter] = useState<"all" | "pizza" | "other">("all");
   const [loading, setLoading] = useState(initialProducts.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    setCategoryId(categoryFromLocationSearch());
+  }, []);
 
   const categoryById = useMemo(() => {
     const map = new Map<string, Category>();
@@ -263,14 +276,7 @@ export default function MenuClient({
           </div>
 
           {loading && products.length === 0 ? (
-            <div className="grid gap-3 sm:gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-28 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/70 sm:h-72"
-                />
-              ))}
-            </div>
+            <MenuProductSkeleton count={8} />
           ) : filtered.length === 0 ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-8 text-center">
               <p

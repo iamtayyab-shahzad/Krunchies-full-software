@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import MenuClient from "./menu-client";
 import { pageSeo } from "@/lib/seo";
 import { getCategories, getProducts } from "@/services/api";
@@ -34,14 +33,13 @@ async function loadMenuCatalog(): Promise<{
 export default async function MenuPage() {
   const { categories, products } = await loadMenuCatalog();
 
+  // No Suspense around MenuClient — it must SSR with initialProducts so
+  // view-source/curl show real product names (not a "Loading menu..." hole).
+  // Category query (?category=) is applied after mount in the client.
   return (
-    <Suspense
-      fallback={<div className="p-10 text-zinc-500">Loading menu...</div>}
-    >
-      <MenuClient
-        initialCategories={categories}
-        initialProducts={products}
-      />
-    </Suspense>
+    <MenuClient
+      initialCategories={categories}
+      initialProducts={products}
+    />
   );
 }

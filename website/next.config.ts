@@ -8,12 +8,16 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   images: {
-    // Bypass /_next/image optimizer — Next 16 + missing/local source files was
-    // returning HTTP 400 for every /products/*.webp. Serve public assets directly.
-    unoptimized: true,
+    // Next 16 requires localPatterns for public/ assets through /_next/image.
+    // Prior 400s came from a wrong turbopack root + missing allowlist — not from
+    // the optimizer itself. Keep optimization on for resized webp/avif.
+    unoptimized: false,
     localPatterns: [
-      { pathname: "/products/**" },
-      { pathname: "/**" },
+      { pathname: "/products/**", search: "" },
+      { pathname: "/icons/**", search: "" },
+      { pathname: "/payments/**", search: "" },
+      { pathname: "/favicon.ico", search: "" },
+      { pathname: "/apple-touch-icon.png", search: "" },
     ],
     formats: ["image/avif", "image/webp"],
     deviceSizes: [640, 750, 828, 1080, 1200],
