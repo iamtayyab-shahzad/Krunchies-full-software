@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProductCard } from "@/components/menu/product-card";
 import { MenuProductSkeleton } from "@/components/menu/menu-product-skeleton";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,15 @@ function categoryFromLocationSearch(): string {
   }
 }
 
+function queryFromLocationSearch(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return new URLSearchParams(window.location.search).get("q")?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function MenuClient({
   initialCategories = [],
   initialProducts = [],
@@ -46,9 +55,30 @@ export default function MenuClient({
   const [loading, setLoading] = useState(initialProducts.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const categoryAsideRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setCategoryId(categoryFromLocationSearch());
+    const q = queryFromLocationSearch();
+    if (q) setSearch(q);
+  }, []);
+
+  useEffect(() => {
+    const el = categoryAsideRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const atTop = scrollTop <= 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+      const canScrollDown = !atBottom && e.deltaY > 0;
+      const canScrollUp = !atTop && e.deltaY < 0;
+      if (canScrollDown || canScrollUp) {
+        el.scrollTop += e.deltaY;
+        e.preventDefault();
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
   const categoryById = useMemo(() => {
@@ -224,16 +254,21 @@ export default function MenuClient({
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[240px_1fr]">
-        <aside className="hidden h-fit space-y-2 lg:sticky lg:top-24 lg:block">
-          <p
-            className={cn(
-              "mb-3 text-xs font-semibold uppercase tracking-wider text-orange-500",
-              locale === "ur" && "font-urdu text-sm tracking-normal",
-            )}
-          >
-            {t("menu_categories")}
-          </p>
-          {categoryButtons}
+        <aside
+          ref={categoryAsideRef}
+          className="hidden lg:sticky lg:top-24 lg:block lg:max-h-[calc(100svh-7rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:pr-1 [scrollbar-width:thin]"
+        >
+          <div className="space-y-2 pb-2">
+            <p
+              className={cn(
+                "mb-3 text-xs font-semibold uppercase tracking-wider text-orange-500",
+                locale === "ur" && "font-urdu text-sm tracking-normal",
+              )}
+            >
+              {t("menu_categories")}
+            </p>
+            {categoryButtons}
+          </div>
         </aside>
 
         <div>

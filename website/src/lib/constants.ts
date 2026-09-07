@@ -18,21 +18,21 @@ export const NAV_LINKS = [
 export const PAYMENT_METHODS = [
   {
     id: "easypaisa" as const,
-    label: "EasyPaisa",
-    description: "QR or transfer using Raast / JazzCash details",
+    label: "QR Code Payment",
+    description: "Scan the QR code to pay",
     showQr: true,
   },
   {
     id: "jazzcash" as const,
     label: "JazzCash",
-    description: "QR, Till ID, or JazzCash number",
-    showQr: true,
+    description: "Pay to JazzCash number",
+    showQr: false,
   },
   {
     id: "bank" as const,
     label: "Other Bank Payments",
-    description: "Pay via IBAN / Raast from any bank",
-    showQr: true,
+    description: "Till ID, Raast ID, or IBAN",
+    showQr: false,
   },
   {
     id: "cod" as const,

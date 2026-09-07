@@ -10,6 +10,7 @@ import { useAuth } from "@/context/auth-context";
 import { useCart } from "@/context/cart-context";
 import { useLocale } from "@/i18n/locale-context";
 import type { MessageKey } from "@/i18n/messages";
+import { HeaderSearch } from "@/components/layout/header-search";
 import { ThemePicker } from "@/components/layout/theme-picker";
 import { SITE_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-1 sm:gap-2">
+          <HeaderSearch />
           <div className="hidden sm:block">{langToggle}</div>
           <div className="hidden sm:block">
             <ThemePicker compact />

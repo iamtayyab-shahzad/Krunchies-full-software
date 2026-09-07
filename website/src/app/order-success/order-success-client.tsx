@@ -67,7 +67,7 @@ export default function OrderSuccessClient() {
               {order.payment_method === "bank"
                 ? "Other Bank Payments"
                 : order.payment_method === "easypaisa"
-                  ? "EasyPaisa"
+                  ? "QR Code Payment"
                   : order.payment_method === "jazzcash"
                     ? "JazzCash"
                     : order.payment_method === "cod"

@@ -320,32 +320,43 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                   shouldValidate: true,
                 })
               }
+              className="space-y-3"
             >
-              {PAYMENT_METHODS.map((method) => (
-                <label
-                  key={method.id}
-                  className="flex min-h-14 cursor-pointer items-start gap-3 rounded-lg border border-zinc-800 p-4 transition-colors hover:border-zinc-600 has-[[data-state=checked]]:border-orange-500"
-                >
-                  <RadioGroupItem value={method.id} className="mt-1" />
-                  <div>
-                    <p className="font-medium text-white">{method.label}</p>
-                    <p className="text-sm text-zinc-400">{method.description}</p>
-                    {method.id === "cod" && (
-                      <p className="mt-1 text-xs text-orange-400">
-                        +{formatPrice(settings?.cash_on_delivery_fee ?? 0, currency)}{" "}
-                        fee
-                      </p>
-                    )}
+              {PAYMENT_METHODS.map((method) => {
+                const selected = paymentMethod === method.id;
+                return (
+                  <div
+                    key={method.id}
+                    className="rounded-lg border border-zinc-800 transition-colors hover:border-zinc-600 has-[[data-state=checked]]:border-orange-500"
+                  >
+                    <label className="flex min-h-14 cursor-pointer items-start gap-3 p-4">
+                      <RadioGroupItem value={method.id} className="mt-1" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-white">{method.label}</p>
+                        <p className="text-sm text-zinc-400">
+                          {method.description}
+                        </p>
+                        {method.id === "cod" && (
+                          <p className="mt-1 text-xs text-orange-400">
+                            +
+                            {formatPrice(
+                              settings?.cash_on_delivery_fee ?? 0,
+                              currency,
+                            )}{" "}
+                            fee
+                          </p>
+                        )}
+                      </div>
+                    </label>
+                    {selected && method.id !== "cod" ? (
+                      <div className="border-t border-zinc-800 px-4 pb-4 pt-0">
+                        <PaymentQrPanel method={method.id} />
+                      </div>
+                    ) : null}
                   </div>
-                </label>
-              ))}
+                );
+              })}
             </RadioGroup>
-
-            {(paymentMethod === "easypaisa" ||
-              paymentMethod === "jazzcash" ||
-              paymentMethod === "bank") && (
-              <PaymentQrPanel method={paymentMethod} />
-            )}
           </section>
         </div>
 
