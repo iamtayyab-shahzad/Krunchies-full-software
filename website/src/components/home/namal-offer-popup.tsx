@@ -74,7 +74,10 @@ export function NamalOfferPopup() {
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
         showClose={false}
-        className="max-h-[min(78dvh,560px)] gap-0 overflow-hidden p-0 sm:max-w-md"
+        className={
+          // Center on mobile too (default DialogContent is a bottom sheet).
+          "left-1/2 top-1/2 bottom-auto right-auto max-h-[min(85dvh,560px)] w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-0 overflow-hidden rounded-xl p-0 sm:w-[calc(100%-2rem)]"
+        }
       >
         <div className="relative bg-orange-500 px-4 pb-3 pt-4 pr-14 sm:px-5">
           <DialogClose
@@ -98,7 +101,7 @@ export function NamalOfferPopup() {
           </DialogHeader>
         </div>
 
-        <div className="max-h-[min(48dvh,320px)] space-y-2.5 overflow-y-auto px-4 py-3 sm:px-5">
+        <div className="max-h-[min(42dvh,280px)] space-y-2.5 overflow-y-auto px-4 py-3 sm:px-5">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5">
             <p className="text-sm font-semibold text-orange-400">Campus</p>
             <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">

@@ -18,6 +18,7 @@ import {
   type DrinkFlavorState,
 } from "@/components/menu/drink-flavor-selector";
 import { useSettings } from "@/hooks/use-settings";
+import { isDealProduct, parseDealPizzaSlots } from "@/lib/deal-flavors";
 import { cn, formatPrice } from "@/lib/utils";
 import { getProductById } from "@/services/api";
 import type { Product, ProductSize } from "@/types";
@@ -29,6 +30,7 @@ export default function ProductDetailsPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [qtyBySize, setQtyBySize] = useState<Record<string, number>>({});
   const [instructions, setInstructions] = useState("");
   const [loading, setLoading] = useState(true);
   const [dealFlavors, setDealFlavors] = useState<DealFlavorState>({
@@ -58,6 +60,9 @@ export default function ProductDetailsPage() {
       .then((data) => {
         setProduct(data);
         setSelectedSize(data?.sizes[0] ?? null);
+        const map: Record<string, number> = {};
+        for (const s of data?.sizes || []) map[s.id] = 0;
+        setQtyBySize(map);
       })
       .finally(() => setLoading(false));
   }, [params.id]);
@@ -77,8 +82,19 @@ export default function ProductDetailsPage() {
     );
   }
 
+  const dealSlots =
+    isDealProduct(product) &&
+    parseDealPizzaSlots(product.description || "").length > 0;
+  const perSizeQty = (product.sizes?.length || 0) > 1 && !dealSlots;
+
+  const bumpSizeQty = (sizeId: string, delta: number) => {
+    setQtyBySize((prev) => ({
+      ...prev,
+      [sizeId]: Math.max(0, (prev[sizeId] || 0) + delta),
+    }));
+  };
+
   const handleAdd = () => {
-    if (!selectedSize) return;
     if (dealFlavors.hasSlots && !dealFlavors.complete) {
       toast.error("Please select a flavor for each pizza in this deal");
       return;
@@ -94,9 +110,35 @@ export default function ProductDetailsPage() {
     ]
       .filter(Boolean)
       .join(" | ");
-    addItem(product, selectedSize, quantity, combinedInstructions || undefined);
-    toast.success(`${product.name} added to cart`);
+    const notes = combinedInstructions || undefined;
+
+    if (perSizeQty) {
+      const lines = product.sizes.filter((s) => (qtyBySize[s.id] || 0) > 0);
+      if (lines.length === 0) {
+        toast.error("Set quantity for at least one size (use +)");
+        return;
+      }
+      const parts: string[] = [];
+      for (const size of lines) {
+        const q = qtyBySize[size.id] || 0;
+        addItem(product, size, q, notes);
+        parts.push(`${q}× ${size.size}`);
+      }
+      toast.success(`${product.name}: ${parts.join(", ")} added`);
+      return;
+    }
+
+    if (!selectedSize) return;
+    addItem(product, selectedSize, quantity, notes);
+    toast.success(`${product.name} (${selectedSize.size}) added to cart`);
   };
+
+  const totalPrice = perSizeQty
+    ? product.sizes.reduce(
+        (sum, s) => sum + s.price * (qtyBySize[s.id] || 0),
+        0,
+      )
+    : (selectedSize?.price ?? 0) * quantity;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-2 lg:items-start lg:gap-12 lg:px-8 lg:py-12">
@@ -132,47 +174,96 @@ export default function ProductDetailsPage() {
           />
         </div>
 
-        <div className="mt-8">
-          <Label className="mb-3 block">Choose Size</Label>
-          <div className="flex flex-wrap gap-2">
-            {product.sizes.map((size) => (
-              <button
-                key={size.id}
-                type="button"
-                onClick={() => setSelectedSize(size)}
-                className={cn(
-                  "min-h-11 rounded-md border px-4 py-3 text-sm font-semibold transition-colors",
-                  selectedSize?.id === size.id
-                    ? "border-orange-500 bg-orange-500 text-black"
-                    : "border-zinc-600 bg-zinc-900 text-zinc-100 hover:border-orange-500/60",
-                )}
-              >
-                {size.size} · {formatPrice(size.price)}
-              </button>
-            ))}
+        {perSizeQty ? (
+          <div className="mt-8">
+            <Label className="mb-2 block">Sizes &amp; quantity</Label>
+            <p className="mb-3 text-xs text-zinc-500">
+              Set how many of each size — e.g. 1 Small + 1 Medium.
+            </p>
+            <div className="space-y-2">
+              {product.sizes.map((size) => {
+                const q = qtyBySize[size.id] || 0;
+                return (
+                  <div
+                    key={size.id}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg border px-3 py-2",
+                      q > 0
+                        ? "border-orange-500/60 bg-orange-500/10"
+                        : "border-zinc-800 bg-zinc-900/50",
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-white">
+                        {size.size} · {formatPrice(size.price)}
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => bumpSizeQty(size.id, -1)}
+                    >
+                      −
+                    </Button>
+                    <span className="w-6 text-center text-sm font-bold">{q}</span>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => bumpSizeQty(size.id, 1)}
+                    >
+                      +
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-
-        <div className="mt-6">
-          <Label className="mb-2 block">Quantity</Label>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="secondary"
-              size="icon"
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-            >
-              −
-            </Button>
-            <span className="w-8 text-center font-semibold">{quantity}</span>
-            <Button
-              variant="secondary"
-              size="icon"
-              onClick={() => setQuantity((q) => q + 1)}
-            >
-              +
-            </Button>
-          </div>
-        </div>
+        ) : (
+          <>
+            <div className="mt-8">
+              <Label className="mb-3 block">Choose Size</Label>
+              <div className="flex flex-wrap gap-2">
+                {product.sizes.map((size) => (
+                  <button
+                    key={size.id}
+                    type="button"
+                    onClick={() => setSelectedSize(size)}
+                    className={cn(
+                      "min-h-11 rounded-md border px-4 py-3 text-sm font-semibold transition-colors",
+                      selectedSize?.id === size.id
+                        ? "border-orange-500 bg-orange-500 text-black"
+                        : "border-zinc-600 bg-zinc-900 text-zinc-100 hover:border-orange-500/60",
+                    )}
+                  >
+                    {size.size} · {formatPrice(size.price)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-6">
+              <Label className="mb-2 block">Quantity</Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                >
+                  −
+                </Button>
+                <span className="w-8 text-center font-semibold">{quantity}</span>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  onClick={() => setQuantity((q) => q + 1)}
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="mt-6">
           <Label htmlFor="notes" className="mb-2 block">
@@ -187,8 +278,7 @@ export default function ProductDetailsPage() {
         </div>
 
         <Button size="lg" className="mt-8 w-full sm:w-auto" onClick={handleAdd}>
-          Add to Cart ·{" "}
-          {formatPrice((selectedSize?.price ?? 0) * quantity)}
+          Add to Cart · {formatPrice(totalPrice)}
         </Button>
       </div>
     </div>
