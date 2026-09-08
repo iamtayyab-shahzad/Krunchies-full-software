@@ -29,6 +29,7 @@ export default function CategoriesPage() {
     image: "",
     display_order: 0,
     visible: true,
+    has_sizes: false,
   });
 
   const { data: categories = [] } = useQuery({
@@ -38,7 +39,13 @@ export default function CategoriesPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", image: "", display_order: 0, visible: true });
+    setForm({
+      name: "",
+      image: "",
+      display_order: 0,
+      visible: true,
+      has_sizes: false,
+    });
     setOpen(true);
   };
 
@@ -49,6 +56,7 @@ export default function CategoriesPage() {
       image: c.image || "",
       display_order: c.display_order,
       visible: c.visible,
+      has_sizes: Boolean(c.has_sizes),
     });
     setOpen(true);
   };
@@ -118,6 +126,7 @@ export default function CategoriesPage() {
                 <p className="text-lg font-bold">{c.name}</p>
                 <p className="text-sm text-zinc-400">
                   Order {c.display_order} · {c.visible ? "Visible" : "Hidden"}
+                  {c.has_sizes ? " · Sizes" : ""}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -148,13 +157,13 @@ export default function CategoriesPage() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90dvh,640px)] max-w-lg flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-zinc-800 px-6 py-4 pr-12">
             <DialogTitle>
               {editing ? "Edit Category" : "Add Category"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
             <div className="space-y-1">
               <Label>Name</Label>
               <Input
@@ -208,6 +217,18 @@ export default function CategoriesPage() {
                 }
               />
             </div>
+            <label className="flex items-start justify-between gap-3 rounded-lg border border-zinc-800 px-3 py-3 text-sm">
+              <span>
+                <span className="font-medium">Different sizes (S / M / L / XL)</span>
+                <span className="mt-0.5 block text-xs text-zinc-500">
+                  On = new products get four size prices
+                </span>
+              </span>
+              <Switch
+                checked={form.has_sizes}
+                onCheckedChange={(v) => setForm({ ...form, has_sizes: v })}
+              />
+            </label>
             <label className="flex items-center gap-2 text-sm">
               <Switch
                 checked={form.visible}
@@ -215,6 +236,8 @@ export default function CategoriesPage() {
               />
               Visible
             </label>
+          </div>
+          <div className="shrink-0 border-t border-zinc-800 px-6 py-3">
             <Button className="w-full" onClick={save}>
               Save
             </Button>

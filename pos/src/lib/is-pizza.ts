@@ -22,9 +22,19 @@ export function isPizzaCategoryName(name?: string | null): boolean {
   return (name || "").toLowerCase().includes("pizza");
 }
 
+/** Prefer persisted has_sizes; fall back to name heuristic for older clients. */
+export function categoryUsesSizes(cat?: {
+  name?: string | null;
+  has_sizes?: boolean | null;
+} | null): boolean {
+  if (!cat) return false;
+  if (typeof cat.has_sizes === "boolean") return cat.has_sizes;
+  return isPizzaCategoryName(cat.name);
+}
+
 export function isPizzaProduct(product: {
   category_id?: string;
-  category?: { id?: string; name?: string } | null;
+  category?: { id?: string; name?: string; has_sizes?: boolean } | null;
 }): boolean {
   const catId = (
     product.category_id ||
@@ -32,5 +42,8 @@ export function isPizzaProduct(product: {
     ""
   ).toLowerCase();
   if (catId && pizzaIdsLower.has(catId)) return true;
+  if (product.category && typeof product.category.has_sizes === "boolean") {
+    return product.category.has_sizes;
+  }
   return isPizzaCategoryName(product.category?.name);
 }

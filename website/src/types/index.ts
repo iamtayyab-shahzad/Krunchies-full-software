@@ -12,6 +12,7 @@ export interface Category {
   image: string;
   display_order: number;
   visible: boolean;
+  has_sizes?: boolean;
 }
 
 export interface Product {

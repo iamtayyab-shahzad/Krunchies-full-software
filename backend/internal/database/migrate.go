@@ -80,7 +80,43 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := backfillInventory(db); err != nil {
 		return err
 	}
+	if err := backfillCategoryHasSizes(db); err != nil {
+		return err
+	}
 	return EnsureNamalLocations(db)
+}
+
+// backfillCategoryHasSizes turns on multi-size for existing pizza-named
+// categories once, so admin product forms keep S/M/L/XL after the flag ships.
+func backfillCategoryHasSizes(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_flags (
+			flag text PRIMARY KEY,
+			applied_at timestamptz NOT NULL DEFAULT NOW()
+		)
+	`).Error; err != nil {
+		return err
+	}
+	var n int64
+	if err := db.Raw(
+		`SELECT COUNT(*) FROM schema_flags WHERE flag = 'category_has_sizes_v1'`,
+	).Scan(&n).Error; err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	if err := db.Exec(`
+		UPDATE categories
+		SET has_sizes = TRUE
+		WHERE LOWER(name) LIKE '%pizza%'
+	`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`
+		INSERT INTO schema_flags (flag) VALUES ('category_has_sizes_v1')
+		ON CONFLICT (flag) DO NOTHING
+	`).Error
 }
 
 // EnsureNamalLocations inserts Namal University / Hostel delivery areas if missing.

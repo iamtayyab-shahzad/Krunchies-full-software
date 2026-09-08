@@ -14,6 +14,8 @@ export type Category = {
   image: string;
   displayOrder: number;
   hidden: boolean;
+  /** When true, products in this category use S/M/L/XL size pricing. */
+  hasSizes: boolean;
 };
 
 export type PizzaSize = {
@@ -208,6 +210,7 @@ export const mockCategories: Category[] = [
       "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=400&q=80",
     displayOrder: 1,
     hidden: false,
+    hasSizes: false,
   },
   {
     id: "c2",
@@ -217,6 +220,7 @@ export const mockCategories: Category[] = [
       "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400&q=80",
     displayOrder: 2,
     hidden: false,
+    hasSizes: false,
   },
   {
     id: "c3",
@@ -226,6 +230,7 @@ export const mockCategories: Category[] = [
       "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=400&q=80",
     displayOrder: 3,
     hidden: false,
+    hasSizes: false,
   },
   {
     id: "c4",
@@ -235,6 +240,7 @@ export const mockCategories: Category[] = [
       "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&q=80",
     displayOrder: 4,
     hidden: false,
+    hasSizes: false,
   },
   {
     id: "c5",
@@ -244,6 +250,7 @@ export const mockCategories: Category[] = [
       "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&q=80",
     displayOrder: 5,
     hidden: false,
+    hasSizes: true,
   },
   {
     id: "c6",
@@ -253,6 +260,7 @@ export const mockCategories: Category[] = [
       "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=400&q=80",
     displayOrder: 6,
     hidden: false,
+    hasSizes: true,
   },
 ];
 

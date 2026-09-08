@@ -16,6 +16,7 @@ type BackendCategory = {
   image: string;
   display_order: number;
   visible: boolean;
+  has_sizes?: boolean;
 };
 
 type BackendProduct = {
@@ -160,6 +161,7 @@ function mapCategory(cat: BackendCategory): Category {
     image: cat.image,
     displayOrder: cat.display_order,
     hidden: !cat.visible,
+    hasSizes: Boolean(cat.has_sizes),
   };
 }
 
@@ -232,6 +234,7 @@ export const categoriesApi = {
     image: string;
     displayOrder: number;
     hidden: boolean;
+    hasSizes: boolean;
   }) => {
     await apiFetch<unknown>("/categories", {
       method: "POST",
@@ -240,12 +243,19 @@ export const categoriesApi = {
         image: payload.image,
         display_order: Number(payload.displayOrder || 0),
         visible: !payload.hidden,
+        has_sizes: Boolean(payload.hasSizes),
       }),
     });
   },
   update: async (
     id: string,
-    payload: { name: string; image: string; displayOrder: number; hidden: boolean },
+    payload: {
+      name: string;
+      image: string;
+      displayOrder: number;
+      hidden: boolean;
+      hasSizes: boolean;
+    },
   ) => {
     await apiFetch<unknown>(`/categories/${id}`, {
       method: "PUT",
@@ -254,6 +264,7 @@ export const categoriesApi = {
         image: payload.image,
         display_order: Number(payload.displayOrder || 0),
         visible: !payload.hidden,
+        has_sizes: Boolean(payload.hasSizes),
       }),
     });
   },

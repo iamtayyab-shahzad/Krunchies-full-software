@@ -497,6 +497,7 @@ export const categoriesApi = {
         image: payload.image || "",
         display_order: payload.display_order || 0,
         visible: payload.visible !== false,
+        has_sizes: Boolean(payload.has_sizes),
       };
       const cats = await catalogRepo.listCategories();
       await replaceCategories([local, ...cats.filter((c) => c.id !== local.id)]);

@@ -31,7 +31,7 @@ export function NamalOfferBanner() {
     <div className="border-b border-emerald-700/50 bg-emerald-500">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-1.5 sm:px-6 lg:px-8">
         <p className="min-w-0 truncate text-xs font-bold text-black sm:text-sm">
-          Namal: free campus &amp; hostel slots · or Deliver now (paid)
+          Namal: order in slot → free delivery · or Deliver now (paid)
         </p>
         <Link
           href="/menu"

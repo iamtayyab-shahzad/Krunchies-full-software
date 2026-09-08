@@ -119,8 +119,8 @@ export default function ProductsPage() {
     return (id: string) => map[id] || "—";
   }, [categories]);
 
-  const categoryIsPizza = (categoryId: string) =>
-    categoryName(categoryId).toLowerCase().includes("pizza");
+  const categoryHasSizes = (categoryId: string) =>
+    Boolean(categories.find((c) => c.id === categoryId)?.hasSizes);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -139,7 +139,7 @@ export default function ProductsPage() {
     setEditing(null);
     const next = emptyForm(categories);
     setForm(next);
-    setUseSizes(categoryIsPizza(next.categoryId));
+    setUseSizes(categoryHasSizes(next.categoryId));
     setSizes([
       { label: "S", price: 0 },
       { label: "M", price: 0 },
@@ -152,10 +152,12 @@ export default function ProductsPage() {
   const openEdit = (product: Product) => {
     setEditing(product);
     setForm({ ...product });
-    const pizza = categoryIsPizza(product.categoryId);
-    setUseSizes(pizza);
+    const multi =
+      categoryHasSizes(product.categoryId) ||
+      (product.pizzaSizes?.length || 0) > 1;
+    setUseSizes(multi);
     setSizes(
-      pizza && product.pizzaSizes?.length
+      multi && product.pizzaSizes?.length
         ? product.pizzaSizes
         : [
             { label: "S", price: 0 },
@@ -320,10 +322,8 @@ export default function ProductsPage() {
                   {categoryName(product.categoryId)}
                 </td>
                 <td className="px-4 py-3 font-bold text-orange-400">
-                  {categoryIsPizza(product.categoryId) &&
-                  product.pizzaSizes &&
-                  product.pizzaSizes.length > 1
-                    ? product.pizzaSizes
+                  {(product.pizzaSizes?.length || 0) > 1
+                    ? product.pizzaSizes!
                         .map((s) => `${s.label}: ${formatPrice(s.price)}`)
                         .join(" · ")
                     : formatPrice(product.basePrice)}
@@ -386,7 +386,7 @@ export default function ProductsPage() {
                 value={form.categoryId}
                 onValueChange={(v) => {
                   setForm({ ...form, categoryId: v });
-                  setUseSizes(categoryIsPizza(v));
+                  setUseSizes(categoryHasSizes(v));
                 }}
               >
                 <SelectTrigger>
@@ -475,7 +475,7 @@ export default function ProductsPage() {
             </div>
             {useSizes ? (
               <p className="text-xs text-zinc-500 sm:col-span-2">
-                Pizza sizes (S / M / L / XL)
+                Size prices (S / M / L / XL) — from category setting
               </p>
             ) : null}
             {useSizes

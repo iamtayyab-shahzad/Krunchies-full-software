@@ -30,6 +30,7 @@ const empty = (): Omit<Category, "id"> => ({
     "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&q=80",
   displayOrder: 1,
   hidden: false,
+  hasSizes: false,
 });
 
 export default function CategoriesPage() {
@@ -86,6 +87,7 @@ export default function CategoriesPage() {
         image: form.image,
         displayOrder: Number(form.displayOrder || 0),
         hidden: form.hidden,
+        hasSizes: form.hasSizes,
       };
 
       if (editing) {
@@ -125,6 +127,7 @@ export default function CategoriesPage() {
         image: current.image,
         displayOrder: current.displayOrder,
         hidden: !current.hidden,
+        hasSizes: current.hasSizes,
       });
       toast.success("Visibility updated");
       const cats = await categoriesApi.list();
@@ -179,13 +182,21 @@ export default function CategoriesPage() {
                     <p className="text-lg font-black">{cat.name}</p>
                     <p className="text-sm text-zinc-500">/{cat.slug}</p>
                   </div>
-                  <Badge tone={cat.hidden ? "danger" : "success"}>
-                    {cat.hidden ? "Hidden" : "Visible"}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge tone={cat.hidden ? "danger" : "success"}>
+                      {cat.hidden ? "Hidden" : "Visible"}
+                    </Badge>
+                    {cat.hasSizes ? (
+                      <Badge tone="orange">Sizes</Badge>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="text-sm text-zinc-400">
                   Display order:{" "}
                   <span className="font-bold text-white">{cat.displayOrder}</span>
+                  {cat.hasSizes ? (
+                    <span className="ml-2 text-orange-400">· S/M/L/XL</span>
+                  ) : null}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -218,13 +229,13 @@ export default function CategoriesPage() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90dvh,640px)] max-w-lg flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-zinc-800 px-6 py-4 pr-12">
             <DialogTitle>
               {editing ? "Edit Category" : "Add Category"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
             <div className="space-y-2">
               <Label>Name</Label>
               <Input
@@ -286,6 +297,18 @@ export default function CategoriesPage() {
                 }
               />
             </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 px-3 py-3">
+              <div>
+                <Label>Different sizes (S / M / L / XL)</Label>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  On = new products get four size prices. Off = single price.
+                </p>
+              </div>
+              <Switch
+                checked={form.hasSizes}
+                onCheckedChange={(v) => setForm({ ...form, hasSizes: v })}
+              />
+            </div>
             <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-3">
               <Label>Hidden</Label>
               <Switch
@@ -293,12 +316,12 @@ export default function CategoriesPage() {
                 onCheckedChange={(v) => setForm({ ...form, hidden: v })}
               />
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={save}>Save</Button>
-            </div>
+          </div>
+          <div className="flex shrink-0 justify-end gap-2 border-t border-zinc-800 bg-zinc-950 px-6 py-3">
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={save}>Save</Button>
           </div>
         </DialogContent>
       </Dialog>

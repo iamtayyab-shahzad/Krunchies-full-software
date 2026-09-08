@@ -64,7 +64,9 @@ export function NamalOfferPopup() {
 
   if (!cfg?.enabled) return null;
 
+  const campusFrom = displayTimeLabel(cfg.campus_order_start);
   const campusUntil = displayTimeLabel(cfg.campus_order_end);
+  const hostelFrom = displayTimeLabel(cfg.hostel_order_start);
   const hostelUntil = displayTimeLabel(cfg.hostel_order_end);
   const campusSlot = `${displayTimeLabel(cfg.campus_delivery_start_mon_thu)}–${displayTimeLabel(cfg.campus_delivery_end_mon_thu)}`;
   const campusFriSlot = `${displayTimeLabel(cfg.campus_delivery_start_fri)}–${displayTimeLabel(cfg.campus_delivery_end_fri)}`;
@@ -95,8 +97,9 @@ export function NamalOfferPopup() {
               Free campus &amp; hostel delivery
             </DialogTitle>
             <DialogDescription className="text-sm text-black/75">
-              Order before the cutoff → get free delivery in the time slot. Or
-              choose <strong>Deliver now</strong> (paid).
+              Place your order in the window below and we deliver free in that
+              day’s slot. Need it sooner? Choose{" "}
+              <strong>Deliver now</strong> (paid).
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -104,15 +107,27 @@ export function NamalOfferPopup() {
         <div className="max-h-[min(42dvh,280px)] space-y-2.5 overflow-y-auto px-4 py-3 sm:px-5">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5">
             <p className="text-sm font-semibold text-orange-400">Campus</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">
-              Order by {campusUntil} · Free Mon–Thu {campusSlot}, Fri{" "}
-              {campusFriSlot}
+            <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+              Order from <strong className="text-white">{campusFrom}</strong> to{" "}
+              <strong className="text-white">{campusUntil}</strong>
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              → Free delivery Mon–Thu{" "}
+              <strong className="text-zinc-200">{campusSlot}</strong>
+              <br />
+              → Free delivery Fri{" "}
+              <strong className="text-zinc-200">{campusFriSlot}</strong>
             </p>
           </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5">
             <p className="text-sm font-semibold text-orange-400">Hostel</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">
-              Order by {hostelUntil} · Free every day {hostelSlot}
+            <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+              Order from <strong className="text-white">{hostelFrom}</strong> to{" "}
+              <strong className="text-white">{hostelUntil}</strong>
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              → Free delivery every day{" "}
+              <strong className="text-zinc-200">{hostelSlot}</strong>
             </p>
           </div>
         </div>

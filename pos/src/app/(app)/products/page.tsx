@@ -27,7 +27,7 @@ import {
 } from "@/lib/image-upload";
 import { formatPrice } from "@/lib/utils";
 import {
-  isPizzaCategoryName,
+  categoryUsesSizes,
   isPizzaProduct,
   isPizzaSizeLabel,
   pizzaSellableSizes,
@@ -91,16 +91,16 @@ export default function ProductsPage() {
     [products, q],
   );
 
-  const categoryIsPizza = (categoryId: string) => {
+  const categoryHasSizes = (categoryId: string) => {
     const cat = categories.find((c: Category) => c.id === categoryId);
-    return isPizzaCategoryName(cat?.name);
+    return categoryUsesSizes(cat);
   };
 
   const openCreate = () => {
     setEditing(null);
     const categoryId = categories[0]?.id || "";
     setForm({ ...emptyForm, category_id: categoryId });
-    setUseSizes(categoryIsPizza(categoryId));
+    setUseSizes(categoryHasSizes(categoryId));
     setSizes([
       newSizeRow({ label: "S", price: 0 }),
       newSizeRow({ label: "M", price: 0 }),
@@ -112,7 +112,10 @@ export default function ProductsPage() {
 
   const openEdit = (p: Product) => {
     setEditing(p);
-    const pizza = isPizzaProduct(p) || categoryIsPizza(p.category_id);
+    const multi =
+      isPizzaProduct(p) ||
+      categoryHasSizes(p.category_id) ||
+      pizzaSellableSizes(p.sizes).length > 1;
     setForm({
       name: p.name,
       description: p.description || "",
@@ -123,12 +126,12 @@ export default function ProductsPage() {
       display_order: p.display_order,
       basePrice: p.sizes?.[0]?.price || 0,
     });
-    setUseSizes(pizza);
+    setUseSizes(multi);
     const pizzaRows = pizzaSellableSizes(p.sizes).map((s) =>
       newSizeRow({ id: s.id, label: s.size, price: s.price }),
     );
     setSizes(
-      pizza
+      multi
         ? pizzaRows.length
           ? pizzaRows
           : [
@@ -347,7 +350,7 @@ export default function ProductsPage() {
                 value={form.category_id}
                 onValueChange={(v) => {
                   setForm({ ...form, category_id: v });
-                  setUseSizes(categoryIsPizza(v));
+                  setUseSizes(categoryHasSizes(v));
                 }}
               >
                 <SelectTrigger>

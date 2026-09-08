@@ -15,6 +15,8 @@ export interface Category extends BaseEntity {
   image: string;
   display_order: number;
   visible: boolean;
+  /** Products in this category use multi-size (S/M/L/XL) pricing. */
+  has_sizes?: boolean;
 }
 
 export interface ProductSize extends BaseEntity {
