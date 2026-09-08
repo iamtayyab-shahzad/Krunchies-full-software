@@ -12,8 +12,8 @@ export const metadata: Metadata = pageSeo({
   absoluteTitle: true,
 });
 
-/** Revalidate catalog periodically so menu stays fresh without a cold client fetch. */
-export const revalidate = 300;
+/** Fallback ISR safety net (1h). Primary updates use on-demand /api/revalidate. */
+export const revalidate = 3600;
 
 async function loadMenuCatalog(): Promise<{
   categories: Category[];

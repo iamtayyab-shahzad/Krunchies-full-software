@@ -254,6 +254,10 @@ cd admin && npm run dev      # :3002
 | `WHATSAPP_TOKEN` | No | Meta Cloud API bearer token (order alerts) |
 | `WHATSAPP_PHONE_NUMBER_ID` | No | Meta WhatsApp phone number ID |
 | `WHATSAPP_OWNER_PHONE` | No | Owner phone(s), comma-separated, e.g. `92300…`. Website orders also always notify `923000128562` (03000128562). |
+| `WEBSITE_REVALIDATE_URL` | No* | Website origin or full `/api/revalidate` URL (e.g. `https://www.krunchies.pk`). Needed for on-demand menu ISR. |
+| `REVALIDATE_SECRET` | No* | Shared secret with website `REVALIDATE_SECRET`. Backend sends it as `x-revalidate-secret`. |
+
+\*Required in production if you want admin catalog edits to purge website ISR immediately.
 
 ### Frontends (Vercel)
 
@@ -262,6 +266,7 @@ cd admin && npm run dev      # :3002
 | `NEXT_PUBLIC_API_URL` | website, admin, pos (cloud fallback) |
 | `NEXT_PUBLIC_POS_URL` | admin |
 | `NEXT_PUBLIC_APP_NAME` | optional |
+| `REVALIDATE_SECRET` | website only — must match backend `REVALIDATE_SECRET` |
 
 Shop local POS uses the same `NEXT_PUBLIC_API_URL` written into `pos/.env.local` by `Setup-Local-POS.bat`.
 

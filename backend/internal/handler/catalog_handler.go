@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"backend/internal/notify"
 	"backend/internal/service"
 	"backend/internal/utils"
 
@@ -29,6 +30,7 @@ func (h *CatalogHandler) DeleteProductSize(c *gin.Context) {
 		HandleError(c, err)
 		return
 	}
+	notify.RevalidateWebsiteMenu("product size", id.String())
 	utils.Success(c, http.StatusOK, "product size deleted", nil)
 }
 
@@ -42,6 +44,7 @@ func (h *CatalogHandler) DeleteProduct(c *gin.Context) {
 		HandleError(c, err)
 		return
 	}
+	notify.RevalidateWebsiteMenu("product", id.String())
 	utils.Success(c, http.StatusOK, "product deleted", nil)
 }
 
@@ -55,6 +58,7 @@ func (h *CatalogHandler) DeleteCategory(c *gin.Context) {
 		HandleError(c, err)
 		return
 	}
+	notify.RevalidateWebsiteMenu("category", id.String())
 	utils.Success(c, http.StatusOK, "category deleted", nil)
 }
 

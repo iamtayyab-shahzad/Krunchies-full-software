@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
+	"backend/internal/notify"
 	"backend/internal/service"
 	"backend/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -26,6 +28,37 @@ func (h *CRUDHandler[T]) Register(r gin.IRoutes, path string) {
 	r.DELETE(path+"/:id", h.Delete)
 }
 
+func catalogAffectsMenu(name string) bool {
+	switch name {
+	case "product", "category", "product size":
+		return true
+	default:
+		return false
+	}
+}
+
+func payloadID(payload any) string {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return ""
+	}
+	if id, ok := m["id"].(string); ok {
+		return id
+	}
+	return ""
+}
+
+func (h *CRUDHandler[T]) triggerMenuISR(itemID string) {
+	if !catalogAffectsMenu(h.name) {
+		return
+	}
+	notify.RevalidateWebsiteMenu(h.name, itemID)
+}
+
 func (h *CRUDHandler[T]) Create(c *gin.Context) {
 	var payload T
 	if err := c.ShouldBindJSON(&payload); err != nil {
@@ -36,6 +69,7 @@ func (h *CRUDHandler[T]) Create(c *gin.Context) {
 		HandleError(c, err)
 		return
 	}
+	h.triggerMenuISR(payloadID(payload))
 	utils.Success(c, http.StatusCreated, h.name+" created", payload)
 }
 
@@ -87,6 +121,7 @@ func (h *CRUDHandler[T]) Update(c *gin.Context) {
 		HandleError(c, err)
 		return
 	}
+	h.triggerMenuISR(id.String())
 	utils.Success(c, http.StatusOK, h.name+" updated", nil)
 }
 
@@ -100,5 +135,6 @@ func (h *CRUDHandler[T]) Delete(c *gin.Context) {
 		HandleError(c, err)
 		return
 	}
+	h.triggerMenuISR(id.String())
 	utils.Success(c, http.StatusOK, h.name+" deleted", nil)
 }

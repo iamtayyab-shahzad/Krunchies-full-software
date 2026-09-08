@@ -32,8 +32,8 @@ export const metadata: Metadata = pageSeo({
   absoluteTitle: true,
 });
 
-/** Same ISR window as /menu so home catalog is in the HTML, not a client fetch. */
-export const revalidate = 300;
+/** Fallback ISR safety net (1h). Primary updates use on-demand /api/revalidate. */
+export const revalidate = 3600;
 
 async function loadHomeCatalog(): Promise<{
   categories: Category[];
