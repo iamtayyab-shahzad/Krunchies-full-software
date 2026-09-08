@@ -13,7 +13,7 @@ export const metadata: Metadata = pageSeo({
 });
 
 /** Revalidate catalog periodically so menu stays fresh without a cold client fetch. */
-export const revalidate = 60;
+export const revalidate = 300;
 
 async function loadMenuCatalog(): Promise<{
   categories: Category[];

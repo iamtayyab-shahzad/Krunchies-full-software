@@ -44,7 +44,7 @@ async function backendFetch<T>(
       signal: controller.signal,
       // Next.js server components: cache catalog briefly (ISR-friendly).
       ...(typeof window === "undefined"
-        ? { next: { revalidate: 60 } }
+        ? { next: { revalidate: 300 } }
         : {}),
     });
   } catch (err) {

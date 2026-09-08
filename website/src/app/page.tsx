@@ -33,7 +33,7 @@ export const metadata: Metadata = pageSeo({
 });
 
 /** Same ISR window as /menu so home catalog is in the HTML, not a client fetch. */
-export const revalidate = 60;
+export const revalidate = 300;
 
 async function loadHomeCatalog(): Promise<{
   categories: Category[];
