@@ -29,7 +29,7 @@ interface CartActionsValue {
     quantity?: number,
     specialInstructions?: string,
   ) => void;
-  changeSize: (id: string, size: ProductSize) => void;
+  changeSize: (id: string, size: ProductSize) => string | null;
   updateQuantity: (id: string, quantity: number) => void;
   updateInstructions: (id: string, instructions: string) => void;
   removeItem: (id: string) => void;
@@ -150,12 +150,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const changeSize = useCallback((id: string, size: ProductSize) => {
+  const changeSize = useCallback((id: string, size: ProductSize): string | null => {
+    let focusId: string | null = null;
     setItems((prev) => {
       const line = prev.find((item) => item.id === id);
       if (!line) return prev;
-      // Same size already selected — nothing to do.
-      if (line.size_id === size.id) return prev;
+      if (line.size_id === size.id) {
+        focusId = id;
+        return prev;
+      }
 
       const newId = makeCartItemId(
         line.product_id,
@@ -163,15 +166,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
         line.special_instructions,
       );
       const existing = prev.find((item) => item.id === newId);
-      // Another size of the same pizza: keep the current line and add/bump
-      // the other size so Medium + Large can both stay in the order.
       if (existing) {
+        focusId = newId;
         return prev.map((item) =>
           item.id === newId
             ? { ...item, quantity: item.quantity + 1 }
             : item,
         );
       }
+      focusId = newId;
       return [
         ...prev,
         {
@@ -189,6 +192,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         },
       ];
     });
+    return focusId;
   }, []);
 
   const updateQuantity = useCallback((id: string, quantity: number) => {

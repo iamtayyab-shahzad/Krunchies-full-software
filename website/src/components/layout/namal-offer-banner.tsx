@@ -3,14 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getSettings } from "@/services/api";
-import {
-  namalOfferSummary,
-  parseNamalDeliveryConfig,
-} from "@/lib/namal-delivery";
+import { parseNamalDeliveryConfig } from "@/lib/namal-delivery";
 
-/** Compact reminder strip after the main Namal popup is dismissed. */
+/** Single compact strip — no stacked open/offer bars. */
 export function NamalOfferBanner() {
-  const [text, setText] = useState("");
+  const [show, setShow] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -18,29 +15,29 @@ export function NamalOfferBanner() {
       .then((s) => {
         if (!active) return;
         const cfg = parseNamalDeliveryConfig(s.namal_delivery);
-        setText(namalOfferSummary(cfg));
+        setShow(cfg.enabled);
       })
       .catch(() => {
-        if (active) setText("");
+        if (active) setShow(false);
       });
     return () => {
       active = false;
     };
   }, []);
 
-  if (!text) return null;
+  if (!show) return null;
 
   return (
-    <div className="border-b border-orange-500/50 bg-orange-500 text-black">
-      <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-        <p className="text-sm font-bold sm:text-[15px]">
-          Namal students: {text}
+    <div className="border-b border-orange-600/40 bg-orange-500">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-1.5 sm:px-6 lg:px-8">
+        <p className="min-w-0 truncate text-xs font-bold text-black sm:text-sm">
+          Namal: free campus &amp; hostel slots · or Deliver now (paid)
         </p>
         <Link
           href="/menu"
-          className="shrink-0 rounded-md bg-black px-3 py-1.5 text-sm font-bold text-orange-400"
+          className="shrink-0 rounded bg-black px-2.5 py-1 text-xs font-bold text-orange-400"
         >
-          Order now
+          Order
         </Link>
       </div>
     </div>

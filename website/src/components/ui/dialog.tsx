@@ -27,8 +27,10 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    showClose?: boolean;
+  }
+>(({ className, children, showClose = true, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -36,17 +38,19 @@ const DialogContent = React.forwardRef<
       className={cn(
         "fixed z-50 grid gap-4 border border-zinc-800 bg-zinc-950 p-5 shadow-xl sm:p-6",
         // Mobile: bottom sheet (thumb-friendly). Desktop: centered dialog.
-        "inset-x-0 bottom-0 top-auto max-h-[92dvh] w-full translate-x-0 translate-y-0 overflow-y-auto rounded-b-none rounded-t-2xl",
+        "inset-x-0 bottom-0 top-auto max-h-[85dvh] w-full translate-x-0 translate-y-0 overflow-y-auto rounded-b-none rounded-t-2xl",
         "sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[calc(100%-2rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl",
         className,
       )}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm text-zinc-400 opacity-70 transition-opacity hover:opacity-100">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
+      {showClose ? (
+        <DialogPrimitive.Close className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800 text-white opacity-100 transition-colors hover:bg-zinc-700">
+          <X className="h-4 w-4" strokeWidth={2.5} />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      ) : null}
     </DialogPrimitive.Content>
   </DialogPortal>
 ));

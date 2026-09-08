@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -19,7 +21,7 @@ import {
 
 const DISMISS_KEY = "krunchies_namal_offer_dismissed";
 
-/** Full-screen style popup so Namal students notice free delivery. */
+/** Compact Namal free-delivery popup (not full-screen). */
 export function NamalOfferPopup() {
   const [cfg, setCfg] = useState<NamalDeliveryConfig | null>(null);
   const [open, setOpen] = useState(false);
@@ -70,61 +72,59 @@ export function NamalOfferPopup() {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="inset-x-3 bottom-auto top-[50%] max-h-[90dvh] w-auto max-w-lg translate-y-[-50%] overflow-y-auto rounded-2xl border-orange-500/50 bg-zinc-950 p-0 shadow-[0_0_60px_rgba(249,115,22,0.35)] sm:inset-x-auto">
-        <div className="bg-gradient-to-br from-orange-500 via-orange-600 to-amber-700 px-5 py-6 text-center sm:px-8 sm:py-8">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-black/70">
-            Namal University students
-          </p>
-          <DialogHeader className="space-y-2">
-            <DialogTitle className="font-display text-3xl leading-tight text-black sm:text-4xl">
-              Free delivery to campus &amp; hostel
+      <DialogContent
+        showClose={false}
+        className="max-h-[min(78dvh,560px)] gap-0 overflow-hidden p-0 sm:max-w-md"
+      >
+        <div className="relative bg-orange-500 px-4 pb-3 pt-4 pr-14 sm:px-5">
+          <DialogClose
+            type="button"
+            className="absolute right-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black text-white shadow-md hover:bg-zinc-900"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" strokeWidth={2.5} />
+          </DialogClose>
+          <DialogHeader className="space-y-1 text-left">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-black/70">
+              Namal students
+            </p>
+            <DialogTitle className="font-display text-xl leading-snug text-black sm:text-2xl">
+              Free campus &amp; hostel delivery
             </DialogTitle>
-            <DialogDescription className="text-base text-black/80">
-              Order in advance for a free batch delivery — or choose{" "}
-              <strong>Deliver now</strong> anytime (paid).
+            <DialogDescription className="text-sm text-black/75">
+              Order before the cutoff → get free delivery in the time slot. Or
+              choose <strong>Deliver now</strong> (paid).
             </DialogDescription>
           </DialogHeader>
         </div>
 
-        <div className="space-y-4 px-5 py-5 sm:px-8 sm:py-6">
-          <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 p-4">
-            <p className="font-bold text-orange-300">Namal University (campus)</p>
-            <p className="mt-1 text-sm text-zinc-300">
-              Order by {campusUntil} · Free delivery Mon–Thu {campusSlot}, Fri{" "}
+        <div className="max-h-[min(48dvh,320px)] space-y-2.5 overflow-y-auto px-4 py-3 sm:px-5">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5">
+            <p className="text-sm font-semibold text-orange-400">Campus</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">
+              Order by {campusUntil} · Free Mon–Thu {campusSlot}, Fri{" "}
               {campusFriSlot}
             </p>
           </div>
-          <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 p-4">
-            <p className="font-bold text-orange-300">Namal Hostel</p>
-            <p className="mt-1 text-sm text-zinc-300">
-              Order by {hostelUntil} · Free delivery every day {hostelSlot}
-            </p>
-            <p className="mt-2 text-sm font-medium text-white">
-              At checkout choose <span className="text-orange-400">Deliver now</span>{" "}
-              or <span className="text-emerald-400">Free delivery</span>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5">
+            <p className="text-sm font-semibold text-orange-400">Hostel</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">
+              Order by {hostelUntil} · Free every day {hostelSlot}
             </p>
           </div>
+        </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              asChild
-              className="min-h-12 flex-1 text-base font-bold"
-              onClick={() => handleClose(false)}
-            >
-              <Link href="/menu">Order free delivery</Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              className="min-h-12 flex-1 border-zinc-600"
-              onClick={() => handleClose(false)}
-            >
-              <Link href="/checkout">Go to checkout</Link>
-            </Button>
-          </div>
+        <div className="space-y-2 border-t border-zinc-800 px-4 py-3 sm:px-5">
+          <Button
+            asChild
+            className="min-h-11 w-full font-bold"
+            onClick={() => handleClose(false)}
+          >
+            <Link href="/menu">Order free delivery</Link>
+          </Button>
           <button
             type="button"
-            className="w-full py-2 text-center text-sm text-zinc-500 hover:text-zinc-300"
+            className="w-full py-2 text-center text-sm text-zinc-400 hover:text-white"
             onClick={() => handleClose(false)}
           >
             Maybe later
