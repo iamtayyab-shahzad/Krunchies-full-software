@@ -78,6 +78,11 @@ function displayHHMM(s: string): string {
   return `${h}:${String(m).padStart(2, "0")} ${ap}`;
 }
 
+/** Public helper for UI labels (e.g. offer popup). */
+export function displayTimeLabel(s: string): string {
+  return displayHHMM(s);
+}
+
 function formatRange(start: string, end: string): string {
   return `${displayHHMM(start)}–${displayHHMM(end)}`;
 }
@@ -145,7 +150,7 @@ export function evaluateNamalSlot(
         site,
         freeSlotAvailable: false,
         slotLabel: "",
-        hint: "Campus free delivery runs Monday–Friday only. You can still order ASAP with delivery fee.",
+        hint: "Campus free delivery runs Monday–Friday only. You can still choose Deliver now with a delivery fee.",
       };
     }
     const start = parseHHMM(cfg.campus_order_start);
@@ -166,14 +171,14 @@ export function evaluateNamalSlot(
     const delEnd = fri
       ? cfg.campus_delivery_end_fri
       : cfg.campus_delivery_end_mon_thu;
-    const label = `Namal Campus · ${formatRange(delStart, delEnd)}`;
+    const label = formatRange(delStart, delEnd);
     if (nowMin >= start && nowMin <= end) {
       return {
         enabled: true,
         site,
         freeSlotAvailable: true,
         slotLabel: label,
-        hint: `Free delivery today ${formatRange(delStart, delEnd)}. Order by ${displayHHMM(cfg.campus_order_end)}.`,
+        hint: `Free delivery today ${label}. Order by ${displayHHMM(cfg.campus_order_end)}.`,
       };
     }
     return {
@@ -181,7 +186,7 @@ export function evaluateNamalSlot(
       site,
       freeSlotAvailable: false,
       slotLabel: "",
-      hint: `Campus free slot closed for today (order ${displayHHMM(cfg.campus_order_start)}–${displayHHMM(cfg.campus_order_end)}). ASAP delivery still available.`,
+      hint: `Campus free slot closed for today (order ${displayHHMM(cfg.campus_order_start)}–${displayHHMM(cfg.campus_order_end)}). Deliver now is still available.`,
     };
   }
 
@@ -197,14 +202,14 @@ export function evaluateNamalSlot(
       hint: "Hostel free slot is unavailable.",
     };
   }
-  const label = `Namal Hostel · ${formatRange(cfg.hostel_delivery_start, cfg.hostel_delivery_end)}`;
+  const label = formatRange(cfg.hostel_delivery_start, cfg.hostel_delivery_end);
   if (nowMin >= start && nowMin <= end) {
     return {
       enabled: true,
       site,
       freeSlotAvailable: true,
       slotLabel: label,
-      hint: `Free hostel delivery tonight ${formatRange(cfg.hostel_delivery_start, cfg.hostel_delivery_end)}. Order by ${displayHHMM(cfg.hostel_order_end)}.`,
+      hint: `Free hostel delivery tonight ${label}. Order by ${displayHHMM(cfg.hostel_order_end)}.`,
     };
   }
   return {
@@ -212,11 +217,11 @@ export function evaluateNamalSlot(
     site,
     freeSlotAvailable: false,
     slotLabel: "",
-    hint: `Hostel free slot closed for today (order until ${displayHHMM(cfg.hostel_order_end)}). ASAP delivery still available.`,
+    hint: `Hostel free slot closed for today (order until ${displayHHMM(cfg.hostel_order_end)}). Deliver now is still available.`,
   };
 }
 
 export function namalOfferSummary(cfg: NamalDeliveryConfig): string {
   if (!cfg.enabled) return "";
-  return `Free campus delivery (order by ${displayHHMM(cfg.campus_order_end)}, Mon–Fri) · free hostel delivery (order by ${displayHHMM(cfg.hostel_order_end)}, every day). Or pay for ASAP anytime.`;
+  return `Free campus & hostel delivery in time windows — or Deliver now anytime (paid).`;
 }

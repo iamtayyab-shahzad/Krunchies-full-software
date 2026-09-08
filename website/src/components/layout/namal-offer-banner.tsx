@@ -8,7 +8,7 @@ import {
   parseNamalDeliveryConfig,
 } from "@/lib/namal-delivery";
 
-/** Prominent strip so Namal students notice free scheduled delivery. */
+/** Compact reminder strip after the main Namal popup is dismissed. */
 export function NamalOfferBanner() {
   const [text, setText] = useState("");
 
@@ -31,17 +31,16 @@ export function NamalOfferBanner() {
   if (!text) return null;
 
   return (
-    <div className="border-b border-orange-500/40 bg-gradient-to-r from-orange-500/20 via-orange-500/10 to-transparent">
-      <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-        <p className="text-sm font-medium text-orange-100 sm:text-[15px]">
-          <span className="font-bold text-orange-400">Namal students — </span>
-          {text}
+    <div className="border-b border-orange-500/50 bg-orange-500 text-black">
+      <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <p className="text-sm font-bold sm:text-[15px]">
+          Namal students: {text}
         </p>
         <Link
-          href="/checkout"
-          className="shrink-0 text-sm font-bold text-orange-400 underline-offset-2 hover:underline"
+          href="/menu"
+          className="shrink-0 rounded-md bg-black px-3 py-1.5 text-sm font-bold text-orange-400"
         >
-          Order now →
+          Order now
         </Link>
       </div>
     </div>

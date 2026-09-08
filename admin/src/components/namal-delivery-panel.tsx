@@ -42,6 +42,8 @@ function parseNamal(raw?: string): NamalDeliveryConfig {
 export function NamalDeliveryPanel() {
   const [locations, setLocations] = useState<DeliveryLocationRow[]>([]);
   const [cfg, setCfg] = useState<NamalDeliveryConfig>({ ...DEFAULT_NAMAL });
+  const [campusFee, setCampusFee] = useState(150);
+  const [hostelFee, setHostelFee] = useState(150);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -51,7 +53,14 @@ export function NamalDeliveryPanel() {
       settingsApi.get(),
     ]);
     setLocations(locs);
-    setCfg(parseNamal(settings.namal_delivery));
+    const parsed = parseNamal(settings.namal_delivery);
+    setCfg(parsed);
+    setCampusFee(
+      locs.find((l) => l.id === parsed.campus_location_id)?.charge ?? 150,
+    );
+    setHostelFee(
+      locs.find((l) => l.id === parsed.hostel_location_id)?.charge ?? 150,
+    );
   };
 
   useEffect(() => {
@@ -68,6 +77,20 @@ export function NamalDeliveryPanel() {
     setSaving(true);
     try {
       await settingsApi.updateNamalDelivery(cfg);
+      const campus = locations.find((l) => l.id === cfg.campus_location_id);
+      const hostel = locations.find((l) => l.id === cfg.hostel_location_id);
+      if (campus) {
+        await locationsApi.update(campus.id, {
+          name: campus.name,
+          charge: Number(campusFee || 0),
+        });
+      }
+      if (hostel) {
+        await locationsApi.update(hostel.id, {
+          name: hostel.name,
+          charge: Number(hostelFee || 0),
+        });
+      }
       toast.success("Namal delivery settings saved");
       await reload();
     } catch (e) {
@@ -91,9 +114,10 @@ export function NamalDeliveryPanel() {
       <div>
         <h2 className="text-lg font-bold">Namal free delivery</h2>
         <p className="text-sm text-zinc-400">
-          Free same-day scheduled delivery for Namal University &amp; Hostel.
-          Students can still choose ASAP with the normal delivery fee anytime
-          the shop is open.
+          Students pick Namal University or Namal Hostel, then{" "}
+          <strong className="text-zinc-300">Deliver now</strong> (paid) or{" "}
+          <strong className="text-zinc-300">Free delivery</strong> in the time
+          window.
         </p>
       </div>
 
@@ -116,7 +140,13 @@ export function NamalDeliveryPanel() {
             <select
               className="h-11 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm"
               value={cfg.campus_location_id}
-              onChange={(e) => setField("campus_location_id", e.target.value)}
+              onChange={(e) => {
+                setField("campus_location_id", e.target.value);
+                setCampusFee(
+                  locations.find((l) => l.id === e.target.value)?.charge ??
+                    campusFee,
+                );
+              }}
             >
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -124,13 +154,28 @@ export function NamalDeliveryPanel() {
                 </option>
               ))}
             </select>
+            <Label className="text-xs text-zinc-500">
+              Deliver now fee (Rs)
+            </Label>
+            <Input
+              type="number"
+              min={0}
+              value={campusFee}
+              onChange={(e) => setCampusFee(Number(e.target.value))}
+            />
           </div>
           <div className="space-y-2">
             <Label>Hostel location</Label>
             <select
               className="h-11 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm"
               value={cfg.hostel_location_id}
-              onChange={(e) => setField("hostel_location_id", e.target.value)}
+              onChange={(e) => {
+                setField("hostel_location_id", e.target.value);
+                setHostelFee(
+                  locations.find((l) => l.id === e.target.value)?.charge ??
+                    hostelFee,
+                );
+              }}
             >
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -138,6 +183,15 @@ export function NamalDeliveryPanel() {
                 </option>
               ))}
             </select>
+            <Label className="text-xs text-zinc-500">
+              Deliver now fee (Rs)
+            </Label>
+            <Input
+              type="number"
+              min={0}
+              value={hostelFee}
+              onChange={(e) => setHostelFee(Number(e.target.value))}
+            />
           </div>
         </div>
 
@@ -181,7 +235,13 @@ export function NamalDeliveryPanel() {
         </div>
 
         <div className="rounded-lg border border-zinc-800 bg-black/30 p-4">
-          <h3 className="font-bold text-orange-400">Hostel (every day)</h3>
+          <h3 className="font-bold text-orange-400">
+            Hostel — Deliver now or Free delivery
+          </h3>
+          <p className="mt-1 text-xs text-zinc-500">
+            Students choose Deliver now (fee above) or Free delivery in this
+            window.
+          </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <TimeField
               label="Order from"
@@ -194,12 +254,12 @@ export function NamalDeliveryPanel() {
               onChange={(v) => setField("hostel_order_end", v)}
             />
             <TimeField
-              label="Deliver from"
+              label="Free deliver from"
               value={cfg.hostel_delivery_start}
               onChange={(v) => setField("hostel_delivery_start", v)}
             />
             <TimeField
-              label="Deliver until"
+              label="Free deliver until"
               value={cfg.hostel_delivery_end}
               onChange={(v) => setField("hostel_delivery_end", v)}
             />

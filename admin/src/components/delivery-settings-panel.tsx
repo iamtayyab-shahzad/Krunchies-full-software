@@ -23,6 +23,9 @@ import {
 /** Delivery areas + COD fee — embedded in Website Settings. */
 export function DeliverySettingsPanel() {
   const [locations, setLocations] = useState<DeliveryLocationRow[]>([]);
+  const [namalLocationIds, setNamalLocationIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [codFee, setCodFee] = useState(0);
   const [loading, setLoading] = useState(true);
   const [savingFee, setSavingFee] = useState(false);
@@ -37,6 +40,24 @@ export function DeliverySettingsPanel() {
     ]);
     setLocations(locs);
     setCodFee(settings.cash_on_delivery_fee ?? 0);
+    try {
+      const raw = settings.namal_delivery?.trim();
+      if (raw) {
+        const cfg = JSON.parse(raw) as {
+          campus_location_id?: string;
+          hostel_location_id?: string;
+        };
+        setNamalLocationIds(
+          new Set(
+            [cfg.campus_location_id, cfg.hostel_location_id].filter(
+              Boolean,
+            ) as string[],
+          ),
+        );
+      }
+    } catch {
+      setNamalLocationIds(new Set());
+    }
   };
 
   useEffect(() => {
@@ -117,13 +138,19 @@ export function DeliverySettingsPanel() {
     );
   }
 
+  const visibleLocations = locations.filter(
+    (loc) => !namalLocationIds.has(loc.id),
+  );
+
   return (
     <div id="delivery" className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold">Delivery charges</h2>
           <p className="text-sm text-zinc-400">
-            Areas and fees shown on the customer website checkout
+            Areas and fees shown on the customer website checkout. Namal
+            University &amp; Hostel are managed in the Namal free delivery
+            section below (Deliver now fee + free slot).
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -167,7 +194,7 @@ export function DeliverySettingsPanel() {
             </tr>
           </thead>
           <tbody>
-            {locations.map((loc) => (
+            {visibleLocations.map((loc) => (
               <tr key={loc.id} className="border-t border-zinc-800">
                 <td className="px-4 py-3 font-bold">{loc.name}</td>
                 <td className="px-4 py-3 text-orange-400">
@@ -193,7 +220,7 @@ export function DeliverySettingsPanel() {
                 </td>
               </tr>
             ))}
-            {!locations.length && (
+            {!visibleLocations.length && (
               <tr>
                 <td
                   colSpan={3}

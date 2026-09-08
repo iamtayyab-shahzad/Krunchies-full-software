@@ -274,10 +274,10 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
           <div className="mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-100">
             <p className="font-semibold text-orange-300">Namal student offer</p>
             <p className="mt-1 text-zinc-300">
-              Pick <strong>Namal University</strong> or{" "}
-              <strong>Namal Hostel</strong>, then choose free scheduled delivery
-              when the order window is open — or ASAP with the normal fee
-              anytime.
+              Choose <strong>Namal University</strong> or{" "}
+              <strong>Namal Hostel</strong>, then pick{" "}
+              <strong>Deliver now</strong> (paid) or{" "}
+              <strong>Free delivery</strong> when the time window is open.
             </p>
           </div>
         ) : null}
@@ -349,16 +349,19 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                   <SelectValue placeholder="Select delivery area" />
                 </SelectTrigger>
                 <SelectContent>
-                  {locations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name} — {formatPrice(loc.delivery_charge, currency)}
-                      {namalCfg.enabled &&
+                  {locations.map((loc) => {
+                    const isNamal =
+                      namalCfg.enabled &&
                       (loc.id === namalCfg.campus_location_id ||
-                        loc.id === namalCfg.hostel_location_id)
-                        ? " · free slot available"
-                        : ""}
-                    </SelectItem>
-                  ))}
+                        loc.id === namalCfg.hostel_location_id);
+                    return (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {isNamal
+                          ? `${loc.name} — Deliver now or Free delivery`
+                          : `${loc.name} — ${formatPrice(loc.delivery_charge, currency)}`}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               {errors.location_id && (
@@ -383,9 +386,9 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                   <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-800 p-3 has-[[data-state=checked]]:border-orange-500">
                     <RadioGroupItem value="asap" className="mt-1" />
                     <div>
-                      <p className="font-medium text-white">Deliver ASAP</p>
+                      <p className="font-medium text-white">Deliver now</p>
                       <p className="text-sm text-zinc-400">
-                        Normal delivery fee:{" "}
+                        Get it as soon as possible · fee{" "}
                         {formatPrice(baseDeliveryCharge, currency)}
                       </p>
                     </div>
@@ -403,12 +406,10 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                       disabled={!namalSlot.freeSlotAvailable}
                     />
                     <div>
-                      <p className="font-medium text-white">
-                        Free Namal scheduled delivery
-                      </p>
+                      <p className="font-medium text-white">Free delivery</p>
                       {namalSlot.freeSlotAvailable ? (
                         <p className="text-sm text-emerald-400">
-                          {namalSlot.slotLabel} · Rs 0 delivery
+                          Arrives {namalSlot.slotLabel} · Rs 0
                         </p>
                       ) : (
                         <p className="text-sm text-zinc-400">{namalSlot.hint}</p>

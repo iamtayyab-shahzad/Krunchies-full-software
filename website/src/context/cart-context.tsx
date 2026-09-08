@@ -154,44 +154,40 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((prev) => {
       const line = prev.find((item) => item.id === id);
       if (!line) return prev;
+      // Same size already selected — nothing to do.
+      if (line.size_id === size.id) return prev;
+
       const newId = makeCartItemId(
         line.product_id,
         size.id,
         line.special_instructions,
       );
-      if (newId === id) {
+      const existing = prev.find((item) => item.id === newId);
+      // Another size of the same pizza: keep the current line and add/bump
+      // the other size so Medium + Large can both stay in the order.
+      if (existing) {
         return prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                size_id: size.id,
-                size: size.size,
-                price: size.price,
-              }
+          item.id === newId
+            ? { ...item, quantity: item.quantity + 1 }
             : item,
         );
       }
-      const existing = prev.find((item) => item.id === newId);
-      if (existing) {
-        return prev
-          .filter((item) => item.id !== id)
-          .map((item) =>
-            item.id === newId
-              ? { ...item, quantity: item.quantity + line.quantity }
-              : item,
-          );
-      }
-      return prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              id: newId,
-              size_id: size.id,
-              size: size.size,
-              price: size.price,
-            }
-          : item,
-      );
+      return [
+        ...prev,
+        {
+          id: newId,
+          product_id: line.product_id,
+          product_name: line.product_name,
+          product_image: line.product_image,
+          size_id: size.id,
+          size: size.size,
+          price: size.price,
+          quantity: 1,
+          special_instructions: line.special_instructions,
+          is_deal: line.is_deal,
+          was_price: size.was_price || undefined,
+        },
+      ];
     });
   }, []);
 

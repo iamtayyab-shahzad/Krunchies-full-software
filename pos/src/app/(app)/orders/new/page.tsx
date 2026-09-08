@@ -772,7 +772,11 @@ export default function NewOrderPage() {
                   {product &&
                     isPizzaProduct(product) &&
                     pizzaSellableSizes(product.sizes).length > 1 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
+                    <div className="mt-2 space-y-1">
+                      <p className="text-[10px] text-zinc-500">
+                        Tap another size to add it (keep both)
+                      </p>
+                      <div className="flex flex-wrap gap-1">
                       {pizzaSellableSizes(product.sizes).map((s: ProductSize) => (
                         <button
                           key={s.id}
@@ -782,12 +786,13 @@ export default function NewOrderPage() {
                             "rounded px-2 py-1 text-xs font-bold",
                             item.size_id === s.id
                               ? "bg-orange-500 text-black"
-                              : "bg-zinc-800 text-zinc-400",
+                              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700",
                           )}
                         >
                           {s.size}
                         </button>
                       ))}
+                      </div>
                     </div>
                   )}
                   <div className="mt-2 flex items-center gap-2">

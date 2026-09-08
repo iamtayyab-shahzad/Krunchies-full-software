@@ -107,7 +107,11 @@ export default function CartPage() {
                     </button>
                   </div>
                   {sizes.length > 1 ? (
-                    <div className="flex flex-wrap gap-1">
+                    <div className="space-y-1">
+                      <p className="text-xs text-zinc-500">
+                        Tap another size to add it too (e.g. Medium + Large)
+                      </p>
+                      <div className="flex flex-wrap gap-1">
                       {sizes.map((s) => (
                         <button
                           key={s.id}
@@ -117,12 +121,13 @@ export default function CartPage() {
                             "rounded px-2 py-1 text-xs font-bold",
                             item.size_id === s.id
                               ? "bg-orange-500 text-black"
-                              : "bg-zinc-800 text-zinc-400",
+                              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700",
                           )}
                         >
                           {s.size}
                         </button>
                       ))}
+                      </div>
                     </div>
                   ) : null}
                   <div className="flex items-center gap-3">

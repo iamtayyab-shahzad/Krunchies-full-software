@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { HeroSection } from "@/components/home/hero-section";
-import { OfferPopup } from "@/components/home/offer-popup";
+import { HomePopups } from "@/components/home/home-popups";
 import { FeaturedProducts } from "@/components/home/featured-products";
 import { PopularCategories } from "@/components/home/popular-categories";
 import { pageSeo } from "@/lib/seo";
@@ -57,7 +57,7 @@ export default async function HomePage() {
   return (
     <>
       <HeroSection />
-      <OfferPopup />
+      <HomePopups />
       <FeaturedProducts initialProducts={featured} />
       <PopularCategories initialCategories={categories} />
       <RestaurantStory />

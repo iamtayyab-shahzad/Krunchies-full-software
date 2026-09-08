@@ -327,52 +327,47 @@ export function BillProvider({ children }: { children: ReactNode }) {
         setState((p) => {
           const line = p.items.find((i) => i.key === key);
           if (!line) return p;
+          if (line.size_id === size.id) return p;
+
           const newKey = makeLineKey(
             line.product_id,
             size.id,
             line.special_instructions,
           );
-          if (newKey === key) {
+          const existing = p.items.find((i) => i.key === newKey);
+          // Keep the current size line and add/bump the other size so staff
+          // can put Medium and Large of the same pizza on one order.
+          if (existing) {
             return {
               ...p,
               items: p.items.map((i) =>
-                i.key === key
-                  ? {
-                      ...i,
-                      size_id: size.id,
-                      size: size.size,
-                      price: size.price,
-                    }
+                i.key === newKey
+                  ? { ...i, quantity: i.quantity + 1 }
                   : i,
               ),
             };
           }
-          const existing = p.items.find((i) => i.key === newKey);
-          if (existing) {
-            return {
-              ...p,
-              items: p.items
-                .filter((i) => i.key !== key)
-                .map((i) =>
-                  i.key === newKey
-                    ? { ...i, quantity: i.quantity + line.quantity }
-                    : i,
-                ),
-            };
-          }
           return {
             ...p,
-            items: p.items.map((i) =>
-              i.key === key
-                ? {
-                    ...i,
-                    key: newKey,
-                    size_id: size.id,
-                    size: size.size,
-                    price: size.price,
-                  }
-                : i,
-            ),
+            items: [
+              ...p.items,
+              {
+                key: newKey,
+                product_id: line.product_id,
+                product_name: line.product_name,
+                product_image: line.product_image,
+                size_id: size.id,
+                size: size.size,
+                price: size.price,
+                quantity: 1,
+                special_instructions: line.special_instructions,
+                is_deal: line.is_deal,
+                was_price: size.was_price || undefined,
+                crust: line.crust,
+                toppings: line.toppings,
+                extras: line.extras,
+              },
+            ],
           };
         }),
       increase: (key) =>
