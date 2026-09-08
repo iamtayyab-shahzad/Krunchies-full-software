@@ -58,6 +58,7 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 			ClosingTime:       "11:00 PM",
 			DrinkFlavors:      `["Coke","Sprite","Fanta"]`,
 			DefaultSiteTheme:  "dark",
+			NamalDelivery:     domain.DefaultNamalDeliveryConfig().JSON(),
 		}
 		if createErr := s.db.Create(&setting).Error; createErr != nil {
 			return nil, createErr
@@ -79,6 +80,10 @@ func (s *SettingService) Get() (*domain.Setting, error) {
 	if strings.TrimSpace(setting.DefaultSiteTheme) == "" {
 		setting.DefaultSiteTheme = "dark"
 		_ = s.db.Model(&setting).Update("default_site_theme", setting.DefaultSiteTheme).Error
+	}
+	if strings.TrimSpace(setting.NamalDelivery) == "" {
+		setting.NamalDelivery = domain.DefaultNamalDeliveryConfig().JSON()
+		_ = s.db.Model(&setting).Update("namal_delivery", setting.NamalDelivery).Error
 	}
 
 	s.mu.Lock()
@@ -160,6 +165,18 @@ func (s *SettingService) UpdateFromDTO(input dto.UpdateSettingsRequest) (*domain
 		default:
 			return nil, utils.NewAppError(http.StatusBadRequest, "invalid default_site_theme")
 		}
+	}
+	if input.NamalDelivery != nil {
+		raw := strings.TrimSpace(*input.NamalDelivery)
+		if raw == "" {
+			raw = domain.DefaultNamalDeliveryConfig().JSON()
+		} else {
+			// Validate JSON shape
+			_ = domain.ParseNamalDeliveryConfig(raw)
+			raw = domain.ParseNamalDeliveryConfig(raw).JSON()
+		}
+		patch.NamalDelivery = raw
+		cols = append(cols, "NamalDelivery")
 	}
 	if len(cols) == 0 {
 		return nil, utils.NewAppError(http.StatusBadRequest, "no fields to update")

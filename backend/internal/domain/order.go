@@ -19,6 +19,10 @@ type Order struct {
 	OrderStatus     string      `gorm:"size:50;not null;index" json:"order_status"`
 	OrderType       string      `gorm:"size:30;not null;default:'website';index" json:"order_type"`
 	OrderNotes      string      `gorm:"type:text" json:"order_notes"`
+	// DeliveryMode: asap (paid location fee) or scheduled (Namal free slot).
+	DeliveryMode string `gorm:"size:20;not null;default:'asap'" json:"delivery_mode"`
+	// ScheduledSlot is a human label e.g. "Namal Campus · 1:30–2:00 PM".
+	ScheduledSlot string `gorm:"size:120" json:"scheduled_slot"`
 	Subtotal        int         `gorm:"not null;default:0" json:"subtotal"`
 	// Discount is order-level promo (e.g. Fri & Sun 10% on non-deal items).
 	Discount   int `gorm:"not null;default:0" json:"discount"`

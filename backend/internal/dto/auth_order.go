@@ -42,6 +42,8 @@ type CreateOrderRequest struct {
 	// CreatedAt is the original till timestamp. If omitted, server time is used.
 	CreatedAt     *time.Time               `json:"created_at"`
 	IsGuest       bool                     `json:"is_guest"`
+	// DeliveryMode: asap (default) or scheduled (Namal free same-day slot).
+	DeliveryMode string `json:"delivery_mode" binding:"omitempty,oneof=asap scheduled"`
 	Items         []CreateOrderItemRequest `json:"items" binding:"required,min=1,dive"`
 }
 
@@ -86,6 +88,7 @@ type UpdateSettingsRequest struct {
 	Instagram         *string `json:"instagram" binding:"omitempty,max=500"`
 	DrinkFlavors      *string `json:"drink_flavors" binding:"omitempty,max=2000"`
 	DefaultSiteTheme  *string `json:"default_site_theme" binding:"omitempty,oneof=dark dim light warm"`
+	NamalDelivery     *string `json:"namal_delivery" binding:"omitempty,max=4000"`
 }
 
 type TokenResponse struct {

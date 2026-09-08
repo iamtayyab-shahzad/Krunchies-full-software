@@ -3,6 +3,7 @@ package database
 import (
 	"backend/internal/domain"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -76,7 +77,40 @@ func AutoMigrate(db *gorm.DB) error {
 		}
 	}
 
-	return backfillInventory(db)
+	if err := backfillInventory(db); err != nil {
+		return err
+	}
+	return EnsureNamalLocations(db)
+}
+
+// EnsureNamalLocations inserts Namal University / Hostel delivery areas if missing.
+func EnsureNamalLocations(db *gorm.DB) error {
+	rows := []domain.Location{
+		{
+			BaseModel:      domain.BaseModel{ID: uuid.MustParse(domain.NamalCampusLocationID)},
+			Name:           "Namal University",
+			DeliveryCharge: 150,
+		},
+		{
+			BaseModel:      domain.BaseModel{ID: uuid.MustParse(domain.NamalHostelLocationID)},
+			Name:           "Namal Hostel",
+			DeliveryCharge: 150,
+		},
+	}
+	for _, loc := range rows {
+		var existing domain.Location
+		err := db.First(&existing, "id = ?", loc.ID).Error
+		if err == nil {
+			continue
+		}
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+		if err := db.Create(&loc).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // backfillInventory upgrades inventory rows that predate the unit-conversion

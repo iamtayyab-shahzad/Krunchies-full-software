@@ -12,6 +12,7 @@ import { Footer } from "@/components/layout/footer";
 import { MobileCartBar } from "@/components/layout/mobile-cart-bar";
 import { WhatsAppButton } from "@/components/layout/whatsapp-button";
 import { ShopStatusBanner } from "@/components/layout/shop-status-banner";
+import { NamalOfferBanner } from "@/components/layout/namal-offer-banner";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <ShopStatusBanner />
+      <NamalOfferBanner />
       <Header />
       <main className={cn("flex-1", padForCartBar && "pb-24 md:pb-0")}>
         {children}

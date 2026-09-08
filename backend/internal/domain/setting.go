@@ -20,4 +20,6 @@ type Setting struct {
 	// DefaultSiteTheme is the first-visit website appearance:
 	// dark | dim | light | warm
 	DefaultSiteTheme string `gorm:"size:20;not null;default:'dark'" json:"default_site_theme"`
+	// NamalDelivery is JSON config for Namal free scheduled delivery windows.
+	NamalDelivery string `gorm:"type:text" json:"namal_delivery"`
 }

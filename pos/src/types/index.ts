@@ -118,6 +118,8 @@ export interface Order extends BaseEntity {
   order_status: string;
   order_type: string;
   order_notes: string;
+  delivery_mode?: string;
+  scheduled_slot?: string;
   subtotal: number;
   discount?: number;
   grand_total: number;

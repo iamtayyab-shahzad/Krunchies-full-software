@@ -72,6 +72,8 @@ type BackendSetting = {
   drink_flavors?: string;
   /** First-visit website appearance: dark | dim | light | warm */
   default_site_theme?: string;
+  /** JSON string: Namal free scheduled delivery config */
+  namal_delivery?: string;
 };
 
 type BackendInventory = {
@@ -507,6 +509,23 @@ export type SettingsUpdatePayload = {
   drink_flavors?: string;
   /** First-visit website appearance: dark | dim | light | warm */
   default_site_theme?: string;
+  namal_delivery?: string;
+};
+
+export type NamalDeliveryConfig = {
+  enabled: boolean;
+  campus_location_id: string;
+  hostel_location_id: string;
+  campus_order_start: string;
+  campus_order_end: string;
+  campus_delivery_start_mon_thu: string;
+  campus_delivery_end_mon_thu: string;
+  campus_delivery_start_fri: string;
+  campus_delivery_end_fri: string;
+  hostel_order_start: string;
+  hostel_order_end: string;
+  hostel_delivery_start: string;
+  hostel_delivery_end: string;
 };
 
 export const settingsApi = {
@@ -523,6 +542,12 @@ export const settingsApi = {
     await apiFetch<BackendSetting>("/settings", {
       method: "PUT",
       body: JSON.stringify({ cash_on_delivery_fee: Number(fee || 0) }),
+    });
+  },
+  updateNamalDelivery: async (cfg: NamalDeliveryConfig) => {
+    await apiFetch<BackendSetting>("/settings", {
+      method: "PUT",
+      body: JSON.stringify({ namal_delivery: JSON.stringify(cfg) }),
     });
   },
 };

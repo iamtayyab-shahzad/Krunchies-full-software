@@ -26,6 +26,11 @@ import { useCart } from "@/context/cart-context";
 import { LAST_ORDER_KEY, PAYMENT_METHODS } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import { weekendPromoLabel } from "@/lib/weekend-promo";
+import {
+  evaluateNamalSlot,
+  parseNamalDeliveryConfig,
+  type NamalDeliveryConfig,
+} from "@/lib/namal-delivery";
 import { createOrder, getLocations, getSettings } from "@/services/api";
 import type { Location, PaymentMethod, Settings } from "@/types";
 import { AfterHoursNotice } from "@/components/checkout/after-hours-notice";
@@ -49,6 +54,7 @@ const checkoutSchema = z.object({
   location_id: z.string().min(1, "Select a delivery location"),
   payment_method: z.enum(["easypaisa", "jazzcash", "bank", "cod"]),
   order_notes: z.string().optional(),
+  delivery_mode: z.enum(["asap", "scheduled"]),
 });
 
 type CheckoutFormValues = z.infer<typeof checkoutSchema>;
@@ -63,7 +69,11 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
   const { customer, isAuthenticated, saveCheckoutDefaults } = useAuth();
   const [locations, setLocations] = useState<Location[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [namalCfg, setNamalCfg] = useState<NamalDeliveryConfig>(
+    parseNamalDeliveryConfig(null),
+  );
   const [submitting, setSubmitting] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   const {
     register,
@@ -80,17 +90,20 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
       location_id: "",
       payment_method: "cod",
       order_notes: "",
+      delivery_mode: "asap",
     },
   });
 
   const locationId = watch("location_id");
   const paymentMethod = watch("payment_method");
+  const deliveryMode = watch("delivery_mode");
 
   useEffect(() => {
     Promise.all([getLocations(), getSettings()])
       .then(([locationRows, restaurantSettings]) => {
         setLocations(locationRows);
         setSettings(restaurantSettings);
+        setNamalCfg(parseNamalDeliveryConfig(restaurantSettings.namal_delivery));
       })
       .catch((error) =>
         toast.error(
@@ -99,6 +112,11 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             : "Unable to load checkout settings",
         ),
       );
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -116,9 +134,25 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
     }
   }, [customer, guestMode, setValue]);
 
-  const deliveryCharge = useMemo(() => {
+  const namalSlot = useMemo(
+    () => evaluateNamalSlot(namalCfg, locationId, new Date(nowTick)),
+    [namalCfg, locationId, nowTick],
+  );
+
+  useEffect(() => {
+    if (deliveryMode === "scheduled" && !namalSlot.freeSlotAvailable) {
+      setValue("delivery_mode", "asap");
+    }
+  }, [deliveryMode, namalSlot.freeSlotAvailable, setValue]);
+
+  const baseDeliveryCharge = useMemo(() => {
     return locations.find((l) => l.id === locationId)?.delivery_charge ?? 0;
   }, [locations, locationId]);
+
+  const deliveryCharge =
+    deliveryMode === "scheduled" && namalSlot.freeSlotAvailable
+      ? 0
+      : baseDeliveryCharge;
 
   const codFee =
     paymentMethod === "cod" ? (settings?.cash_on_delivery_fee ?? 0) : 0;
@@ -154,6 +188,15 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
 
     setSubmitting(true);
     try {
+      if (values.delivery_mode === "scheduled" && !namalSlot.freeSlotAvailable) {
+        toast.error(
+          namalSlot.hint ||
+            "Namal free delivery slot is not available right now",
+        );
+        setSubmitting(false);
+        return;
+      }
+
       const hours = getShopHoursStatus(DEFAULT_SHOP_OPEN, DEFAULT_SHOP_CLOSE);
       const afterNote = afterHoursOrderNote(hours);
       const notes = [afterNote, values.order_notes?.trim()]
@@ -164,6 +207,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
         ...values,
         order_notes: notes || undefined,
         is_guest: guestMode || !isAuthenticated,
+        delivery_mode: values.delivery_mode,
         items: items.map((item) => ({
           product_id: item.product_id,
           product_size_id: item.size_id,
@@ -182,11 +226,13 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
       }
       clearCart();
       toast.success(
-        hours.isOpen
-          ? "Order placed successfully!"
-          : hours.serveWhen === "today"
-            ? `Order placed! We'll prepare it when we open today at ${hours.openLabel}.`
-            : `Order placed! We'll prepare it tomorrow when we open at ${hours.openLabel}.`,
+        values.delivery_mode === "scheduled" && namalSlot.slotLabel
+          ? `Order placed! Free delivery: ${namalSlot.slotLabel}`
+          : hours.isOpen
+            ? "Order placed successfully!"
+            : hours.serveWhen === "today"
+              ? `Order placed! We'll prepare it when we open today at ${hours.openLabel}.`
+              : `Order placed! We'll prepare it tomorrow when we open at ${hours.openLabel}.`,
       );
       router.push(`/order-success?order=${order.order_number}`);
     } catch (error) {
@@ -224,6 +270,17 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
           </div>
         )}
         <AfterHoursNotice className="mt-4" />
+        {namalCfg.enabled ? (
+          <div className="mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-100">
+            <p className="font-semibold text-orange-300">Namal student offer</p>
+            <p className="mt-1 text-zinc-300">
+              Pick <strong>Namal University</strong> or{" "}
+              <strong>Namal Hostel</strong>, then choose free scheduled delivery
+              when the order window is open — or ASAP with the normal fee
+              anytime.
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <form
@@ -295,6 +352,11 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
                       {loc.name} — {formatPrice(loc.delivery_charge, currency)}
+                      {namalCfg.enabled &&
+                      (loc.id === namalCfg.campus_location_id ||
+                        loc.id === namalCfg.hostel_location_id)
+                        ? " · free slot available"
+                        : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -305,6 +367,63 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                 </p>
               )}
             </div>
+
+            {namalCfg.enabled && namalSlot.site ? (
+              <div className="space-y-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
+                <p className="font-semibold text-orange-300">Delivery timing</p>
+                <RadioGroup
+                  value={deliveryMode}
+                  onValueChange={(value) =>
+                    setValue("delivery_mode", value as "asap" | "scheduled", {
+                      shouldValidate: true,
+                    })
+                  }
+                  className="space-y-2"
+                >
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-800 p-3 has-[[data-state=checked]]:border-orange-500">
+                    <RadioGroupItem value="asap" className="mt-1" />
+                    <div>
+                      <p className="font-medium text-white">Deliver ASAP</p>
+                      <p className="text-sm text-zinc-400">
+                        Normal delivery fee:{" "}
+                        {formatPrice(baseDeliveryCharge, currency)}
+                      </p>
+                    </div>
+                  </label>
+                  <label
+                    className={`flex items-start gap-3 rounded-lg border border-zinc-800 p-3 ${
+                      namalSlot.freeSlotAvailable
+                        ? "cursor-pointer has-[[data-state=checked]]:border-orange-500"
+                        : "cursor-not-allowed opacity-60"
+                    }`}
+                  >
+                    <RadioGroupItem
+                      value="scheduled"
+                      className="mt-1"
+                      disabled={!namalSlot.freeSlotAvailable}
+                    />
+                    <div>
+                      <p className="font-medium text-white">
+                        Free Namal scheduled delivery
+                      </p>
+                      {namalSlot.freeSlotAvailable ? (
+                        <p className="text-sm text-emerald-400">
+                          {namalSlot.slotLabel} · Rs 0 delivery
+                        </p>
+                      ) : (
+                        <p className="text-sm text-zinc-400">{namalSlot.hint}</p>
+                      )}
+                    </div>
+                  </label>
+                </RadioGroup>
+                {namalSlot.freeSlotAvailable && deliveryMode === "scheduled" ? (
+                  <p className="text-xs text-zinc-400">{namalSlot.hint}</p>
+                ) : null}
+              </div>
+            ) : namalCfg.enabled && namalSlot.hint ? (
+              <p className="text-sm text-zinc-400">{namalSlot.hint}</p>
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="order_notes">Order Notes (optional)</Label>
               <Textarea id="order_notes" {...register("order_notes")} />
@@ -390,11 +509,18 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
               </div>
             ) : null}
             <div className="flex justify-between text-zinc-400">
-              <span>Delivery</span>
               <span>
-                {locationId
-                  ? formatPrice(deliveryCharge, currency)
-                  : "Select location"}
+                Delivery
+                {deliveryMode === "scheduled" && namalSlot.freeSlotAvailable
+                  ? ` (${namalSlot.slotLabel})`
+                  : ""}
+              </span>
+              <span>
+                {!locationId
+                  ? "Select location"
+                  : deliveryCharge === 0
+                    ? "Free"
+                    : formatPrice(deliveryCharge, currency)}
               </span>
             </div>
             {codFee > 0 && (

@@ -136,6 +136,36 @@ func (s *OrderService) CreateOrder(
 		codFee = setting.CashOnDeliveryFee
 	}
 
+	deliveryMode := strings.ToLower(strings.TrimSpace(input.DeliveryMode))
+	if deliveryMode == "" {
+		deliveryMode = "asap"
+	}
+	deliveryCharge := location.DeliveryCharge
+	scheduledSlot := ""
+	orderNotes := strings.TrimSpace(input.OrderNotes)
+
+	if deliveryMode == "scheduled" {
+		cfg := domain.ParseNamalDeliveryConfig(setting.NamalDelivery)
+		slot := EvaluateNamalFreeSlot(cfg, locationID, time.Now())
+		if !slot.Eligible {
+			tx.Rollback()
+			msg := slot.Reason
+			if msg == "" {
+				msg = "Namal free delivery slot is not available right now"
+			}
+			return nil, utils.NewAppError(http.StatusBadRequest, msg)
+		}
+		deliveryCharge = 0
+		scheduledSlot = slot.SlotLabel
+		if slot.KitchenNote != "" {
+			if orderNotes == "" {
+				orderNotes = slot.KitchenNote
+			} else {
+				orderNotes = slot.KitchenNote + "\n" + orderNotes
+			}
+		}
+	}
+
 	saleTime := resolveClientCreatedAt(input.CreatedAt)
 	orderID := uuid.New()
 	order := &domain.Order{
@@ -147,12 +177,14 @@ func (s *OrderService) CreateOrder(
 		Phone:             phone,
 		Address:           address,
 		LocationID:        locationID,
-		DeliveryCharge:    location.DeliveryCharge,
+		DeliveryCharge:    deliveryCharge,
 		CashOnDeliveryFee: codFee,
 		PaymentMethod:     method,
 		OrderStatus:       "PENDING",
 		OrderType:         orderType,
-		OrderNotes:        input.OrderNotes,
+		OrderNotes:        orderNotes,
+		DeliveryMode:      deliveryMode,
+		ScheduledSlot:     scheduledSlot,
 	}
 
 	subtotal := 0
@@ -208,7 +240,7 @@ func (s *OrderService) CreateOrder(
 	discount := s.activeDiscount(saleTime, subtotal, eligibleSubtotal)
 	order.Subtotal = subtotal
 	order.Discount = discount
-	order.GrandTotal = subtotal - discount + location.DeliveryCharge + codFee
+	order.GrandTotal = subtotal - discount + deliveryCharge + codFee
 
 	if err := s.orderRepo.Create(tx, order); err != nil {
 		tx.Rollback()

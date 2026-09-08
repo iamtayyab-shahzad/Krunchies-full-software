@@ -342,6 +342,11 @@ export default function PendingOrdersPage() {
                     {" · "}
                     {items.length} item{items.length === 1 ? "" : "s"}
                   </p>
+                  {order.scheduled_slot ? (
+                    <p className="text-sm font-semibold text-orange-400">
+                      Slot: {order.scheduled_slot}
+                    </p>
+                  ) : null}
                   {order.order_notes ? (
                     <p className="text-sm text-amber-300/90">
                       Note: {order.order_notes}

@@ -18,6 +18,7 @@ import {
   type WebsiteSettings,
 } from "@/lib/mock-data";
 import { DeliverySettingsPanel } from "@/components/delivery-settings-panel";
+import { NamalDeliveryPanel } from "@/components/namal-delivery-panel";
 import { settingsApi } from "@/services/api";
 
 type WebsiteForm = WebsiteSettings & {
@@ -384,6 +385,12 @@ export default function WebsiteSettingsPage() {
       <div className="mt-6">
         <Card className="space-y-4">
           <DeliverySettingsPanel />
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card className="space-y-4">
+          <NamalDeliveryPanel />
         </Card>
       </div>
     </div>

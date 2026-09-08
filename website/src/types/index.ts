@@ -62,6 +62,8 @@ export interface Settings {
   drink_flavors?: string;
   /** First-visit website appearance: dark | dim | light | warm */
   default_site_theme?: string;
+  /** JSON: Namal free scheduled delivery windows */
+  namal_delivery?: string;
 }
 
 export type PaymentMethod = "easypaisa" | "jazzcash" | "bank" | "cod";
@@ -105,6 +107,8 @@ export interface CreateOrderPayload {
   order_notes?: string;
   items: OrderItemPayload[];
   is_guest: boolean;
+  /** asap (default) or scheduled (Namal free same-day slot) */
+  delivery_mode?: "asap" | "scheduled";
 }
 
 export interface OrderItem {
@@ -133,6 +137,8 @@ export interface Order {
   order_status: string;
   order_type: string;
   order_notes?: string;
+  delivery_mode?: string;
+  scheduled_slot?: string;
   subtotal: number;
   discount?: number;
   grand_total: number;
