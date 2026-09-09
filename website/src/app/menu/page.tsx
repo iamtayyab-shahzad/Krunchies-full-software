@@ -12,8 +12,11 @@ export const metadata: Metadata = pageSeo({
   absoluteTitle: true,
 });
 
-/** Fallback ISR safety net (1h). Primary updates use on-demand /api/revalidate. */
-export const revalidate = 3600;
+/**
+ * Cache forever until admin edits trigger POST /api/revalidate.
+ * Avoids hourly ISR writes that burn the Vercel free/hobby write quota.
+ */
+export const revalidate = false;
 
 async function loadMenuCatalog(): Promise<{
   categories: Category[];

@@ -42,9 +42,9 @@ async function backendFetch<T>(
       ...options,
       headers,
       signal: controller.signal,
-      // Next.js server components: long fallback cache; on-demand revalidate purges on edits.
+      // Cache until on-demand revalidatePath (no timed ISR churn).
       ...(typeof window === "undefined"
-        ? { next: { revalidate: 3600 } }
+        ? { next: { revalidate: false } }
         : {}),
     });
   } catch (err) {
