@@ -15,6 +15,8 @@ import type {
 } from "@/types";
 
 const FETCH_TIMEOUT_MS = 10_000;
+/** Order create can wait on DB + WhatsApp path; 10s caused false timeouts + duplicate retries. */
+const ORDER_TIMEOUT_MS = 45_000;
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
@@ -23,6 +25,7 @@ async function backendFetch<T>(
   path: string,
   options: RequestInit = {},
   withAuth = false,
+  timeoutMs = FETCH_TIMEOUT_MS,
 ): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) {
@@ -34,7 +37,7 @@ async function backendFetch<T>(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let res: Response;
   try {
@@ -49,9 +52,17 @@ async function backendFetch<T>(
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("Menu request timed out. Please retry.");
+      throw new Error(
+        timeoutMs >= ORDER_TIMEOUT_MS
+          ? "Order is taking longer than expected. Please wait a moment, then tap Place Order once more — we will not create a duplicate."
+          : "Request timed out. Please retry.",
+      );
     }
-    throw new Error("Network unavailable. Showing saved menu.");
+    throw new Error(
+      timeoutMs >= ORDER_TIMEOUT_MS
+        ? "Network unavailable. Check your connection and try again."
+        : "Network unavailable. Showing saved menu.",
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -236,6 +247,7 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       body: JSON.stringify(payload),
     },
     true,
+    ORDER_TIMEOUT_MS,
   );
 }
 

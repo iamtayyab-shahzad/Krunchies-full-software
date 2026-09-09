@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Menu, ShoppingBag, User, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
 import { useCart } from "@/context/cart-context";
@@ -110,7 +111,11 @@ export function Header() {
           </div>
 
           <Button asChild variant="ghost" size="icon" className="relative h-11 w-11">
-            <Link href="/cart" aria-label={t("nav_cart")}>
+            <Link
+              href="/cart"
+              aria-label={t("nav_cart")}
+              onClick={() => toast.dismiss()}
+            >
               <ShoppingBag className="h-5 w-5" />
               {itemCount > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-black">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShoppingBag } from "lucide-react";
+import { toast } from "sonner";
 import { useCart } from "@/context/cart-context";
 import { useSettings } from "@/hooks/use-settings";
 import { formatPrice } from "@/lib/utils";
@@ -29,6 +30,7 @@ export function MobileCartBar() {
       <div className="pointer-events-auto border-t border-zinc-800 bg-black/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
         <Link
           href="/cart"
+          onClick={() => toast.dismiss()}
           className="flex min-h-12 items-center justify-between gap-3 rounded-xl bg-orange-500 px-4 py-3 text-black active:bg-orange-400"
         >
           <span className="flex items-center gap-2 font-semibold">

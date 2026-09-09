@@ -38,6 +38,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       <Toaster
         theme="dark"
         position="top-center"
+        closeButton
+        duration={2800}
+        visibleToasts={2}
         toastOptions={{
           style: {
             background: "#18181b",

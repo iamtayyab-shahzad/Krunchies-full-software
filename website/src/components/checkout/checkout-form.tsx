@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -53,11 +53,28 @@ const checkoutSchema = z.object({
   address: z.string().trim().min(5, "Address is required"),
   location_id: z.string().min(1, "Select a delivery location"),
   payment_method: z.enum(["easypaisa", "jazzcash", "bank", "cod"]),
-  order_notes: z.string().optional(),
   delivery_mode: z.enum(["asap", "scheduled"]),
 });
 
 type CheckoutFormValues = z.infer<typeof checkoutSchema>;
+
+const FIELD_LABELS: Record<keyof CheckoutFormValues, string> = {
+  customer_name: "Full name",
+  phone: "Phone",
+  address: "Delivery address",
+  location_id: "Delivery location",
+  payment_method: "Payment method",
+  delivery_mode: "Delivery timing",
+};
+
+const FIELD_SCROLL_IDS: Partial<Record<keyof CheckoutFormValues, string>> = {
+  customer_name: "customer_name",
+  phone: "phone",
+  address: "address",
+  location_id: "checkout-location",
+  payment_method: "checkout-payment",
+  delivery_mode: "checkout-delivery-mode",
+};
 
 interface CheckoutFormProps {
   guestMode?: boolean;
@@ -73,7 +90,11 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
     parseNamalDeliveryConfig(null),
   );
   const [submitting, setSubmitting] = useState(false);
+  const [formBanner, setFormBanner] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  /** Same UUID for retries so backend returns one order (no double WhatsApp/POS). */
+  const clientOrderIdRef = useRef<string | null>(null);
+  const placingLockRef = useRef(false);
 
   const {
     register,
@@ -89,7 +110,6 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
       address: "",
       location_id: "",
       payment_method: "cod",
-      order_notes: "",
       delivery_mode: "asap",
     },
   });
@@ -145,6 +165,12 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
     }
   }, [deliveryMode, namalSlot.freeSlotAvailable, setValue]);
 
+  useEffect(() => {
+    if (formBanner) setFormBanner(null);
+    // Clear sticky banner when user edits required fields.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationId, paymentMethod, deliveryMode]);
+
   const baseDeliveryCharge = useMemo(() => {
     return locations.find((l) => l.id === locationId)?.delivery_charge ?? 0;
   }, [locations, locationId]);
@@ -171,7 +197,47 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
     );
   }
 
+  const focusFirstError = (errs: FieldErrors<CheckoutFormValues>) => {
+    const order: (keyof CheckoutFormValues)[] = [
+      "customer_name",
+      "phone",
+      "address",
+      "location_id",
+      "delivery_mode",
+      "payment_method",
+    ];
+    const first = order.find((key) => errs[key]);
+    if (!first) return;
+    const elId = FIELD_SCROLL_IDS[first];
+    const el = elId ? document.getElementById(elId) : null;
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (el instanceof HTMLElement && "focus" in el) {
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const onInvalid = (errs: FieldErrors<CheckoutFormValues>) => {
+    const missing = (
+      Object.keys(errs) as (keyof CheckoutFormValues)[]
+    )
+      .filter((k) => errs[k])
+      .map((k) => FIELD_LABELS[k] || k);
+    const msg =
+      missing.length > 0
+        ? `Please complete: ${missing.join(", ")}`
+        : "Please fill in the required details above.";
+    setFormBanner(msg);
+    toast.error(msg, { duration: 4500 });
+    focusFirstError(errs);
+  };
+
   const onSubmit = async (values: CheckoutFormValues) => {
+    if (placingLockRef.current || submitting) return;
+
     if (
       items.length === 0 ||
       items.some(
@@ -186,28 +252,36 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
       return;
     }
 
+    placingLockRef.current = true;
     setSubmitting(true);
+    setFormBanner(null);
+
     try {
       if (values.delivery_mode === "scheduled" && !namalSlot.freeSlotAvailable) {
         toast.error(
           namalSlot.hint ||
             "Namal free delivery slot is not available right now",
         );
-        setSubmitting(false);
         return;
+      }
+
+      if (!clientOrderIdRef.current) {
+        clientOrderIdRef.current = crypto.randomUUID();
       }
 
       const hours = getShopHoursStatus(DEFAULT_SHOP_OPEN, DEFAULT_SHOP_CLOSE);
       const afterNote = afterHoursOrderNote(hours);
-      const notes = [afterNote, values.order_notes?.trim()]
-        .filter(Boolean)
-        .join("\n");
 
       const payload = {
-        ...values,
-        order_notes: notes || undefined,
-        is_guest: guestMode || !isAuthenticated,
+        customer_name: values.customer_name,
+        phone: values.phone,
+        address: values.address,
+        location_id: values.location_id,
+        payment_method: values.payment_method,
         delivery_mode: values.delivery_mode,
+        order_notes: afterNote || undefined,
+        client_order_id: clientOrderIdRef.current,
+        is_guest: guestMode || !isAuthenticated,
         items: items.map((item) => ({
           product_id: item.product_id,
           product_size_id: item.size_id,
@@ -216,6 +290,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
         })),
       };
       const order = await createOrder(payload);
+      clientOrderIdRef.current = null;
       localStorage.setItem(LAST_ORDER_KEY, JSON.stringify(order));
       if (isAuthenticated && !guestMode) {
         void saveCheckoutDefaults({
@@ -242,6 +317,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
           : "Failed to place order. Please try again.",
       );
     } finally {
+      placingLockRef.current = false;
       setSubmitting(false);
     }
   };
@@ -285,8 +361,8 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
 
       <form
         id="checkout-form"
-        onSubmit={handleSubmit(onSubmit)}
-        className="grid gap-8 pb-28 lg:grid-cols-[1fr_360px] lg:gap-10 lg:pb-0"
+        onSubmit={handleSubmit(onSubmit, onInvalid)}
+        className="grid gap-8 pb-36 lg:grid-cols-[1fr_360px] lg:gap-10 lg:pb-0"
       >
         <div className="space-y-6 sm:space-y-8">
           <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 sm:p-6">
@@ -299,7 +375,9 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                 <Input
                   id="customer_name"
                   className="min-h-11"
-                  {...register("customer_name")}
+                  {...register("customer_name", {
+                    onChange: () => setFormBanner(null),
+                  })}
                 />
                 {errors.customer_name && (
                   <p className="text-xs text-red-400">
@@ -318,6 +396,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                   maxLength={11}
                   {...register("phone", {
                     onChange: (e) => {
+                      setFormBanner(null);
                       const digits = String(e.target.value || "")
                         .replace(/\D/g, "")
                         .slice(0, 11);
@@ -332,12 +411,17 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="address">Delivery Address</Label>
-              <Textarea id="address" {...register("address")} />
+              <Textarea
+                id="address"
+                {...register("address", {
+                  onChange: () => setFormBanner(null),
+                })}
+              />
               {errors.address && (
                 <p className="text-xs text-red-400">{errors.address.message}</p>
               )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2" id="checkout-location">
               <Label>Location</Label>
               <Select
                 value={locationId}
@@ -372,7 +456,10 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             </div>
 
             {namalCfg.enabled && namalSlot.site ? (
-              <div className="space-y-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
+              <div
+                id="checkout-delivery-mode"
+                className="space-y-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-4"
+              >
                 <p className="font-semibold text-orange-300">Delivery timing</p>
                 <RadioGroup
                   value={deliveryMode}
@@ -424,14 +511,12 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             ) : namalCfg.enabled && namalSlot.hint ? (
               <p className="text-sm text-zinc-400">{namalSlot.hint}</p>
             ) : null}
-
-            <div className="space-y-2">
-              <Label htmlFor="order_notes">Order Notes (optional)</Label>
-              <Textarea id="order_notes" {...register("order_notes")} />
-            </div>
           </section>
 
-          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 sm:p-6">
+          <section
+            id="checkout-payment"
+            className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 sm:p-6"
+          >
             <h2 className="text-lg font-semibold text-white">Payment Method</h2>
             <RadioGroup
               value={paymentMethod}
@@ -537,6 +622,11 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
               </span>
             </div>
           </div>
+          {formBanner ? (
+            <p className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {formBanner}
+            </p>
+          ) : null}
           <Button
             type="submit"
             className="mt-6 hidden min-h-12 w-full lg:flex"
@@ -549,6 +639,11 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
 
         {/* Mobile sticky place-order — desktop uses sidebar button */}
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-black/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm lg:hidden">
+          {formBanner ? (
+            <p className="mb-2 rounded-md border border-red-500/40 bg-red-500/15 px-3 py-2 text-center text-xs font-medium text-red-300">
+              {formBanner}
+            </p>
+          ) : null}
           <div className="mb-2 flex items-center justify-between text-sm text-zinc-300">
             <span>Total</span>
             <span className="font-semibold text-orange-400">

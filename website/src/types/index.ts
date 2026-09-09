@@ -106,6 +106,8 @@ export interface CreateOrderPayload {
   location_id: string;
   payment_method: PaymentMethod;
   order_notes?: string;
+  /** Idempotency key — retries with the same id return the same order. */
+  client_order_id?: string;
   items: OrderItemPayload[];
   is_guest: boolean;
   /** asap (default) or scheduled (Namal free same-day slot) */
