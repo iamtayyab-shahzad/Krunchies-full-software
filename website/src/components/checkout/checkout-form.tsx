@@ -32,6 +32,7 @@ import {
   type NamalDeliveryConfig,
 } from "@/lib/namal-delivery";
 import { createOrder, getLocations, getSettings } from "@/services/api";
+import { filterCheckoutLocations } from "@/lib/checkout-locations";
 import type { Location, PaymentMethod, Settings } from "@/types";
 import { AfterHoursNotice } from "@/components/checkout/after-hours-notice";
 import {
@@ -171,9 +172,25 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationId, paymentMethod, deliveryMode]);
 
+  const checkoutLocations = useMemo(
+    () => filterCheckoutLocations(locations, namalCfg),
+    [locations, namalCfg],
+  );
+
+  useEffect(() => {
+    if (!locationId) return;
+    if (!checkoutLocations.some((l) => l.id === locationId)) {
+      setValue("location_id", "", { shouldValidate: false });
+    }
+  }, [checkoutLocations, locationId, setValue]);
+
   const baseDeliveryCharge = useMemo(() => {
-    return locations.find((l) => l.id === locationId)?.delivery_charge ?? 0;
-  }, [locations, locationId]);
+    return (
+      checkoutLocations.find((l) => l.id === locationId)?.delivery_charge ??
+      locations.find((l) => l.id === locationId)?.delivery_charge ??
+      0
+    );
+  }, [checkoutLocations, locations, locationId]);
 
   const deliveryCharge =
     deliveryMode === "scheduled" && namalSlot.freeSlotAvailable
@@ -433,7 +450,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
                   <SelectValue placeholder="Select delivery area" />
                 </SelectTrigger>
                 <SelectContent>
-                  {locations.map((loc) => {
+                  {checkoutLocations.map((loc) => {
                     const isNamal =
                       namalCfg.enabled &&
                       (loc.id === namalCfg.campus_location_id ||

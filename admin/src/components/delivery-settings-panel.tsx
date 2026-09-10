@@ -139,7 +139,9 @@ export function DeliverySettingsPanel() {
   }
 
   const visibleLocations = locations.filter(
-    (loc) => !namalLocationIds.has(loc.id),
+    (loc) =>
+      !namalLocationIds.has(loc.id) &&
+      loc.name.trim().toLowerCase() !== "city center",
   );
 
   return (
