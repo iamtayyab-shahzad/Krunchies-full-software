@@ -269,6 +269,19 @@ func (s *OrderService) CreateOrder(
 		return nil, err
 	}
 
+	// Return the in-memory order (already saved). Skipping GetByID avoids an
+	// extra round-trip on checkout; relations below are already loaded here.
+	order.Location = location
+	order.Payment = payment
+	for i := range order.Items {
+		if p, ok := productsByID[order.Items[i].ProductID]; ok {
+			order.Items[i].Product = p
+		}
+		if sz, ok := sizesByID[order.Items[i].ProductSizeID]; ok {
+			order.Items[i].ProductSize = sz
+		}
+	}
+
 	// WhatsApp alert only for customer website orders (not POS walk-in / phone).
 	if orderType == "website" || orderType == "guest" {
 		items := make([]notify.OrderAlertItem, 0, len(order.Items))
@@ -307,7 +320,7 @@ func (s *OrderService) CreateOrder(
 		})
 	}
 
-	return s.orderRepo.GetByID(order.ID)
+	return order, nil
 }
 
 func (s *OrderService) UpdateOrder(id uuid.UUID, input dto.UpdateOrderRequest) error {

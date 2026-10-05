@@ -272,12 +272,14 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
     placingLockRef.current = true;
     setSubmitting(true);
     setFormBanner(null);
+    const saveToast = toast.loading("Saving your order…");
 
     try {
       if (values.delivery_mode === "scheduled" && !namalSlot.freeSlotAvailable) {
         toast.error(
           namalSlot.hint ||
             "Namal free delivery slot is not available right now",
+          { id: saveToast },
         );
         return;
       }
@@ -325,6 +327,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             : hours.serveWhen === "today"
               ? `Order placed! We'll prepare it when we open today at ${hours.openLabel}.`
               : `Order placed! We'll prepare it tomorrow when we open at ${hours.openLabel}.`,
+        { id: saveToast },
       );
       router.push(`/order-success?order=${order.order_number}`);
     } catch (error) {
@@ -332,6 +335,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
         error instanceof Error
           ? error.message
           : "Failed to place order. Please try again.",
+        { id: saveToast },
       );
     } finally {
       placingLockRef.current = false;
@@ -650,7 +654,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             size="lg"
             disabled={submitting}
           >
-            {submitting ? "Placing Order..." : "Place Order"}
+            {submitting ? "Saving your order…" : "Place Order"}
           </Button>
         </aside>
 
@@ -673,7 +677,7 @@ export function CheckoutForm({ guestMode = false }: CheckoutFormProps) {
             size="lg"
             disabled={submitting}
           >
-            {submitting ? "Placing Order..." : "Place Order"}
+            {submitting ? "Saving your order…" : "Place Order"}
           </Button>
         </div>
       </form>
