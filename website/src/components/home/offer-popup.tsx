@@ -22,12 +22,14 @@ export function OfferPopup() {
     const dismissed = sessionStorage.getItem("krunchies_offer_dismissed");
     if (dismissed) return;
 
-    getOffers().then((data) => {
-      if (data[0]) {
-        setOffer(data[0]);
-        setTimeout(() => setOpen(true), 1200);
-      }
-    });
+    getOffers()
+      .then((data) => {
+        if (data[0]) {
+          setOffer(data[0]);
+          setTimeout(() => setOpen(true), 1200);
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   const handleClose = (value: boolean) => {

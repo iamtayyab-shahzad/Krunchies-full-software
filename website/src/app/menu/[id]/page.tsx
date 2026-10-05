@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { X } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,34 @@ import { isDealProduct, parseDealPizzaSlots } from "@/lib/deal-flavors";
 import { cn, formatPrice } from "@/lib/utils";
 import { getProductById } from "@/services/api";
 import type { Product, ProductSize } from "@/types";
+
+function closeProductDetails(router: ReturnType<typeof useRouter>) {
+  try {
+    const ref = document.referrer;
+    const sameOrigin = Boolean(ref) && new URL(ref).origin === window.location.origin;
+    if (sameOrigin && window.history.length > 1) {
+      router.back();
+      return;
+    }
+  } catch {
+    /* fall through to menu */
+  }
+  router.push("/menu");
+}
+
+function CloseDetailsButton() {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={() => closeProductDetails(router)}
+      className="fixed right-3 top-[4.25rem] z-30 flex h-11 w-11 items-center justify-center rounded-full bg-zinc-800 text-white shadow-lg transition-colors hover:bg-zinc-700 sm:right-6 sm:top-[4.75rem]"
+      aria-label="Close and go back"
+    >
+      <X className="h-5 w-5" strokeWidth={2.5} />
+    </button>
+  );
+}
 
 export default function ProductDetailsPage() {
   const params = useParams<{ id: string }>();
@@ -68,17 +97,25 @@ export default function ProductDetailsPage() {
   }, [params.id]);
 
   if (loading) {
-    return <div className="p-10 text-zinc-500">Loading product...</div>;
+    return (
+      <>
+        <CloseDetailsButton />
+        <div className="p-10 text-zinc-500">Loading product...</div>
+      </>
+    );
   }
 
   if (!product) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-20 text-center">
-        <h1 className="font-display text-4xl text-white">Product not found</h1>
-        <Button asChild className="mt-6">
-          <Link href="/menu">Back to Menu</Link>
-        </Button>
-      </div>
+      <>
+        <CloseDetailsButton />
+        <div className="mx-auto max-w-3xl px-4 py-20 text-center">
+          <h1 className="font-display text-4xl text-white">Product not found</h1>
+          <Button asChild className="mt-6">
+            <Link href="/menu">Back to Menu</Link>
+          </Button>
+        </div>
+      </>
     );
   }
 
@@ -141,7 +178,8 @@ export default function ProductDetailsPage() {
     : (selectedSize?.price ?? 0) * quantity;
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-2 lg:items-start lg:gap-12 lg:px-8 lg:py-12">
+    <div className="relative mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-2 lg:items-start lg:gap-12 lg:px-8 lg:py-12">
+      <CloseDetailsButton />
       <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-2xl lg:max-w-none">
         <Image
           src={product.image}

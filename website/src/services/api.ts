@@ -1,4 +1,9 @@
-import { reviews, categories as localCategories, products as localProducts } from "@/data/krunchies";
+import {
+  reviews,
+  categories as localCategories,
+  products as localProducts,
+  settings as localSettings,
+} from "@/data/krunchies";
 import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/constants";
 import type {
   Category,
@@ -21,12 +26,16 @@ const ORDER_TIMEOUT_MS = 45_000;
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 
-async function backendFetch<T>(
+type RequestResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; message: string };
+
+async function backendRequest<T>(
   path: string,
   options: RequestInit = {},
   withAuth = false,
   timeoutMs = FETCH_TIMEOUT_MS,
-): Promise<T> {
+): Promise<RequestResult<T>> {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -39,9 +48,8 @@ async function backendFetch<T>(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    const res = await fetch(`${API_URL}${path}`, {
       ...options,
       headers,
       signal: controller.signal,
@@ -50,30 +58,47 @@ async function backendFetch<T>(
         ? { next: { revalidate: false } }
         : {}),
     });
+    const json = (await res.json().catch(() => null)) as
+      | { success: boolean; message: string; data: T }
+      | null;
+    if (!res.ok || !json?.success) {
+      return {
+        ok: false,
+        message: json?.message || `Request failed (${res.status})`,
+      };
+    }
+    return { ok: true, data: json.data };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error(
-        timeoutMs >= ORDER_TIMEOUT_MS
-          ? "Order is taking longer than expected. Please wait a moment, then tap Place Order once more — we will not create a duplicate."
-          : "Request timed out. Please retry.",
-      );
+      return {
+        ok: false,
+        message:
+          timeoutMs >= ORDER_TIMEOUT_MS
+            ? "Order is taking longer than expected. Please wait a moment, then tap Place Order once more — we will not create a duplicate."
+            : "Request timed out. Please retry.",
+      };
     }
-    throw new Error(
-      timeoutMs >= ORDER_TIMEOUT_MS
-        ? "Network unavailable. Check your connection and try again."
-        : "Network unavailable. Showing saved menu.",
-    );
+    return {
+      ok: false,
+      message:
+        timeoutMs >= ORDER_TIMEOUT_MS
+          ? "Network unavailable. Check your connection and try again."
+          : "Network unavailable. Showing saved menu.",
+    };
   } finally {
     clearTimeout(timeout);
   }
+}
 
-  const json = (await res.json().catch(() => null)) as
-    | { success: boolean; message: string; data: T }
-    | null;
-  if (!res.ok || !json?.success) {
-    throw new Error(json?.message || `Request failed (${res.status})`);
-  }
-  return json.data;
+async function backendFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  withAuth = false,
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<T> {
+  const result = await backendRequest<T>(path, options, withAuth, timeoutMs);
+  if (!result.ok) throw new Error(result.message);
+  return result.data;
 }
 
 const SETTINGS_TTL_MS = 120_000;
@@ -84,10 +109,10 @@ export async function getSettings() {
   if (settingsCache && now - settingsCache.at < SETTINGS_TTL_MS) {
     return settingsCache.promise;
   }
-  const promise = backendFetch<Settings>("/settings/public").catch((err) => {
-    settingsCache = null;
-    throw err;
-  });
+  const promise = (async () => {
+    const result = await backendRequest<Settings>("/settings/public");
+    return result.ok ? result.data : localSettings;
+  })();
   settingsCache = { at: now, promise };
   return promise;
 }
@@ -120,48 +145,49 @@ async function loadCatalog(force = false): Promise<CatalogPayload> {
   }
 
   const promise = (async () => {
-    try {
-      const [categories, remoteProducts, remoteSizes] = await Promise.all([
-        backendFetch<Category[]>("/categories"),
-        backendFetch<Product[]>("/products"),
-        backendFetch<ProductSize[]>("/product-sizes"),
-      ]);
+    const [categoriesRes, remoteProductsRes, remoteSizesRes] = await Promise.all(
+      [
+        backendRequest<Category[]>("/categories"),
+        backendRequest<Product[]>("/products"),
+        backendRequest<ProductSize[]>("/product-sizes"),
+      ],
+    );
 
-      const sizesByProduct = new Map<string, ProductSize[]>();
-      for (const s of remoteSizes) {
-        const arr = sizesByProduct.get(s.product_id) || [];
-        arr.push(s);
-        sizesByProduct.set(s.product_id, arr);
-      }
-
-      const categoryById = new Map(categories.map((c) => [c.id, c]));
-      const products = remoteProducts
-        .filter((p) => p.available)
-        .map((p) => ({
-          ...p,
-          sizes: sizesByProduct.get(p.id) || [],
-          category: categoryById.get(p.category_id),
-        }))
-        .sort((a, b) => a.display_order - b.display_order);
-
-      // Empty remote catalog is treated as failure so customers still see menu.
-      if (!products.length) {
-        return localCatalogFallback();
-      }
-
-      return { categories, products, fromFallback: false };
-    } catch {
+    if (!categoriesRes.ok || !remoteProductsRes.ok || !remoteSizesRes.ok) {
       return localCatalogFallback();
     }
+
+    const categories = categoriesRes.data;
+    const remoteProducts = remoteProductsRes.data;
+    const remoteSizes = remoteSizesRes.data;
+
+    const sizesByProduct = new Map<string, ProductSize[]>();
+    for (const s of remoteSizes) {
+      const arr = sizesByProduct.get(s.product_id) || [];
+      arr.push(s);
+      sizesByProduct.set(s.product_id, arr);
+    }
+
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+    const products = remoteProducts
+      .filter((p) => p.available)
+      .map((p) => ({
+        ...p,
+        sizes: sizesByProduct.get(p.id) || [],
+        category: categoryById.get(p.category_id),
+      }))
+      .sort((a, b) => a.display_order - b.display_order);
+
+    // Empty remote catalog is treated as failure so customers still see menu.
+    if (!products.length) {
+      return localCatalogFallback();
+    }
+
+    return { categories, products, fromFallback: false };
   })();
 
   catalogCache = { at: now, promise };
-  try {
-    return await promise;
-  } catch (err) {
-    catalogCache = null;
-    throw err;
-  }
+  return promise;
 }
 
 /** Clear cached catalog so Retry starts a fresh network fetch. */
@@ -218,9 +244,11 @@ export async function refreshCatalog() {
 }
 
 export async function getOffers() {
-  const list = await backendFetch<(Offer & { offer_popup?: boolean })[]>(
+  const result = await backendRequest<(Offer & { offer_popup?: boolean })[]>(
     "/offers",
   );
+  if (!result.ok) return [];
+  const list = result.data;
   // `offer_popup` is optional in the DB during migrations; treat missing as true.
   return list.filter(
     (o) => o.active && (o.offer_popup === undefined || o.offer_popup),
@@ -228,7 +256,8 @@ export async function getOffers() {
 }
 
 export async function getLocations() {
-  return backendFetch<Location[]>("/locations");
+  const result = await backendRequest<Location[]>("/locations");
+  return result.ok ? result.data : [];
 }
 
 export async function getLocationById(id: string) {
@@ -307,7 +336,7 @@ export async function getMyOrders(limit = 5): Promise<Order[]> {
 export async function getActiveDiscountRules() {
   const { setDiscountRulesCache } = await import("@/lib/weekend-promo");
   try {
-    const rules = await backendFetch<
+    const rules = await backendRequest<
       {
         id: string;
         name: string;
@@ -321,8 +350,9 @@ export async function getActiveDiscountRules() {
         exclude_deals?: boolean;
       }[]
     >("/discount-rules/active");
-    setDiscountRulesCache(rules || []);
-    return rules || [];
+    const list = rules.ok ? rules.data || [] : [];
+    setDiscountRulesCache(list);
+    return list;
   } catch {
     return [];
   }

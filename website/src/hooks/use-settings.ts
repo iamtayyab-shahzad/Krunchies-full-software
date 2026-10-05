@@ -14,6 +14,9 @@ export function useSettings() {
       .then((data) => {
         if (active) setSettings(data);
       })
+      .catch(() => {
+        if (active) setSettings(null);
+      })
       .finally(() => {
         if (active) setLoading(false);
       });
