@@ -18,6 +18,34 @@ export function pizzaSellableSizes<T extends { size?: string }>(
   return (sizes || []).filter((s) => isPizzaSizeLabel(s.size));
 }
 
+/**
+ * Placeholder labels used for single-size products. These are hidden on
+ * tiles, bill lines and receipts; any other label (Full, Half, Small, 500ml…)
+ * is meaningful and must be shown so staff/kitchen can tell lines apart.
+ */
+const GENERIC_SIZE_RE =
+  /^(regular|standard|default|normal|deal|single|one\s*size|-)$/i;
+
+export function isDisplayableSizeLabel(size?: string | null): boolean {
+  const s = (size || "").trim();
+  return s.length > 0 && !GENERIC_SIZE_RE.test(s);
+}
+
+/**
+ * Sizes a product can be sold in on the POS.
+ * Pizza products only expose S/M/L/XL; every other product exposes all its
+ * configured sizes (e.g. Full / Small), matching the website behaviour.
+ */
+export function sellableSizes<T extends { size?: string }>(
+  product: Parameters<typeof isPizzaProduct>[0] & {
+    sizes?: T[] | null;
+  },
+): T[] {
+  return isPizzaProduct(product)
+    ? pizzaSellableSizes(product.sizes)
+    : product.sizes || [];
+}
+
 export function isPizzaCategoryName(name?: string | null): boolean {
   return (name || "").toLowerCase().includes("pizza");
 }

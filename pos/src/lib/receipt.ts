@@ -2,7 +2,7 @@ import type { Order, OrderItem, Settings } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import { parseDealIncludedItems } from "@/lib/deal-flavors";
 import { isDealLineName } from "@/lib/weekend-promo";
-import { isPizzaSizeLabel } from "@/lib/is-pizza";
+import { isDisplayableSizeLabel } from "@/lib/is-pizza";
 import { krunchiesProducts } from "@/data/krunchies";
 
 const bundledDescriptionByProductId = new Map(
@@ -296,11 +296,11 @@ function itemSize(item: OrderItem) {
   return "-";
 }
 
-/** Pizza S/M/L/XL only — hide Regular/Deal/etc on kitchen and customer tickets. */
+/** Real sizes (S/M/L/XL, Full/Small, …) — hide Regular/Deal placeholders on tickets. */
 function printablePizzaSize(item: OrderItem) {
   const size = itemSize(item);
   if (!size || size === "-") return "";
-  return isPizzaSizeLabel(size) ? size : "";
+  return isDisplayableSizeLabel(size) ? size : "";
 }
 
 /**

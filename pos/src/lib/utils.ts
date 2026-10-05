@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { BillLine, Order, OrderItem, OrderType, PaymentMethod } from "@/types";
 import { isDealProduct } from "@/lib/deal-flavors";
-import { isPizzaSizeLabel } from "@/lib/is-pizza";
+import { isDisplayableSizeLabel } from "@/lib/is-pizza";
 import { weekendDiscount } from "@/lib/weekend-promo";
 
 export function cn(...inputs: ClassValue[]) {
@@ -260,7 +260,7 @@ function orderItemDisplayName(
     item.product_size?.size?.trim() ||
     item.size?.trim() ||
     "";
-  return isPizzaSizeLabel(size) ? `${name} (${size})` : name;
+  return isDisplayableSizeLabel(size) ? `${name} (${size})` : name;
 }
 
 /**

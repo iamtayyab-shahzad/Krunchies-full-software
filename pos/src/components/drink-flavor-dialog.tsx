@@ -19,6 +19,8 @@ import type { Product, ProductSize } from "@/types";
 type Props = {
   open: boolean;
   product: Product | null;
+  /** Size tapped on the tile; falls back to the product's first size. */
+  size?: ProductSize | null;
   flavorsRaw?: string | null;
   onOpenChange: (open: boolean) => void;
   onConfirm: (product: Product, size: ProductSize, flavorNote: string) => void;
@@ -27,6 +29,7 @@ type Props = {
 export function DrinkFlavorDialog({
   open,
   product,
+  size: pickedSize,
   flavorsRaw,
   onOpenChange,
   onConfirm,
@@ -40,7 +43,7 @@ export function DrinkFlavorDialog({
 
   if (!product) return null;
 
-  const size = product.sizes?.[0];
+  const size = pickedSize || product.sizes?.[0];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

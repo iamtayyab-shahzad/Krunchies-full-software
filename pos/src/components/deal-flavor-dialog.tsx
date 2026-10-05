@@ -20,6 +20,8 @@ import type { Category, Product, ProductSize } from "@/types";
 type Props = {
   open: boolean;
   product: Product | null;
+  /** Size tapped on the tile; falls back to the product's first size. */
+  size?: ProductSize | null;
   products: Product[];
   categories: Category[];
   onOpenChange: (open: boolean) => void;
@@ -33,6 +35,7 @@ type Props = {
 export function DealFlavorDialog({
   open,
   product,
+  size: pickedSize,
   products,
   categories,
   onOpenChange,
@@ -59,7 +62,7 @@ export function DealFlavorDialog({
 
   if (!product) return null;
 
-  const size = product.sizes?.[0];
+  const size = pickedSize || product.sizes?.[0];
   const complete =
     slots.length > 0 && slots.every((slot) => Boolean(picks[slot.id]));
 

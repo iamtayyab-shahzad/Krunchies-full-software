@@ -21,11 +21,7 @@ import { useBill } from "@/context/bill-context";
 import { useMenuSearch } from "@/context/menu-search-context";
 import { requiresDealFlavorChoice } from "@/lib/deal-flavors";
 import { requiresDrinkFlavor } from "@/lib/drink-flavors";
-import {
-  isPizzaProduct,
-  isPizzaSizeLabel,
-  pizzaSellableSizes,
-} from "@/lib/is-pizza";
+import { isDisplayableSizeLabel, sellableSizes } from "@/lib/is-pizza";
 import {
   calcCodFee,
   calcGrandTotal,
@@ -72,8 +68,14 @@ export default function NewOrderPage() {
   const { search, setSearch } = useMenuSearch();
   const [categoryId, setCategoryId] = useState("all");
   const [busy, setBusy] = useState(false);
-  const [dealProduct, setDealProduct] = useState<Product | null>(null);
-  const [drinkProduct, setDrinkProduct] = useState<Product | null>(null);
+  const [dealPick, setDealPick] = useState<{
+    product: Product;
+    size: ProductSize;
+  } | null>(null);
+  const [drinkPick, setDrinkPick] = useState<{
+    product: Product;
+    size: ProductSize;
+  } | null>(null);
   const isWalkin = bill.orderType === "walkin";
   const paymentOptions = paymentsForOrderType(bill.orderType);
 
@@ -157,24 +159,22 @@ export default function NewOrderPage() {
 
   const onProductClick = useCallback(
     (product: Product, size?: ProductSize) => {
-      const sizes = isPizzaProduct(product)
-        ? pizzaSellableSizes(product.sizes)
-        : product.sizes || [];
+      const sizes = sellableSizes(product);
       const chosen = size || sizes[0] || product.sizes?.[0];
       if (!chosen) {
         toast.error("No sizes configured for this product");
         return;
       }
       if (requiresDealFlavorChoice(product)) {
-        setDealProduct(product);
+        setDealPick({ product, size: chosen });
         return;
       }
       if (requiresDrinkFlavor(product)) {
-        setDrinkProduct(product);
+        setDrinkPick({ product, size: chosen });
         return;
       }
       bill.addProduct(product, chosen);
-      if (isPizzaProduct(product) && sizes.length > 1) {
+      if (sizes.length > 1) {
         toast.message(`${product.name} added (${chosen.size})`);
       }
     },
@@ -758,7 +758,9 @@ export default function NewOrderPage() {
                       <p className="font-bold text-white">{item.product_name}</p>
                       <p className="text-sm text-orange-400">
                         {formatPrice(item.price, currency)}
-                        {isPizzaSizeLabel(item.size) ? ` · ${item.size}` : ""}
+                        {isDisplayableSizeLabel(item.size)
+                          ? ` · ${item.size}`
+                          : ""}
                       </p>
                     </div>
                     <button
@@ -769,15 +771,13 @@ export default function NewOrderPage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  {product &&
-                    isPizzaProduct(product) &&
-                    pizzaSellableSizes(product.sizes).length > 1 && (
+                  {product && sellableSizes(product).length > 1 && (
                     <div className="mt-2 space-y-1">
                       <p className="text-[10px] text-zinc-500">
                         Tap another size to add it (keep both)
                       </p>
                       <div className="flex flex-wrap gap-1">
-                      {pizzaSellableSizes(product.sizes).map((s: ProductSize) => (
+                      {sellableSizes(product).map((s: ProductSize) => (
                         <button
                           key={s.id}
                           type="button"
@@ -932,21 +932,23 @@ export default function NewOrderPage() {
       </aside>
 
       <DealFlavorDialog
-        open={Boolean(dealProduct)}
-        product={dealProduct}
+        open={Boolean(dealPick)}
+        product={dealPick?.product ?? null}
+        size={dealPick?.size}
         products={productsWithCategories}
         categories={categories}
         onOpenChange={(open) => {
-          if (!open) setDealProduct(null);
+          if (!open) setDealPick(null);
         }}
         onConfirm={onDealConfirm}
       />
       <DrinkFlavorDialog
-        open={Boolean(drinkProduct)}
-        product={drinkProduct}
+        open={Boolean(drinkPick)}
+        product={drinkPick?.product ?? null}
+        size={drinkPick?.size}
         flavorsRaw={settings?.drink_flavors}
         onOpenChange={(open) => {
-          if (!open) setDrinkProduct(null);
+          if (!open) setDrinkPick(null);
         }}
         onConfirm={onDrinkConfirm}
       />
@@ -963,13 +965,11 @@ function ProductTile({
   currency: string;
   onAdd: (p: Product, size?: ProductSize) => void;
 }) {
-  const sizes = isPizzaProduct(product)
-    ? pizzaSellableSizes(product.sizes)
-    : product.sizes || [];
+  const sizes = sellableSizes(product);
   const prices = sizes.map((s) => s.price);
   const minPrice = prices.length ? Math.min(...prices) : 0;
   const maxPrice = prices.length ? Math.max(...prices) : 0;
-  const multiSize = isPizzaProduct(product) && sizes.length > 1;
+  const multiSize = sizes.length > 1;
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 text-left transition hover:border-orange-500">

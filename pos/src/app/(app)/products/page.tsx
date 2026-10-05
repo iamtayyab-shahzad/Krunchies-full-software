@@ -31,6 +31,7 @@ import {
   isPizzaProduct,
   isPizzaSizeLabel,
   pizzaSellableSizes,
+  sellableSizes,
 } from "@/lib/is-pizza";
 import { categoriesApi, productsApi } from "@/services/api";
 import type { Category, Product } from "@/types";
@@ -290,14 +291,12 @@ export default function ProductsPage() {
             <div>
               <p className="text-lg font-bold">{p.name}</p>
               <p className="text-sm text-zinc-400">
-                {isPizzaProduct(p) && pizzaSellableSizes(p.sizes).length > 1
-                  ? pizzaSellableSizes(p.sizes)
+                {sellableSizes(p).length > 1
+                  ? sellableSizes(p)
                       .map((s) => `${s.size} ${formatPrice(s.price)}`)
                       .join(" · ")
                   : formatPrice(
-                      pizzaSellableSizes(p.sizes)[0]?.price ||
-                        p.sizes?.[0]?.price ||
-                        0,
+                      sellableSizes(p)[0]?.price || p.sizes?.[0]?.price || 0,
                     )}
               </p>
               <div className="mt-2 flex gap-4 text-sm">
