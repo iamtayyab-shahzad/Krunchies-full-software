@@ -119,13 +119,54 @@ func notifyWebsiteOrder(alert OrderAlert) {
 	url := graphAPIBase + "/" + phoneNumberID + "/messages"
 	client := &http.Client{Timeout: 10 * time.Second}
 
+	// If the approved template (website_order_alert) is missing/rejected on Meta,
+	// the template send 400s. Fall back to a free-form text message on the same API,
+	// which needs no template at all — so orders still reach the shop.
 	for _, to := range phones {
-		if err := sendWebsiteOrderTemplate(client, url, token, to, alert); err != nil {
-			log.Printf("whatsapp notify: send failed for order %s to %s: %v", alert.OrderID, to, err)
+		if err := sendWebsiteOrderTemplate(client, url, token, to, alert); err == nil {
+			log.Printf("whatsapp notify: sent (template) for order %s to %s", alert.OrderID, to)
 			continue
 		}
-		log.Printf("whatsapp notify: sent for order %s to %s", alert.OrderID, to)
+		log.Printf("whatsapp notify: template failed for order %s to %s: %v (retrying as text)", alert.OrderID, to, err)
+		if err := sendWhatsAppTextMessage(client, url, token, to, formatOrderAlert(alert)); err == nil {
+			log.Printf("whatsapp notify: sent (text fallback) for order %s to %s", alert.OrderID, to)
+			continue
+		}
+		log.Printf("whatsapp notify: send failed for order %s to %s: %v", alert.OrderID, to, err)
 	}
+}
+
+// sendWhatsAppTextMessage posts a free-form WhatsApp message.
+// Unlike the template path it needs no approved template, so it keeps working
+// when the website_order_alert template is missing/rejected on Meta.
+func sendWhatsAppTextMessage(client *http.Client, url, token, to, body string) error {
+	payload := textMessagePayload{
+		MessagingProduct: "whatsapp",
+		To:               to,
+		Type:             "text",
+	}
+	payload.Text.Body = body
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("graph API %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return nil
 }
 
 // SendWhatsAppText sends a plain-text WhatsApp message to one recipient.
