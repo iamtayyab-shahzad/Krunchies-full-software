@@ -119,20 +119,21 @@ func notifyWebsiteOrder(alert OrderAlert) {
 	url := graphAPIBase + "/" + phoneNumberID + "/messages"
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	// If the approved template (website_order_alert) is missing/rejected on Meta,
-	// the template send 400s. Fall back to a free-form text message on the same API,
-	// which needs no template at all — so orders still reach the shop.
 	for _, to := range phones {
-		if err := sendWebsiteOrderTemplate(client, url, token, to, alert); err == nil {
+		tplErr := sendWebsiteOrderTemplate(client, url, token, to, alert)
+		if tplErr == nil {
 			log.Printf("whatsapp notify: sent (template) for order %s to %s", alert.OrderID, to)
 			continue
 		}
-		log.Printf("whatsapp notify: template failed for order %s to %s: %v (retrying as text)", alert.OrderID, to, err)
-		if err := sendWhatsAppTextMessage(client, url, token, to, formatOrderAlert(alert)); err == nil {
+		// If the approved template (website_order_alert) is missing/rejected on Meta,
+		// the template send 400s. Fall back to a free-form text message on the same API,
+		// which needs no template at all — so orders still reach the shop.
+		log.Printf("whatsapp notify: template failed for order %s to %s: %v (retrying as text)", alert.OrderID, to, tplErr)
+		if err := sendWhatsAppTextMessage(client, url, token, to, FormatOrderAlert(alert)); err == nil {
 			log.Printf("whatsapp notify: sent (text fallback) for order %s to %s", alert.OrderID, to)
 			continue
 		}
-		log.Printf("whatsapp notify: send failed for order %s to %s: %v", alert.OrderID, to, err)
+		log.Printf("whatsapp notify: send failed for order %s to %s: %v", alert.OrderID, to, tplErr)
 	}
 }
 
@@ -299,7 +300,9 @@ func sendWhatsAppText(client *http.Client, url, token, to, body string) error {
 	return nil
 }
 
-func formatOrderAlert(a OrderAlert) string {
+// FormatOrderAlert renders the human-readable order alert body.
+// Exported so Telegram (and other channels) can reuse it.
+func FormatOrderAlert(a OrderAlert) string {
 	ref := strings.TrimSpace(a.OrderNumber)
 	if ref == "" {
 		ref = a.OrderID.String()

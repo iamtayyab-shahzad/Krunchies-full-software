@@ -318,6 +318,40 @@ func (s *OrderService) CreateOrder(
 			GrandTotal:    order.GrandTotal,
 			Items:         items,
 		})
+
+		// Telegram is a separate company from Meta, so a WhatsApp ban/suspension
+		// does not affect it — it is the independent backup channel for order alerts.
+		notify.NotifyTelegramAsync(notify.OrderAlert{
+			OrderID:       order.ID,
+			OrderNumber:   order.OrderNumber,
+			CustomerName:  order.CustomerName,
+			Phone:         order.Phone,
+			Address:       order.Address,
+			LocationName:  location.Name,
+			PaymentMethod: order.PaymentMethod,
+			OrderNotes:    order.OrderNotes,
+			Subtotal:      order.Subtotal,
+			Discount:      order.Discount,
+			Delivery:      order.DeliveryCharge,
+			CODFee:        order.CashOnDeliveryFee,
+			GrandTotal:    order.GrandTotal,
+			Items:         items,
+		}, notify.FormatOrderAlert(notify.OrderAlert{
+			OrderID:       order.ID,
+			OrderNumber:   order.OrderNumber,
+			CustomerName:  order.CustomerName,
+			Phone:         order.Phone,
+			Address:       order.Address,
+			LocationName:  location.Name,
+			PaymentMethod: order.PaymentMethod,
+			OrderNotes:    order.OrderNotes,
+			Subtotal:      order.Subtotal,
+			Discount:      order.Discount,
+			Delivery:      order.DeliveryCharge,
+			CODFee:        order.CashOnDeliveryFee,
+			GrandTotal:    order.GrandTotal,
+			Items:         items,
+		}))
 	}
 
 	return order, nil
