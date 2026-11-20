@@ -10,4 +10,8 @@ type ProductSize struct {
 	Price     int       `gorm:"not null" json:"price"`
 	// WasPrice is the pre-deal / compare-at price used to show "Save Rs …" on flyers.
 	WasPrice int `gorm:"not null;default:0" json:"was_price"`
+	// IsAvailable: when false, this size is hidden from customer ordering
+	// (e.g. disabling XL for a pizza that doesn't offer it) without deleting
+	// the row, so past orders referencing it stay intact.
+	IsAvailable bool `gorm:"not null;default:true" json:"is_available"`
 }

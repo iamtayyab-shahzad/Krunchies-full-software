@@ -42,7 +42,9 @@ type CreateOrderRequest struct {
 	// CreatedAt is the original till timestamp. If omitted, server time is used.
 	CreatedAt     *time.Time               `json:"created_at"`
 	IsGuest       bool                     `json:"is_guest"`
-	// DeliveryMode: asap (default) or scheduled (Namal free same-day slot).
+	// DeliveryMode: asap (default) or scheduled. No longer drives any pricing
+	// logic (Namal free delivery is now amount-based, see EvaluateNamalDelivery);
+	// kept accepted for backward compatibility with older clients.
 	DeliveryMode string `json:"delivery_mode" binding:"omitempty,oneof=asap scheduled"`
 	Items         []CreateOrderItemRequest `json:"items" binding:"required,min=1,dive"`
 }

@@ -35,6 +35,7 @@ type BackendProductSize = {
   product_id: string;
   size: string;
   price: number;
+  is_available?: boolean;
 };
 
 type BackendOffer = {
@@ -170,6 +171,7 @@ function mapProduct(p: BackendProduct, sizes: BackendProductSize[]): Product {
     id: s.id,
     label: s.size,
     price: s.price,
+    available: s.is_available !== false,
   }));
   const basePrice = pizzaSizes[0]?.price ?? 0;
   return {
@@ -310,6 +312,7 @@ export const productsApi = {
           product_id: created.id,
           size: s.label,
           price: Number(s.price || 0),
+          is_available: s.available !== false,
         }),
       });
     }
@@ -368,7 +371,11 @@ export const productsApi = {
       if (match) {
         await apiFetch<unknown>(`/product-sizes/${match.id}`, {
           method: "PUT",
-          body: JSON.stringify({ size: label, price: Math.round(Number(d.price || 0)) }),
+          body: JSON.stringify({
+            size: label,
+            price: Math.round(Number(d.price || 0)),
+            is_available: d.available !== false,
+          }),
         });
       } else {
         await apiFetch<BackendProductSize>("/product-sizes", {
@@ -377,6 +384,7 @@ export const productsApi = {
             product_id: id,
             size: label,
             price: Math.round(Number(d.price || 0)),
+            is_available: d.available !== false,
           }),
         });
       }
@@ -527,16 +535,9 @@ export type NamalDeliveryConfig = {
   enabled: boolean;
   campus_location_id: string;
   hostel_location_id: string;
-  campus_order_start: string;
-  campus_order_end: string;
-  campus_delivery_start_mon_thu: string;
-  campus_delivery_end_mon_thu: string;
-  campus_delivery_start_fri: string;
-  campus_delivery_end_fri: string;
-  hostel_order_start: string;
-  hostel_order_end: string;
-  hostel_delivery_start: string;
-  hostel_delivery_end: string;
+  campus_free_threshold: number;
+  hostel_min_order: number;
+  hostel_free_threshold: number;
 };
 
 export const settingsApi = {

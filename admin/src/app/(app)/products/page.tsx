@@ -79,10 +79,10 @@ export default function ProductsPage() {
   const [form, setForm] = useState(() => emptyForm([]));
   const [useSizes, setUseSizes] = useState(false);
   const [sizes, setSizes] = useState<PizzaSize[]>([
-    { label: "S", price: 0 },
-    { label: "M", price: 0 },
-    { label: "L", price: 0 },
-    { label: "XL", price: 0 },
+    { label: "S", price: 0, available: true },
+    { label: "M", price: 0, available: true },
+    { label: "L", price: 0, available: true },
+    { label: "XL", price: 0, available: true },
   ]);
 
   const { data, isLoading: loading, isError, error, refetch } = useQuery({
@@ -160,10 +160,10 @@ export default function ProductsPage() {
       multi && product.pizzaSizes?.length
         ? product.pizzaSizes
         : [
-            { label: "S", price: 0 },
-            { label: "M", price: 0 },
-            { label: "L", price: 0 },
-            { label: "XL", price: 0 },
+            { label: "S", price: 0, available: true },
+            { label: "M", price: 0, available: true },
+            { label: "L", price: 0, available: true },
+            { label: "XL", price: 0, available: true },
           ],
     );
     setOpen(true);
@@ -475,16 +475,32 @@ export default function ProductsPage() {
             </div>
             {useSizes ? (
               <p className="text-xs text-zinc-500 sm:col-span-2">
-                Size prices (S / M / L / XL) — from category setting
+                Size prices (S / M / L / XL) — from category setting. Turn a
+                size off if this product doesn&apos;t offer it; customers
+                won&apos;t see it.
               </p>
             ) : null}
             {useSizes
               ? sizes.map((size, idx) => (
                   <div key={size.label} className="space-y-2">
-                    <Label>{size.label} Price</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>{size.label} Price</Label>
+                      <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <Switch
+                          checked={size.available !== false}
+                          onCheckedChange={(v) => {
+                            const next = [...sizes];
+                            next[idx] = { ...size, available: v };
+                            setSizes(next);
+                          }}
+                        />
+                        Available
+                      </label>
+                    </div>
                     <Input
                       type="number"
                       value={size.price}
+                      disabled={size.available === false}
                       onChange={(e) => {
                         const next = [...sizes];
                         next[idx] = {

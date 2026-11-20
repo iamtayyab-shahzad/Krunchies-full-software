@@ -22,6 +22,8 @@ export type PizzaSize = {
   id?: string;
   label: string;
   price: number;
+  /** When false, this size is hidden from customer ordering (e.g. no XL for this pizza). */
+  available?: boolean;
 };
 
 export type Product = {

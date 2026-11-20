@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { getSettings } from "@/services/api";
 import {
-  displayTimeLabel,
   parseNamalDeliveryConfig,
   type NamalDeliveryConfig,
 } from "@/lib/namal-delivery";
@@ -64,14 +63,6 @@ export function NamalOfferPopup() {
 
   if (!cfg?.enabled) return null;
 
-  const campusFrom = displayTimeLabel(cfg.campus_order_start);
-  const campusUntil = displayTimeLabel(cfg.campus_order_end);
-  const hostelFrom = displayTimeLabel(cfg.hostel_order_start);
-  const hostelUntil = displayTimeLabel(cfg.hostel_order_end);
-  const campusSlot = `${displayTimeLabel(cfg.campus_delivery_start_mon_thu)}–${displayTimeLabel(cfg.campus_delivery_end_mon_thu)}`;
-  const campusFriSlot = `${displayTimeLabel(cfg.campus_delivery_start_fri)}–${displayTimeLabel(cfg.campus_delivery_end_fri)}`;
-  const hostelSlot = `${displayTimeLabel(cfg.hostel_delivery_start)}–${displayTimeLabel(cfg.hostel_delivery_end)}`;
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
@@ -94,40 +85,39 @@ export function NamalOfferPopup() {
               Namal students
             </p>
             <DialogTitle className="font-display text-xl leading-snug text-black sm:text-2xl">
-              Free campus &amp; hostel delivery
+              Free delivery for Namal students
             </DialogTitle>
             <DialogDescription className="text-sm text-black/75">
-              Place your order in the window below and we deliver free in that
-              day’s slot. Need it sooner? Choose{" "}
-              <strong>Deliver now</strong> (paid).
+              No time windows — just order enough and delivery is free.
             </DialogDescription>
           </DialogHeader>
         </div>
 
         <div className="max-h-[min(42dvh,280px)] space-y-2.5 overflow-y-auto px-4 py-3 sm:px-5">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5">
-            <p className="text-sm font-semibold text-orange-400">Campus</p>
+            <p className="text-sm font-semibold text-orange-400">
+              Namal University
+            </p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-300">
-              Order from <strong className="text-white">{campusFrom}</strong> to{" "}
-              <strong className="text-white">{campusUntil}</strong>
+              Order <strong className="text-white">Rs {cfg.campus_free_threshold}</strong>{" "}
+              or more and get <strong className="text-emerald-400">FREE delivery</strong>.
             </p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-              → Free delivery Mon–Thu{" "}
-              <strong className="text-zinc-200">{campusSlot}</strong>
-              <br />
-              → Free delivery Fri{" "}
-              <strong className="text-zinc-200">{campusFriSlot}</strong>
+              Below that, the normal delivery fee applies.
             </p>
           </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5">
-            <p className="text-sm font-semibold text-orange-400">Hostel</p>
+            <p className="text-sm font-semibold text-orange-400">
+              Namal Hostel
+            </p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-300">
-              Order from <strong className="text-white">{hostelFrom}</strong> to{" "}
-              <strong className="text-white">{hostelUntil}</strong>
+              Order <strong className="text-white">Rs {cfg.hostel_free_threshold}</strong>{" "}
+              or more and get <strong className="text-emerald-400">FREE delivery</strong>.
             </p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-              → Free delivery every day{" "}
-              <strong className="text-zinc-200">{hostelSlot}</strong>
+              Minimum order from the hostel is{" "}
+              <strong className="text-zinc-200">Rs {cfg.hostel_min_order}</strong> —
+              orders below this can&apos;t be placed.
             </p>
           </div>
         </div>
@@ -138,7 +128,7 @@ export function NamalOfferPopup() {
             className="min-h-11 w-full font-bold"
             onClick={() => handleClose(false)}
           >
-            <Link href="/menu">Order free delivery</Link>
+            <Link href="/menu">Order now</Link>
           </Button>
           <button
             type="button"

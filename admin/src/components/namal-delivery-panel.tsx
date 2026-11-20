@@ -17,16 +17,9 @@ const DEFAULT_NAMAL: NamalDeliveryConfig = {
   enabled: false,
   campus_location_id: "50000000-0000-4000-8000-000000000004",
   hostel_location_id: "50000000-0000-4000-8000-000000000005",
-  campus_order_start: "08:00",
-  campus_order_end: "12:45",
-  campus_delivery_start_mon_thu: "13:30",
-  campus_delivery_end_mon_thu: "14:00",
-  campus_delivery_start_fri: "14:00",
-  campus_delivery_end_fri: "14:30",
-  hostel_order_start: "08:00",
-  hostel_order_end: "19:30",
-  hostel_delivery_start: "20:00",
-  hostel_delivery_end: "20:30",
+  campus_free_threshold: 2000,
+  hostel_min_order: 1500,
+  hostel_free_threshold: 5000,
 };
 
 function parseNamal(raw?: string): NamalDeliveryConfig {
@@ -38,7 +31,7 @@ function parseNamal(raw?: string): NamalDeliveryConfig {
   }
 }
 
-/** Namal University free scheduled delivery — under Website Settings. */
+/** Namal University / Hostel free delivery — amount-based, under Website Settings. */
 export function NamalDeliveryPanel() {
   const [locations, setLocations] = useState<DeliveryLocationRow[]>([]);
   const [cfg, setCfg] = useState<NamalDeliveryConfig>({ ...DEFAULT_NAMAL });
@@ -114,10 +107,11 @@ export function NamalDeliveryPanel() {
       <div>
         <h2 className="text-lg font-bold">Namal free delivery</h2>
         <p className="text-sm text-zinc-400">
-          Students pick Namal University or Namal Hostel, then{" "}
-          <strong className="text-zinc-300">Deliver now</strong> (paid) or{" "}
-          <strong className="text-zinc-300">Free delivery</strong> in the time
-          window.
+          No time windows. Students pick{" "}
+          <strong className="text-zinc-300">Namal University</strong> or{" "}
+          <strong className="text-zinc-300">Namal Hostel</strong>, and delivery
+          is free once their order reaches the threshold below. Below the
+          hostel minimum, the order can&apos;t be placed at all.
         </p>
       </div>
 
@@ -155,7 +149,7 @@ export function NamalDeliveryPanel() {
               ))}
             </select>
             <Label className="text-xs text-zinc-500">
-              Deliver now fee (Rs)
+              Normal delivery fee (Rs) — charged below the free threshold
             </Label>
             <Input
               type="number"
@@ -184,7 +178,8 @@ export function NamalDeliveryPanel() {
               ))}
             </select>
             <Label className="text-xs text-zinc-500">
-              Deliver now fee (Rs)
+              Normal delivery fee (Rs) — charged between the minimum and the
+              free threshold
             </Label>
             <Input
               type="number"
@@ -196,73 +191,63 @@ export function NamalDeliveryPanel() {
         </div>
 
         <div className="rounded-lg border border-zinc-800 bg-black/30 p-4">
-          <h3 className="font-bold text-orange-400">Campus (Mon–Fri)</h3>
+          <h3 className="font-bold text-orange-400">Namal University</h3>
           <p className="mt-1 text-xs text-zinc-500">
-            Order window daily Mon–Fri. Delivery Mon–Thu vs Friday can differ.
+            Orders of this amount or more get free delivery. Below it, the
+            normal fee above applies.
           </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <TimeField
-              label="Order from"
-              value={cfg.campus_order_start}
-              onChange={(v) => setField("campus_order_start", v)}
-            />
-            <TimeField
-              label="Order until"
-              value={cfg.campus_order_end}
-              onChange={(v) => setField("campus_order_end", v)}
-            />
-            <TimeField
-              label="Mon–Thu deliver from"
-              value={cfg.campus_delivery_start_mon_thu}
-              onChange={(v) => setField("campus_delivery_start_mon_thu", v)}
-            />
-            <TimeField
-              label="Mon–Thu deliver until"
-              value={cfg.campus_delivery_end_mon_thu}
-              onChange={(v) => setField("campus_delivery_end_mon_thu", v)}
-            />
-            <TimeField
-              label="Friday deliver from"
-              value={cfg.campus_delivery_start_fri}
-              onChange={(v) => setField("campus_delivery_start_fri", v)}
-            />
-            <TimeField
-              label="Friday deliver until"
-              value={cfg.campus_delivery_end_fri}
-              onChange={(v) => setField("campus_delivery_end_fri", v)}
+          <div className="mt-3 max-w-xs space-y-1.5">
+            <Label className="text-xs text-zinc-400">
+              Free delivery threshold (Rs)
+            </Label>
+            <Input
+              type="number"
+              min={0}
+              value={cfg.campus_free_threshold}
+              onChange={(e) =>
+                setField("campus_free_threshold", Number(e.target.value || 0))
+              }
             />
           </div>
         </div>
 
         <div className="rounded-lg border border-zinc-800 bg-black/30 p-4">
-          <h3 className="font-bold text-orange-400">
-            Hostel — Deliver now or Free delivery
-          </h3>
+          <h3 className="font-bold text-orange-400">Namal Hostel</h3>
           <p className="mt-1 text-xs text-zinc-500">
-            Students choose Deliver now (fee above) or Free delivery in this
-            window.
+            Orders below the minimum are blocked with a clear message. Orders
+            at or above the free threshold get free delivery; in between, the
+            normal fee above applies.
           </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <TimeField
-              label="Order from"
-              value={cfg.hostel_order_start}
-              onChange={(v) => setField("hostel_order_start", v)}
-            />
-            <TimeField
-              label="Order until"
-              value={cfg.hostel_order_end}
-              onChange={(v) => setField("hostel_order_end", v)}
-            />
-            <TimeField
-              label="Free deliver from"
-              value={cfg.hostel_delivery_start}
-              onChange={(v) => setField("hostel_delivery_start", v)}
-            />
-            <TimeField
-              label="Free deliver until"
-              value={cfg.hostel_delivery_end}
-              onChange={(v) => setField("hostel_delivery_end", v)}
-            />
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-400">
+                Minimum order (Rs)
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                value={cfg.hostel_min_order}
+                onChange={(e) =>
+                  setField("hostel_min_order", Number(e.target.value || 0))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-400">
+                Free delivery threshold (Rs)
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                value={cfg.hostel_free_threshold}
+                onChange={(e) =>
+                  setField(
+                    "hostel_free_threshold",
+                    Number(e.target.value || 0),
+                  )
+                }
+              />
+            </div>
           </div>
         </div>
 
@@ -272,27 +257,6 @@ export function NamalDeliveryPanel() {
           </Button>
         </div>
       </Card>
-    </div>
-  );
-}
-
-function TimeField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-zinc-400">{label}</Label>
-      <Input
-        type="time"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
     </div>
   );
 }

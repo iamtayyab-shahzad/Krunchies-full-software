@@ -140,56 +140,14 @@ func (s *OrderService) CreateOrder(
 	if deliveryMode == "" {
 		deliveryMode = "asap"
 	}
-	deliveryCharge := location.DeliveryCharge
-	scheduledSlot := ""
 	orderNotes := strings.TrimSpace(input.OrderNotes)
 
-	if deliveryMode == "scheduled" {
-		cfg := domain.ParseNamalDeliveryConfig(setting.NamalDelivery)
-		slot := EvaluateNamalFreeSlot(cfg, locationID, time.Now())
-		if !slot.Eligible {
-			tx.Rollback()
-			msg := slot.Reason
-			if msg == "" {
-				msg = "Namal free delivery slot is not available right now"
-			}
-			return nil, utils.NewAppError(http.StatusBadRequest, msg)
-		}
-		deliveryCharge = 0
-		scheduledSlot = slot.SlotLabel
-		if slot.KitchenNote != "" {
-			if orderNotes == "" {
-				orderNotes = slot.KitchenNote
-			} else {
-				orderNotes = slot.KitchenNote + "\n" + orderNotes
-			}
-		}
-	}
-
-	saleTime := resolveClientCreatedAt(input.CreatedAt)
-	orderID := uuid.New()
-	order := &domain.Order{
-		BaseModel:         domain.BaseModel{ID: orderID, CreatedAt: saleTime, UpdatedAt: time.Now().UTC()},
-		OrderNumber:       "KR-" + strings.ToUpper(strings.ReplaceAll(orderID.String(), "-", "")[:16]),
-		ClientOrderID:     input.ClientOrderID,
-		CustomerID:        customerID,
-		CustomerName:      customerName,
-		Phone:             phone,
-		Address:           address,
-		LocationID:        locationID,
-		DeliveryCharge:    deliveryCharge,
-		CashOnDeliveryFee: codFee,
-		PaymentMethod:     method,
-		OrderStatus:       "PENDING",
-		OrderType:         orderType,
-		OrderNotes:        orderNotes,
-		DeliveryMode:      deliveryMode,
-		ScheduledSlot:     scheduledSlot,
-	}
-
+	// Price the cart first: the Namal free-delivery / minimum-order rules
+	// below are based on the cart subtotal, so delivery charge is decided
+	// only after the subtotal is known.
 	subtotal := 0
 	eligibleSubtotal := 0
-	order.Items = make([]domain.OrderItem, 0, len(input.Items))
+	items := make([]domain.OrderItem, 0, len(input.Items))
 
 	sizeIDs := make([]uuid.UUID, 0, len(input.Items))
 	productIDs := make([]uuid.UUID, 0, len(input.Items))
@@ -213,6 +171,10 @@ func (s *OrderService) CreateOrder(
 			tx.Rollback()
 			return nil, utils.NewAppError(http.StatusBadRequest, "product size does not belong to product")
 		}
+		if !size.IsAvailable {
+			tx.Rollback()
+			return nil, utils.NewAppError(http.StatusBadRequest, "this size is currently unavailable: "+size.Size)
+		}
 		product, ok := productsByID[item.ProductID]
 		if !ok {
 			tx.Rollback()
@@ -228,13 +190,49 @@ func (s *OrderService) CreateOrder(
 		if !isDealProduct(product) {
 			eligibleSubtotal += lineTotal
 		}
-		order.Items = append(order.Items, domain.OrderItem{
+		items = append(items, domain.OrderItem{
 			ProductID:           item.ProductID,
 			ProductSizeID:       item.ProductSizeID,
 			Quantity:            item.Quantity,
 			Price:               size.Price,
 			SpecialInstructions: strings.TrimSpace(item.SpecialInstructions),
 		})
+	}
+
+	deliveryCharge := location.DeliveryCharge
+	namalCfg := domain.ParseNamalDeliveryConfig(setting.NamalDelivery)
+	namal := EvaluateNamalDelivery(namalCfg, locationID, subtotal)
+	if namal.Blocked {
+		tx.Rollback()
+		msg := namal.Message
+		if msg == "" {
+			msg = "This order cannot be placed right now."
+		}
+		return nil, utils.NewAppError(http.StatusBadRequest, msg)
+	}
+	if namal.FreeDelivery {
+		deliveryCharge = 0
+	}
+
+	saleTime := resolveClientCreatedAt(input.CreatedAt)
+	orderID := uuid.New()
+	order := &domain.Order{
+		BaseModel:         domain.BaseModel{ID: orderID, CreatedAt: saleTime, UpdatedAt: time.Now().UTC()},
+		OrderNumber:       "KR-" + strings.ToUpper(strings.ReplaceAll(orderID.String(), "-", "")[:16]),
+		ClientOrderID:     input.ClientOrderID,
+		CustomerID:        customerID,
+		CustomerName:      customerName,
+		Phone:             phone,
+		Address:           address,
+		LocationID:        locationID,
+		DeliveryCharge:    deliveryCharge,
+		CashOnDeliveryFee: codFee,
+		PaymentMethod:     method,
+		OrderStatus:       "PENDING",
+		OrderType:         orderType,
+		OrderNotes:        orderNotes,
+		DeliveryMode:      deliveryMode,
+		Items:             items,
 	}
 
 	discount := s.activeDiscount(saleTime, subtotal, eligibleSubtotal)

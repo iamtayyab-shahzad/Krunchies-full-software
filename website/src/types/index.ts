@@ -4,6 +4,7 @@ export interface ProductSize {
   size: string;
   price: number;
   was_price?: number;
+  is_available?: boolean;
 }
 
 export interface Category {

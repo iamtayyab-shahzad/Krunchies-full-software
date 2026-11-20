@@ -3,35 +3,42 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getSettings } from "@/services/api";
-import { parseNamalDeliveryConfig } from "@/lib/namal-delivery";
+import {
+  DEFAULT_NAMAL_CONFIG,
+  parseNamalDeliveryConfig,
+  type NamalDeliveryConfig,
+} from "@/lib/namal-delivery";
 
 /** Single compact strip — no stacked open/offer bars. */
 export function NamalOfferBanner() {
-  const [show, setShow] = useState(false);
+  const [cfg, setCfg] = useState<NamalDeliveryConfig | null>(null);
 
   useEffect(() => {
     let active = true;
     getSettings()
       .then((s) => {
         if (!active) return;
-        const cfg = parseNamalDeliveryConfig(s.namal_delivery);
-        setShow(cfg.enabled);
+        const parsed = parseNamalDeliveryConfig(s.namal_delivery);
+        setCfg(parsed.enabled ? parsed : null);
       })
       .catch(() => {
-        if (active) setShow(false);
+        if (active) setCfg(null);
       });
     return () => {
       active = false;
     };
   }, []);
 
-  if (!show) return null;
+  if (!cfg) return null;
+  const c = { ...DEFAULT_NAMAL_CONFIG, ...cfg };
 
   return (
     <div className="border-b border-emerald-700/50 bg-emerald-500">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-1.5 sm:px-6 lg:px-8">
         <p className="min-w-0 truncate text-xs font-bold text-black sm:text-sm">
-          Namal: order in slot → free delivery · or Deliver now (paid)
+          Namal University: free delivery on Rs {c.campus_free_threshold}+ ·
+          Namal Hostel: free on Rs {c.hostel_free_threshold}+ (Rs{" "}
+          {c.hostel_min_order} min order)
         </p>
         <Link
           href="/menu"

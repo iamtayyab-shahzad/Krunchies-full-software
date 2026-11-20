@@ -11,44 +11,32 @@ const (
 	NamalHostelLocationID = "50000000-0000-4000-8000-000000000005"
 )
 
-// NamalDeliveryConfig controls free scheduled delivery for Namal campus/hostel.
-// Times are 24h "HH:MM" in Asia/Karachi.
+// NamalDeliveryConfig controls the amount-based delivery rules for Namal
+// University campus and Namal Hostel. All amounts are in Rs (whole rupees).
 type NamalDeliveryConfig struct {
 	Enabled bool `json:"enabled"`
 
 	CampusLocationID string `json:"campus_location_id"`
 	HostelLocationID string `json:"hostel_location_id"`
 
-	// Campus: order Mon–Fri 08:00–12:45; deliver Mon–Thu 13:30–14:00, Fri 14:00–14:30.
-	CampusOrderStart           string `json:"campus_order_start"`
-	CampusOrderEnd             string `json:"campus_order_end"`
-	CampusDeliveryStartMonThu  string `json:"campus_delivery_start_mon_thu"`
-	CampusDeliveryEndMonThu    string `json:"campus_delivery_end_mon_thu"`
-	CampusDeliveryStartFri     string `json:"campus_delivery_start_fri"`
-	CampusDeliveryEndFri       string `json:"campus_delivery_end_fri"`
+	// Campus: orders at or above this subtotal get free delivery. Below it,
+	// the location's normal delivery charge applies. No minimum order.
+	CampusFreeThreshold int `json:"campus_free_threshold"`
 
-	// Hostel: order any day 08:00–19:30; deliver 20:00–20:30.
-	HostelOrderStart    string `json:"hostel_order_start"`
-	HostelOrderEnd      string `json:"hostel_order_end"`
-	HostelDeliveryStart string `json:"hostel_delivery_start"`
-	HostelDeliveryEnd   string `json:"hostel_delivery_end"`
+	// Hostel: orders below HostelMinOrder are rejected outright. At or above
+	// HostelFreeThreshold delivery is free; in between, the normal charge applies.
+	HostelMinOrder      int `json:"hostel_min_order"`
+	HostelFreeThreshold int `json:"hostel_free_threshold"`
 }
 
 func DefaultNamalDeliveryConfig() NamalDeliveryConfig {
 	return NamalDeliveryConfig{
-		Enabled:                   false,
-		CampusLocationID:          NamalCampusLocationID,
-		HostelLocationID:          NamalHostelLocationID,
-		CampusOrderStart:          "08:00",
-		CampusOrderEnd:            "12:45",
-		CampusDeliveryStartMonThu: "13:30",
-		CampusDeliveryEndMonThu:   "14:00",
-		CampusDeliveryStartFri:    "14:00",
-		CampusDeliveryEndFri:      "14:30",
-		HostelOrderStart:          "08:00",
-		HostelOrderEnd:            "19:30",
-		HostelDeliveryStart:       "20:00",
-		HostelDeliveryEnd:         "20:30",
+		Enabled:             false,
+		CampusLocationID:    NamalCampusLocationID,
+		HostelLocationID:    NamalHostelLocationID,
+		CampusFreeThreshold: 2000,
+		HostelMinOrder:      1500,
+		HostelFreeThreshold: 5000,
 	}
 }
 

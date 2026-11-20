@@ -163,6 +163,7 @@ async function loadCatalog(force = false): Promise<CatalogPayload> {
 
     const sizesByProduct = new Map<string, ProductSize[]>();
     for (const s of remoteSizes) {
+      if (s.is_available === false) continue;
       const arr = sizesByProduct.get(s.product_id) || [];
       arr.push(s);
       sizesByProduct.set(s.product_id, arr);
