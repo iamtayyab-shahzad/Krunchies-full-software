@@ -251,13 +251,18 @@ cd admin && npm run dev      # :3002
 | `APP_PORT` | Local only | Default 8080 |
 | `DB_*` | Local alt | Used if no `DATABASE_URL` |
 | `CLOUDINARY_*` | No | Optional |
-| `WHATSAPP_TOKEN` | No | Meta Cloud API bearer token (order alerts) |
-| `WHATSAPP_PHONE_NUMBER_ID` | No | Meta WhatsApp phone number ID |
+| `WAHA_BASE_URL` | No | Base URL of your self-hosted WAHA instance (order alerts + WhatsApp reset). No WhatsApp sends happen without it. |
+| `WAHA_API_KEY` | No | API key your WAHA instance expects as `X-Api-Key`. Leave unset if it has none. |
+| `WAHA_SESSION` | No | WAHA session name to send from. Defaults to `default`. |
 | `WHATSAPP_OWNER_PHONE` | No | Owner phone(s), comma-separated, e.g. `92300…`. Website orders also always notify `923000128562` (03000128562). |
 | `WEBSITE_REVALIDATE_URL` | No* | Website origin or full `/api/revalidate` URL (e.g. `https://www.krunchies.pk`). Needed for on-demand menu ISR. |
 | `REVALIDATE_SECRET` | No* | Shared secret with website `REVALIDATE_SECRET`. Backend sends it as `x-revalidate-secret`. |
 
 \*Required in production if you want admin catalog edits to purge website ISR immediately.
+
+**WAHA setup notes:**
+- WAHA is a separate, self-hosted service (not run by this backend) — it needs its own always-on host with a persistent disk, since it holds a logged-in WhatsApp Web session (QR-scanned once; lost on restart without persistent storage).
+- To keep the "text RESET to your WhatsApp number to reset your password" flow working, set that WAHA session's **Webhook URL** to `https://<your-backend-domain>/webhook/whatsapp`, subscribed to the `message` event. Without this, order alerts still go out fine — only the reset-by-WhatsApp reply breaks.
 
 ### Frontends (Vercel)
 

@@ -38,7 +38,6 @@ func SetupRouter(services *service.AppServices, jwtSecret string) *gin.Engine {
 	authHandler := handler.NewAuthHandler(services.Auth)
 	whatsappWebhookHandler := handler.NewWhatsAppWebhookHandler(services.Auth)
 
-	router.GET("/webhook/whatsapp", whatsappWebhookHandler.Verify)
 	router.POST("/webhook/whatsapp", whatsappWebhookHandler.Receive)
 
 	router.Static("/swagger", "./docs/swagger")

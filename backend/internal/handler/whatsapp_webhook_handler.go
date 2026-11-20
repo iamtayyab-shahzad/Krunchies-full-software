@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	"backend/internal/service"
@@ -20,36 +19,20 @@ func NewWhatsAppWebhookHandler(auth *service.AuthService) *WhatsAppWebhookHandle
 	return &WhatsAppWebhookHandler{auth: auth}
 }
 
-// Verify handles Meta webhook subscription verification (GET).
-func (h *WhatsAppWebhookHandler) Verify(c *gin.Context) {
-	mode := c.Query("hub.mode")
-	token := c.Query("hub.verify_token")
-	challenge := c.Query("hub.challenge")
-
-	expected := strings.TrimSpace(os.Getenv("WHATSAPP_VERIFY_TOKEN"))
-	if mode == "subscribe" && expected != "" && token == expected {
-		c.String(http.StatusOK, challenge)
-		return
-	}
-	c.String(http.StatusForbidden, "")
+// wahaWebhookPayload is the event WAHA (https://waha.devlike.pro) posts to our
+// webhook URL for every WhatsApp event on the configured session. Point the
+// session's Webhook URL at POST /webhook/whatsapp, subscribed to "message".
+type wahaWebhookPayload struct {
+	Event   string `json:"event"`
+	Payload struct {
+		From   string `json:"from"`
+		FromMe bool   `json:"fromMe"`
+		Body   string `json:"body"`
+	} `json:"payload"`
 }
 
-type whatsAppWebhookPayload struct {
-	Entry []struct {
-		Changes []struct {
-			Value struct {
-				Messages []struct {
-					From string `json:"from"`
-					Text struct {
-						Body string `json:"body"`
-					} `json:"text"`
-				} `json:"messages"`
-			} `json:"value"`
-		} `json:"changes"`
-	} `json:"entry"`
-}
-
-// Receive handles incoming WhatsApp messages (POST). Always responds 200 so Meta does not retry.
+// Receive handles incoming WhatsApp messages posted by WAHA (POST).
+// Always responds 200 so WAHA does not retry.
 func (h *WhatsAppWebhookHandler) Receive(c *gin.Context) {
 	body, err := c.GetRawData()
 	if err != nil {
@@ -57,27 +40,23 @@ func (h *WhatsAppWebhookHandler) Receive(c *gin.Context) {
 		c.Status(http.StatusOK)
 		return
 	}
-	log.Printf("whatsapp webhook: raw payload: %s", string(body))
 
-	var payload whatsAppWebhookPayload
+	var payload wahaWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		log.Printf("whatsapp webhook: json unmarshal error: %v", err)
 		c.Status(http.StatusOK)
 		return
 	}
 
-	from, text := extractWhatsAppMessage(payload)
-	log.Printf("whatsapp webhook: extracted from=%q text=%q", from, text)
-
+	from, text := extractWahaMessage(payload)
 	if from == "" || text == "" {
-		log.Printf("whatsapp webhook: no message in payload (status update or empty)")
 		c.Status(http.StatusOK)
 		return
 	}
 
 	normalized := strings.ToLower(strings.TrimSpace(text))
 	if normalized != "reset" {
-		log.Printf("whatsapp webhook: ignoring non-reset message: %q", normalized)
+		log.Printf("whatsapp webhook: ignoring non-reset message from %s: %q", from, normalized)
 		c.Status(http.StatusOK)
 		return
 	}
@@ -94,14 +73,14 @@ func (h *WhatsAppWebhookHandler) Receive(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-func extractWhatsAppMessage(payload whatsAppWebhookPayload) (from, text string) {
-	if len(payload.Entry) == 0 || len(payload.Entry[0].Changes) == 0 {
+// extractWahaMessage pulls the sender phone and text body out of a WAHA webhook
+// event, ignoring anything that isn't an inbound text message (e.g. our own
+// outgoing alerts, which WAHA also reports on the same webhook with fromMe=true).
+func extractWahaMessage(payload wahaWebhookPayload) (from, text string) {
+	if payload.Event != "message" || payload.Payload.FromMe {
 		return "", ""
 	}
-	messages := payload.Entry[0].Changes[0].Value.Messages
-	if len(messages) == 0 {
-		return "", ""
-	}
-	msg := messages[0]
-	return strings.TrimSpace(msg.From), strings.TrimSpace(msg.Text.Body)
+	from = strings.TrimSuffix(payload.Payload.From, "@c.us")
+	from = strings.TrimSuffix(from, "@s.whatsapp.net")
+	return strings.TrimSpace(from), strings.TrimSpace(payload.Payload.Body)
 }

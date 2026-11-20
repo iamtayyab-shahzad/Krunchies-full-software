@@ -1,6 +1,9 @@
 package notify
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -45,13 +48,14 @@ func TestOwnerPhones_IncludesExtraAndEnv(t *testing.T) {
 }
 
 func TestFormatOrderAlert_IncludesDetails(t *testing.T) {
-	msg := formatOrderAlert(OrderAlert{
+	msg := FormatOrderAlert(OrderAlert{
 		OrderNumber:   "KR-TEST123",
 		CustomerName:  "Ali",
 		Phone:         "03001234567",
 		Address:       "Street 1",
 		LocationName:  "Cantt",
 		PaymentMethod: "cod",
+		OrderNotes:    "ring bell",
 		Subtotal:      2000,
 		Discount:      200,
 		Delivery:      100,
@@ -67,7 +71,11 @@ func TestFormatOrderAlert_IncludesDetails(t *testing.T) {
 		"Cantt",
 		"Chicken Tikka",
 		"COD",
+		"Subtotal: Rs.2000",
+		"Discount: -Rs.200",
+		"Delivery: Rs.100",
 		"Total: Rs.1900",
+		"Notes: ring bell",
 		"cold",
 	} {
 		if !strings.Contains(msg, want) {
@@ -76,53 +84,43 @@ func TestFormatOrderAlert_IncludesDetails(t *testing.T) {
 	}
 }
 
-func TestBuildWebsiteOrderTemplatePayload(t *testing.T) {
-	alert := OrderAlert{
-		OrderNumber:   "KR-TEST123",
-		CustomerName:  "Ali",
-		Phone:         "03001234567",
-		Address:       "Street 1",
-		LocationName:  "Cantt",
-		PaymentMethod: "cod",
-		OrderNotes:    "ring bell",
-		Subtotal:      2000,
-		Discount:      200,
-		Delivery:      100,
-		GrandTotal:    1900,
-		Items: []OrderAlertItem{
-			{Name: "Chicken Tikka", Size: "Large", Quantity: 1, LineTotal: 1500},
-		},
+func TestWahaConfig_RequiresBaseURL(t *testing.T) {
+	t.Setenv("WAHA_BASE_URL", "")
+	if _, _, _, ok := wahaConfig(); ok {
+		t.Fatal("expected ok=false with no WAHA_BASE_URL")
 	}
-	payload := buildWebsiteOrderTemplatePayload("923001234567", alert)
-	if payload.Type != "template" {
-		t.Fatalf("type=%s", payload.Type)
+
+	t.Setenv("WAHA_BASE_URL", "https://waha.example.com/")
+	t.Setenv("WAHA_API_KEY", "secret")
+	t.Setenv("WAHA_SESSION", "")
+	baseURL, apiKey, session, ok := wahaConfig()
+	if !ok || baseURL != "https://waha.example.com" || apiKey != "secret" || session != defaultWahaSession {
+		t.Fatalf("got baseURL=%q apiKey=%q session=%q ok=%v", baseURL, apiKey, session, ok)
 	}
-	if payload.Template.Name != websiteOrderTemplateName {
-		t.Fatalf("template name=%s", payload.Template.Name)
+}
+
+func TestSendWahaText_PostsExpectedPayload(t *testing.T) {
+	var gotPath, gotAPIKey string
+	var gotBody wahaSendTextPayload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAPIKey = r.Header.Get("X-Api-Key")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	err := sendWahaText(server.Client(), server.URL, "secret", "default", "923001234567", "hello")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if payload.Template.Language.Code != websiteOrderTemplateLang {
-		t.Fatalf("lang=%s", payload.Template.Language.Code)
+	if gotPath != "/api/sendText" {
+		t.Fatalf("path=%s", gotPath)
 	}
-	params := payload.Template.Components[0].Parameters
-	if len(params) != 7 {
-		t.Fatalf("expected 7 params, got %d", len(params))
+	if gotAPIKey != "secret" {
+		t.Fatalf("api key=%s", gotAPIKey)
 	}
-	if params[0].Text != "KR-TEST123" || params[5].Text != "COD" {
-		t.Fatalf("unexpected params: %+v", params)
-	}
-	block := params[6].Text
-	if strings.Contains(block, "\n") {
-		t.Fatalf("param7 must be single-line, got:\n%s", block)
-	}
-	for _, want := range []string{
-		"Items: 1x Chicken Tikka (Large) - Rs.1500",
-		"Subtotal: Rs.2000",
-		"Total: Rs.1900",
-		"Notes: ring bell",
-		" | ",
-	} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("param7 missing %q:\n%s", want, block)
-		}
+	if gotBody.Session != "default" || gotBody.ChatID != "923001234567@c.us" || gotBody.Text != "hello" {
+		t.Fatalf("unexpected payload: %+v", gotBody)
 	}
 }
